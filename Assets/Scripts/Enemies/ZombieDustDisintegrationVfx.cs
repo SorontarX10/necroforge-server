@@ -133,9 +133,9 @@ namespace GrassSim.Enemies
                     continue;
 
                 var bakedMesh = new Mesh();
-                // Keep root scaling in spawned piece transform; baking with scale here can double-scale
-                // rigs that already use non-unit import/root scale (e.g. dog variants).
-                smr.BakeMesh(bakedMesh, false);
+                // Bake with scale for skinned meshes and keep spawned piece transform at unit scale.
+                // This keeps dog and zombie rigs consistent regardless of armature/root scaling.
+                smr.BakeMesh(bakedMesh, true);
                 if (bakedMesh.vertexCount <= 0)
                 {
                     Destroy(bakedMesh);
@@ -143,8 +143,8 @@ namespace GrassSim.Enemies
                 }
 
                 runtimeMeshes.Add(bakedMesh);
-                SpawnPiece(smr.transform, bakedMesh, smr.sharedMaterials, inheritedVelocity);
-                EmitDustParticles(smr.transform, bakedMesh, Mathf.Max(22, bakedMesh.vertexCount / 18));
+                SpawnPiece(smr.transform, bakedMesh, smr.sharedMaterials, inheritedVelocity, applyTransformScale: false);
+                EmitDustParticles(smr.transform, bakedMesh, Mathf.Max(22, bakedMesh.vertexCount / 18), applyTransformScale: false);
             }
         }
 
@@ -161,12 +161,18 @@ namespace GrassSim.Enemies
                 if (mr == null || !mr.enabled || !mr.gameObject.activeInHierarchy)
                     continue;
 
-                SpawnPiece(mf.transform, mf.sharedMesh, mr.sharedMaterials, inheritedVelocity);
-                EmitDustParticles(mf.transform, mf.sharedMesh, Mathf.Max(16, mf.sharedMesh.vertexCount / 22));
+                SpawnPiece(mf.transform, mf.sharedMesh, mr.sharedMaterials, inheritedVelocity, applyTransformScale: true);
+                EmitDustParticles(mf.transform, mf.sharedMesh, Mathf.Max(16, mf.sharedMesh.vertexCount / 22), applyTransformScale: true);
             }
         }
 
-        private void SpawnPiece(Transform sourceTransform, Mesh mesh, Material[] materials, Vector3 inheritedVelocity)
+        private void SpawnPiece(
+            Transform sourceTransform,
+            Mesh mesh,
+            Material[] materials,
+            Vector3 inheritedVelocity,
+            bool applyTransformScale
+        )
         {
             if (sourceTransform == null || mesh == null)
                 return;
@@ -175,7 +181,7 @@ namespace GrassSim.Enemies
             go.transform.SetParent(transform, false);
             go.transform.position = sourceTransform.position;
             go.transform.rotation = sourceTransform.rotation;
-            go.transform.localScale = sourceTransform.lossyScale;
+            go.transform.localScale = applyTransformScale ? sourceTransform.lossyScale : Vector3.one;
 
             var mf = go.AddComponent<MeshFilter>();
             mf.sharedMesh = mesh;
@@ -223,7 +229,7 @@ namespace GrassSim.Enemies
             ps.Play();
         }
 
-        private void EmitDustParticles(Transform sourceTransform, Mesh mesh, int count)
+        private void EmitDustParticles(Transform sourceTransform, Mesh mesh, int count, bool applyTransformScale)
         {
             if (sourceTransform == null || mesh == null)
                 return;
@@ -232,7 +238,7 @@ namespace GrassSim.Enemies
             go.transform.SetParent(transform, false);
             go.transform.position = sourceTransform.position;
             go.transform.rotation = sourceTransform.rotation;
-            go.transform.localScale = sourceTransform.lossyScale;
+            go.transform.localScale = applyTransformScale ? sourceTransform.lossyScale : Vector3.one;
 
             var ps = go.AddComponent<ParticleSystem>();
             ConfigureParticleSystem(ps, count, mesh, useSphereShape: false);
