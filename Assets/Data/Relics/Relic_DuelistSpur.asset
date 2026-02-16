@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 004d9085f2c748479afe328469f115b1, type: 3}
+  m_Name: Relic_DuelistSpur
+  m_EditorClassIdentifier: Assembly-CSharp::DuelistSpur
+  displayName: Duelist Spur
+  description: While exactly one enemy is nearby, gain +15% swing speed and +10% dodge chance.
+  radius: 6
+  checkInterval: 0.25
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176
+  baseSwingSpeedBonus: 0.15
+  swingSpeedBonusPerStack: 0.03
+  baseDodgeChanceBonus: 0.1
+  dodgeChanceBonusPerStack: 0.02

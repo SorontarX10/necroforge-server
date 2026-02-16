@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: BlackMassCenserRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: mythic_black_mass_censer
+  displayName: Black Mass Censer
+  description: Rites alternate every 8s. Wrath grants +25% damage and +20% swing speed. Mercy grants +30% damage reduction and +18 HP/s. Kills extend the current rite.
+  icon: {fileID: 21300000, guid: f136fb542ada44bdb341b8a6a190a734, type: 3}
+  rarity: 4
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: 64faf8dc51fd4b7c94c2ae47289d4ce2, type: 2}

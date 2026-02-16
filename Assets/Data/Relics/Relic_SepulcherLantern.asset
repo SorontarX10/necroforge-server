@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b495005e26240b59926b9c6cf484fef, type: 3}
+  m_Name: Relic_SepulcherLantern
+  m_EditorClassIdentifier: Assembly-CSharp::SepulcherLantern
+  displayName: Sepulcher Lantern
+  description: Every 4th hit applies Wither for 4s, reducing enemy damage and speed. Wither jumps to the nearest foe on kill.
+  hitsPerWither: 4
+  witherDuration: 4
+  baseOutgoingReduction: 0.16
+  outgoingReductionPerStack: 0.03
+  baseSlowPercent: 0.18
+  slowPercentPerStack: 0.03
+  transferRadius: 10
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176

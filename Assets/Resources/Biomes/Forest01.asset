@@ -1,0 +1,155 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 010882d84a204d045876099ba1b2b8cc, type: 3}
+  m_Name: Forest01
+  m_EditorClassIdentifier: Assembly-CSharp::BiomeDefinition
+  biomeName: Forest01
+  biomeType: 1
+  biomeCenter: 0.495
+  biomeEdgeWidth: 0.2
+  biomeEdgeStrength: 0.25
+  minBiomeNoise: 0.33
+  maxBiomeNoise: 0.66
+  maxBiomeHeight: 4
+  biomeHeightMultiplier: 1.5
+  detailHeightStrength: 0.3
+  heightExponent: 1
+  heightMultiplier: 1.2
+  minSpacing: 2.5
+  environmentMask:
+    serializedVersion: 2
+    m_Bits: 256
+  blendWidth: 0.15
+  terrainMaterial: {fileID: 2100000, guid: 5846b07bc1a51cb46a0fc320080a2e02, type: 2}
+  textureTile: {x: 4, y: 4}
+  environmentProfiles:
+  - name: Trees
+    prefabs:
+    - {fileID: 254328846111857588, guid: bd4ef1d10fe10fb4bbe67b9942d0ab08, type: 3}
+    minCount: 20
+    maxCount: 40
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 1.5
+    maxScale: 3
+    minDistance: 6
+    isTree: 1
+    enemyPrefabIndex: 0
+    isEnemy: 0
+    spawnAttempts: 120
+    maxPerChunk: 120
+    densityPer10m2: 0
+    spawnType: 0
+  - name: PineTrees
+    prefabs:
+    - {fileID: 100361516255705665, guid: dab3d156c8083554a89c22d23625d4fb, type: 3}
+    minCount: 20
+    maxCount: 40
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 0.5
+    maxScale: 1
+    minDistance: 6
+    isTree: 1
+    enemyPrefabIndex: 0
+    isEnemy: 0
+    spawnAttempts: 120
+    maxPerChunk: 120
+    densityPer10m2: 100
+    spawnType: 0
+  - name: PineTrees
+    prefabs:
+    - {fileID: 100361516255705665, guid: dab3d156c8083554a89c22d23625d4fb, type: 3}
+    minCount: 6
+    maxCount: 14
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 1
+    maxScale: 4
+    minDistance: 6
+    isTree: 1
+    enemyPrefabIndex: 0
+    isEnemy: 0
+    spawnAttempts: 120
+    maxPerChunk: 120
+    densityPer10m2: 10
+    spawnType: 0
+  - name: Cristals
+    prefabs:
+    - {fileID: 2351709142008663742, guid: 0d1edc2a78afd71418eb2dd1c410bed0, type: 3}
+    minCount: 6
+    maxCount: 14
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 0.1
+    maxScale: 0.5
+    minDistance: 6
+    isTree: 0
+    enemyPrefabIndex: 0
+    isEnemy: 0
+    spawnAttempts: 120
+    maxPerChunk: 10
+    densityPer10m2: 1
+    spawnType: 0
+  - name: Cristals
+    prefabs:
+    - {fileID: 2351709142008663742, guid: a004b8479298f6d40bc2900ae3edc7b0, type: 3}
+    minCount: 6
+    maxCount: 14
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 0.1
+    maxScale: 0.5
+    minDistance: 6
+    isTree: 0
+    enemyPrefabIndex: 0
+    isEnemy: 0
+    spawnAttempts: 120
+    maxPerChunk: 10
+    densityPer10m2: 1
+    spawnType: 0
+  enemyProfiles:
+  - name: Zombie
+    prefabs:
+    - {fileID: 5728699683654753731, guid: 78c460d8cb9af8f4581ed34328cbb3a4, type: 3}
+    minCount: 15
+    maxCount: 30
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 0.8
+    maxScale: 1.25
+    minDistance: 2
+    isTree: 0
+    enemyPrefabIndex: 0
+    isEnemy: 1
+    spawnAttempts: 100
+    maxPerChunk: 25
+    densityPer10m2: 0.3
+    spawnType: 1
+  - name: Zombie Quick
+    prefabs:
+    - {fileID: 5728699683654753731, guid: 6ac0ee50388728b47ac97368a9dd401d, type: 3}
+    minCount: 5
+    maxCount: 10
+    spawnChance: 1
+    randomRotationY: 1
+    minScale: 0.8
+    maxScale: 1.25
+    minDistance: 2
+    isTree: 0
+    enemyPrefabIndex: 1
+    isEnemy: 0
+    spawnAttempts: 100
+    maxPerChunk: 25
+    densityPer10m2: 0.3
+    spawnType: 1
+  allyProfiles: []

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c66528fb14eb407b821ea35f8baf6bb5, type: 3}
+  m_Name: Relic_ScriptureOfTheNinthHour
+  m_EditorClassIdentifier: Assembly-CSharp::ScriptureOfTheNinthHour
+  displayName: Scripture of the Ninth Hour
+  description: First lethal hit every 90s is prevented. For 6s, attacker is Condemned and takes 3x damage from you. Kill it to cut cooldown by 30s, else lose 20% Max Health for 20s.
+  cooldown: 90
+  condemnedDuration: 6
+  condemnedDamageMultiplier: 3
+  cooldownReductionOnSuccess: 30
+  failedPenaltyMaxHealthPercent: 0.2
+  failedPenaltyDuration: 20

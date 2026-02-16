@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: FirstBloodRuneRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: common_first_blood_rune
+  displayName: First Blood Rune
+  description: The first hit on a new target grants temporary crit chance and restores stamina.
+  icon: {fileID: 21300000, guid: 2dded0177673f2e49b203c70f980ab8a, type: 3}
+  rarity: 0
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: 805b8f28188a4bb098518a016c6552a0, type: 2}

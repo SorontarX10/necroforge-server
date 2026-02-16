@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9850fda558746f388d2db930a9a48a1, type: 3}
+  m_Name: Relic_LedgerOfUnpaidGraves
+  m_EditorClassIdentifier: Assembly-CSharp::LedgerOfUnpaidGraves
+  displayName: Ledger of Unpaid Graves
+  description: Store 20% of damage dealt (up to 300% weapon damage). On taking a hit, release a frontal debt wave and clear storage. If unhit for 10s, heal for 50% of stored value.
+  storePercent: 0.2
+  capDamageMultiplier: 3
+  waveRange: 9
+  waveRadius: 1.2
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176
+  unhitDelay: 10
+  idleHealPercent: 0.5

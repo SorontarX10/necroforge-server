@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eeb5fb6f03b34b1abf09c6e4cfbf32b3, type: 3}
+  m_Name: Relic_ScriptureOfReversal
+  m_EditorClassIdentifier: Assembly-CSharp::ScriptureOfReversal
+  displayName: Scripture of Reversal
+  description: Lethal damage is prevented once every 60s. Rewind to your position from 2s ago and restore to 35% Max Health.
+  cooldown: 60
+  rewindSeconds: 2
+  healthRestorePercent: 0.35
+  sampleInterval: 0.1

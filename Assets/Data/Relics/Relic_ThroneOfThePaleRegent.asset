@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 928bdc93d83f40b18d536f257afdf428, type: 3}
+  m_Name: Relic_ThroneOfThePaleRegent
+  m_EditorClassIdentifier: Assembly-CSharp::ThroneOfThePaleRegent
+  displayName: Throne of the Pale Regent
+  description: Every 12s, mark the nearest elite or boss for 10s. 40% of damage dealt to other enemies mirrors to the mark. Killing it grants +25% move speed and +25% damage for 6s.
+  retargetInterval: 12
+  markDuration: 10
+  markSearchRadius: 40
+  eliteHealthThreshold: 260
+  mirrorDamagePercent: 0.4
+  buffDuration: 6
+  baseDamageBonus: 0.25
+  damageBonusPerStack: 0.04
+  baseSpeedBonus: 0.25
+  speedBonusPerStack: 0.03
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: ChronicleOfLastWitnessRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: rare_chronicle_of_last_witness
+  displayName: Chronicle of the Last Witness
+  description: Kills add random Verses (offense, defense, speed) up to a cap. Taking damage removes one Verse.
+  icon: {fileID: 21300000, guid: 5b4d5184e98545841bfd6a84fa2b0c52, type: 3}
+  rarity: 2
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: 68b8abe3e9e849fd969a4ed17f20967a, type: 2}

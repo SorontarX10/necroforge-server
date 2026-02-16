@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01a1d3fd36f94b9e9d711bd8980db87d, type: 3}
+  m_Name: Relic_MortisTitheSeal
+  m_EditorClassIdentifier: Assembly-CSharp::MortisTitheSeal
+  displayName: Mortis Tithe Seal
+  description: Store 12% of damage taken as Tithe. At full Tithe, release soul bolts at nearby enemies and heal 8% Max Health.
+  damageToTithePercent: 0.12
+  baseThresholdPercent: 0.3
+  thresholdPercentPerStack: 0.04
+  boltRadius: 8
+  maxBoltTargets: 6
+  baseBoltDamage: 32
+  boltDamagePerStack: 6
+  titheToDamageMultiplier: 0.35
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176
+  baseHealPercent: 0.08
+  healPercentPerStack: 0.01

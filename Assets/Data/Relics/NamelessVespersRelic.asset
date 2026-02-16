@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: NamelessVespersRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: rare_nameless_vespers
+  displayName: Nameless Vespers
+  description: Hit 6 different enemies within 8s to ring Vespers. Nearby enemies are silenced for 1.8s and you restore 25 stamina.
+  icon: {fileID: 21300000, guid: c3c6e6ab22797af49baeaa105272e53d, type: 3}
+  rarity: 2
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: 5cacffe79fe44ba096729ca11a931eec, type: 2}

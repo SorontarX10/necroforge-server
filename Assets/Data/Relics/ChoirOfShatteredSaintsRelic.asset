@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: ChoirOfShatteredSaintsRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: mythic_choir_of_shattered_saints
+  displayName: Choir of Shattered Saints
+  description: Kills within 4s build Choir Rank (max 5). Each rank grants +5% move speed and one orbiting skull. Taking damage removes 2 ranks and triggers a shock pulse.
+  icon: {fileID: 21300000, guid: 02eaa7c3b8b7477aa4814d2516271c06, type: 3}
+  rarity: 4
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: dde52762d57c4cc18aa2bea98f9e7f82, type: 2}

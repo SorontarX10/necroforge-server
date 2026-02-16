@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21db74d4236948c448ee8c662eeacfa6, type: 3}
+  m_Name: Relic_CryptSpines
+  m_EditorClassIdentifier: Assembly-CSharp::CryptSpines
+  displayName: Crypt Spines
+  description: After a successful dodge, your next melee hit releases a piercing wave behind the target.
+  chargeWindow: 4
+  baseWaveDamagePercent: 0.35
+  extraWaveDamagePerStack: 0.05
+  baseRange: 9
+  extraRangePerStack: 1
+  waveRadius: 1.1
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e64c5c3515784101a5264297999fa96b, type: 3}
+  m_Name: Relic_OssuaryPage
+  m_EditorClassIdentifier: Assembly-CSharp::OssuaryPage
+  displayName: Ossuary Page
+  description: Every 24s, summon a Bone Scribe for 7s if none is active. Marked enemies deal less damage and take more from you.
+  baseCooldown: 24
+  cooldownReductionPerStack: 1.5
+  baseDuration: 7
+  durationBonusPerStack: 0.5
+  markInterval: 1
+  markDuration: 2
+  baseOutgoingReduction: 0.12
+  outgoingReductionPerStack: 0.02
+  baseIncomingDamageMultiplier: 1.1
+  incomingDamageMultiplierPerStack: 0.02
+  aggroRadius: 8
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176
+  scribePrefab: {fileID: 0}

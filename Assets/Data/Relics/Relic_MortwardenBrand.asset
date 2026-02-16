@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b37114c1c67442cd8aab5db1e5f8d0da, type: 3}
+  m_Name: Relic_MortwardenBrand
+  m_EditorClassIdentifier: Assembly-CSharp::MortwardenBrand
+  displayName: Mortwarden Brand
+  description: Overkilling an enemy brands its corpse for 6s. Your next dodge detonates all brands for heavy AoE knockback damage.
+  overkillFactorToBrand: 1
+  brandDuration: 6
+  explosionRadius: 5
+  baseExplosionDamage: 45
+  explosionDamagePerStack: 8
+  baseKnockback: 8
+  knockbackPerStack: 1
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176

@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9fe5fa26a9b84ed58f7e6d5936f34fdd, type: 3}
+  m_Name: Relic_EpitaphOfIronDawn
+  m_EditorClassIdentifier: Assembly-CSharp::EpitaphOfIronDawn
+  displayName: Epitaph of Iron Dawn
+  description: Dropping below 40% Health triggers Iron Dawn for 6s with 35% damage reduction and stagger immunity (30s cooldown). Your next two hits mark then detonate Judged targets.
+  healthThresholdPercent: 0.4
+  cooldown: 30
+  baseDuration: 6
+  durationPerStack: 0.4
+  baseDamageReductionBonus: 0.35
+  damageReductionPerStack: 0.04
+  baseDetonationMultiplier: 1.25
+  detonationMultiplierPerStack: 0.12
+  minDetonationDamage: 45

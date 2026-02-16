@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a386815440de431ea318973c23b69acf, type: 3}
+  m_Name: Relic_GravechalkCartography
+  m_EditorClassIdentifier: Assembly-CSharp::GravechalkCartography
+  displayName: Gravechalk Cartography
+  description: Movement draws Grave Lines that shackle enemies. Stacks create lines faster and strengthen shackles.
+  distancePerLine: 8
+  lineDuration: 5
+  lineLength: 6
+  lineRadius: 0.55
+  distanceReductionPerStackPercent: 0.08
+  slowPercent: 0.4
+  extraSlowPercentPerStack: 0.02
+  incomingDamageMultiplier: 1.12
+  extraIncomingMultiplierPerStack: 0.02
+  shackleDuration: 2
+  extraShackleDurationPerStack: 0.15
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176

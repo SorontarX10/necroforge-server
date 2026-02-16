@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: SepulcherThreadspoolRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: rare_sepulcher_threadspool
+  displayName: Sepulcher Threadspool
+  description: Alternate hits between two targets (A-B-A) to stitch them for 4s. Stitched targets share 50% of melee damage.
+  icon: {fileID: 21300000, guid: 5ea365286f84ae64d8fd0d8a787d0f13, type: 3}
+  rarity: 2
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: 9a45375a938d41978c21b2b7420d273a, type: 2}

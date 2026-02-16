@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: BloodboundIdolRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: Bloodbound Idol
+  displayName: Bloodbound Idol
+  description: Lower Health grants higher lifesteal.
+  icon: {fileID: 21300000, guid: 98edfc20096f0f74588eca5e742c2772, type: 3}
+  rarity: 2
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: b79f30d0a25b2114797f2da0e4573a36, type: 2}

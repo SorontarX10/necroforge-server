@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 13b28f2e4b23482daf25ffda857d67ee, type: 3}
+  m_Name: Relic_AnvilOfNightOaths
+  m_EditorClassIdentifier: Assembly-CSharp::AnvilOfNightOaths
+  displayName: Anvil of Night Oaths
+  description: "Every 8 hits activates Forged for 6s: +20% sword length and +35% crit damage."
+  hitsToForge: 8
+  baseForgedDuration: 6
+  forgedDurationPerStack: 0.4
+  baseSwordLengthBonus: 0.2
+  swordLengthBonusPerStack: 0.02
+  baseCritDamageBonus: 0.35
+  critDamageBonusPerStack: 0.05

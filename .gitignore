@@ -1,0 +1,45 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+# Visual Studio / Rider generated files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.vs/
+.vscode/
+
+# Python virtual environments and caches
+venv/
+venv2/
+venv3/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local outputs / artifacts
+results/
+
+# Local vendor sandbox
+h5py/
+
+# OS files
+.DS_Store
+Thumbs.db

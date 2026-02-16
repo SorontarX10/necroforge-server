@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3aa9d9ab8b543ee9206e6ada8fec80d, type: 3}
+  m_Name: Relic_KeyOfTheSealedCrypt
+  m_EditorClassIdentifier: Assembly-CSharp::KeyOfTheSealedCrypt
+  displayName: Key of the Sealed Crypt
+  description: When stamina falls below 10%, enter Blood Drive for 4s (12s cooldown). Attacks stay full speed but cost Health. Kills restore stamina and Max Health.
+  staminaThresholdPercent: 0.1
+  bloodDriveDuration: 4
+  cooldown: 12
+  healthCostPerSwingPercent: 0.05
+  staminaOnKill: 12
+  healPercentOnKill: 0.03

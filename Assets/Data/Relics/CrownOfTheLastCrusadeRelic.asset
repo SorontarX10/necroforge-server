@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: CrownOfTheLastCrusadeRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: mythic_crown_of_the_last_crusade
+  displayName: Crown of the Last Crusade
+  description: "Each owned rarity tier grants a passive: C +8% speed, U +10 stamina regen, R +12% crit chance, L +12% damage reduction. With all four, gain Crusade for 6s every 30s."
+  icon: {fileID: 21300000, guid: 962c6b39d9f345de9f47941773e82666, type: 3}
+  rarity: 4
+  stackable: 0
+  maxStacks: 1
+  effect: {fileID: 11400000, guid: 80444c380c094b05bf3ddefc93a92faa, type: 2}

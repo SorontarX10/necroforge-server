@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6ab37ab27e5ba041bc3f1d5dc99ed6e, type: 3}
+  m_Name: Relic_UndertakerBrazier
+  m_EditorClassIdentifier: Assembly-CSharp::UndertakerBrazier
+  displayName: Undertaker Brazier
+  description: Kills grant Embers. At 4 Embers, ignite to gain temporary swing speed, move speed, and stamina regen.
+  embersToIgnite: 4
+  emberLifetime: 6
+  baseBuffDuration: 4
+  extraBuffDurationPerStack: 0.5
+  extendOnKill: 0.6
+  maxExtraDuration: 2
+  baseSwingSpeedBonus: 0.14
+  extraSwingSpeedPerStack: 0.025
+  baseSpeedBonus: 0.08
+  extraSpeedPerStack: 0.015
+  baseStaminaRegenBonus: 4
+  extraStaminaRegenPerStack: 0.8

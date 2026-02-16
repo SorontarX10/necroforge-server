@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7efe694792b4d7bbae29bc14bea60a5, type: 3}
+  m_Name: Relic_FuneralStandard
+  m_EditorClassIdentifier: Assembly-CSharp::FuneralStandard
+  displayName: Funeral Standard
+  description: Every 22s, plant a battle standard for 6s. While inside its aura, gain movement speed and damage reduction.
+  baseCooldown: 22
+  cooldownReductionPerStack: 1.2
+  baseDuration: 6
+  durationPerStack: 0.5
+  auraRadius: 4.5
+  baseSpeedBonus: 0.12
+  speedBonusPerStack: 0.02
+  baseDamageReductionBonus: 0.15
+  damageReductionPerStack: 0.02
+  standardPrefab: {fileID: 0}

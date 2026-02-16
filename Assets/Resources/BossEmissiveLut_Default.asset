@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e2f28fb5f8a46b6ab325fcb9f17a612, type: 3}
+  m_Name: BossEmissiveLut_Default
+  m_EditorClassIdentifier: 
+  fallbackLutColor: {r: 1, g: 1, b: 1, a: 1}
+  fallbackGlowScale: 1
+  entries:
+  - archetype: 0
+    lutColor: {r: 0.24, g: 0.95, b: 0.38, a: 1}
+    glowScale: 0.95
+  - archetype: 1
+    lutColor: {r: 0.32, g: 0.82, b: 1, a: 1}
+    glowScale: 1.2
+  - archetype: 2
+    lutColor: {r: 1, g: 0.34, b: 0.28, a: 1}
+    glowScale: 0.9
+  - archetype: 3
+    lutColor: {r: 1, g: 0.76, b: 0.27, a: 1}
+    glowScale: 1.12

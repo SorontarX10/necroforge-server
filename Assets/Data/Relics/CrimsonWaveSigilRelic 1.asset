@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: CrimsonWaveSigilRelic 1
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: Crimson Wave Sigil
+  displayName: Crimson Wave Sigil
+  description: After dodging, your next melee hit releases a piercing blood wave.
+  icon: {fileID: 21300000, guid: 257541b0a805cd74da2fd79d0cf0c455, type: 3}
+  rarity: 3
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: e6d637bc573b5ef45ae0757b3db43269, type: 2}

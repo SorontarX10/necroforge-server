@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5eeea8769eabc6945b32e2551cd840b3, type: 3}
+  m_Name: UpgradeStatIcons_Necroforge
+  m_EditorClassIdentifier: Assembly-CSharp::UpgradeStatIconLibrary
+  entries:
+  - stat: 0
+    icon: {fileID: 21300000, guid: db2bcd99bd28c5c4a8b8565c3a2e82ee, type: 3}
+  - stat: 1
+    icon: {fileID: 21300000, guid: 3ae67697a811fa74a90ef3973e893713, type: 3}
+  - stat: 2
+    icon: {fileID: 21300000, guid: c3d63ceb795e973419734f49207658ee, type: 3}
+  - stat: 3
+    icon: {fileID: 21300000, guid: 668ca4c1ae70c0e4dace046e8e81c66a, type: 3}
+  - stat: 4
+    icon: {fileID: 21300000, guid: 205120d73883a24458fc6a0760e54acd, type: 3}
+  - stat: 5
+    icon: {fileID: 21300000, guid: 4b0a714b41eba9e4daccb670d88eab44, type: 3}
+  - stat: 6
+    icon: {fileID: 21300000, guid: bea8016483d9ba2469e3d5208beff89f, type: 3}
+  - stat: 7
+    icon: {fileID: 21300000, guid: 98681f3c8d66fbf49afd790f782c9916, type: 3}
+  - stat: 8
+    icon: {fileID: 21300000, guid: bf383602a2d73a142b4c8db6507107ac, type: 3}
+  - stat: 9
+    icon: {fileID: 21300000, guid: b830224707e83f4439bf4f4b3ec0d3a1, type: 3}
+  - stat: 10
+    icon: {fileID: 21300000, guid: e57a4185063550d4396735f9006f40ac, type: 3}
+  - stat: 11
+    icon: {fileID: 21300000, guid: df337a96db1f0d44788ae67a9f54f66f, type: 3}

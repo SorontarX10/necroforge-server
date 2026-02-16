@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53cd0c2a5d244cb7a2170a6827b6b8c4, type: 3}
+  m_Name: Relic_CrownOfTheLastCrusade
+  m_EditorClassIdentifier: Assembly-CSharp::CrownOfTheLastCrusade
+  displayName: Crown of the Last Crusade
+  description: "Each owned rarity tier grants a passive: C +8% speed, U +10 stamina regen, R +12% crit chance, L +12% damage reduction. With all four, gain Crusade for 6s every 30s."
+  commonSpeedBonus: 0.08
+  uncommonStaminaRegenBonus: 10
+  rareCritChanceBonus: 0.12
+  legendaryDamageReductionBonus: 0.12
+  crusadeCooldown: 30
+  crusadeDuration: 6
+  crusadeDamageBonus: 0.2

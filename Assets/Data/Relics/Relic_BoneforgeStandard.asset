@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd1c5c1eb9184de888a4a14098ee9f64, type: 3}
+  m_Name: Relic_BoneforgeStandard
+  m_EditorClassIdentifier: Assembly-CSharp::BoneforgeStandard
+  displayName: Boneforge Standard
+  description: Every 25s, plant a forge circle for 7s. Inside, gain +35% sword length and +60% crit damage, and hits release bone shards. Buff lingers 2s after leaving.
+  baseCooldown: 25
+  cooldownReductionPerStack: 1
+  baseDuration: 7
+  durationPerStack: 0.4
+  radius: 5
+  lingerDuration: 2
+  baseSwordLengthBonus: 0.35
+  swordLengthBonusPerStack: 0.03
+  baseCritDamageBonus: 0.6
+  critDamageBonusPerStack: 0.08
+  shardDamagePercent: 0.35
+  shardRadius: 3
+  maxShardTargets: 4
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176
+  standardPrefab: {fileID: 0}

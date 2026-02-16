@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3134a9afbb4ed1245b55ab43a7d8ecd9, type: 3}
+  m_Name: CandleOfFalseDawnRelic
+  m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
+  id: rare_candle_of_false_dawn
+  displayName: Candle of False Dawn
+  description: Below 40% Health, gain +35% move speed and +20 HP/s regen, but deal -20% damage.
+  icon: {fileID: 21300000, guid: 830319046cf90c6449bac06528f53ef3, type: 3}
+  rarity: 2
+  stackable: 1
+  maxStacks: 5
+  effect: {fileID: 11400000, guid: 80d93a9b677e42ecb4b847b16312c271, type: 2}

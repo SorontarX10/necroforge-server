@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61219d50ef594d05840a4b4d9bd79d83, type: 3}
+  m_Name: Relic_CathedralEmberheart
+  m_EditorClassIdentifier: Assembly-CSharp::CathedralEmberheart
+  displayName: Cathedral Emberheart
+  description: Kills grant Embers (max 4). At 4 Embers, consume all for 7s Ashen State with +20% move speed and burning melee trails.
+  embersToIgnite: 4
+  baseAshenDuration: 7
+  ashenDurationPerStack: 0.5
+  baseSpeedBonus: 0.2
+  speedBonusPerStack: 0.03
+  trailDuration: 1.6
+  trailTickInterval: 0.2
+  trailRadius: 1.1
+  baseTrailDamagePerSecond: 18
+  trailDamagePerStack: 3
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 2176

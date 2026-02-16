@@ -1,0 +1,80 @@
+name: Perf Budget Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-export-profiler-metrics:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export latest metrics from Unity Profiler
+        shell: pwsh
+        env:
+          UNITY_EDITOR_PATH: ${{ secrets.UNITY_EDITOR_PATH }}
+        run: |
+          if (-not $env:UNITY_EDITOR_PATH) {
+            Write-Error "Missing UNITY_EDITOR_PATH secret (expected full Unity.exe path)."
+            exit 2
+          }
+
+          New-Item -Path "results/perf" -ItemType Directory -Force | Out-Null
+
+          & "$env:UNITY_EDITOR_PATH" `
+            -batchmode `
+            -nographics `
+            -projectPath "$PWD" `
+            -executeMethod GrassSim.Editor.UnityProfilerMetricsExporter.ExportLatestMetricsForCI `
+            -perfScene "Assets/Scenes/Game.unity" `
+            -perfOutput "results/perf/latest_metrics.json" `
+            -perfWarmupFrames 120 `
+            -perfSampleFrames 360 `
+            -perfTimeoutSeconds 180 `
+            -logFile "results/perf/unity-profiler-export.log"
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload profiler export artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: profiler-export
+          path: |
+            results/perf/latest_metrics.json
+            results/perf/unity-profiler-export.log
+
+  perf-budget-gate:
+    needs: build-and-export-profiler-metrics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download profiler export artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: profiler-export
+          path: results/perf
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify profiler export exists
+        run: |
+          test -f results/perf/latest_metrics.json || (echo "Missing results/perf/latest_metrics.json profiler export." && exit 2)
+
+      - name: Enforce CPU/GC budget
+        run: |
+          python Tools/perf/perf_budget_gate.py \
+            --metrics results/perf/latest_metrics.json \
+            --budget Tools/perf/perf_budget.json \
+            --output-json results/perf/perf_budget_gate_result.json
