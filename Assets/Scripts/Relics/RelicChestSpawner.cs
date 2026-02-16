@@ -11,6 +11,7 @@ public class RelicChestSpawner : MonoBehaviour
     public int chestsPerWave = 15;
     public float phaseADelay = 5f;
     [Min(0.01f)] public float spawnedChestScaleMultiplier = 0.5f;
+    [Min(10f)] public float minSpawnDistanceFromMapBorder = 10f;
 
     private bool phaseASpawned;
     private bool phaseBSpawned;
@@ -98,7 +99,8 @@ public class RelicChestSpawner : MonoBehaviour
 
         for (int i = 0; i < chestsPerWave; i++)
         {
-            Vector3 pos = world.GetRandomValidWorldPosition();
+            float borderInset = Mathf.Max(10f, minSpawnDistanceFromMapBorder);
+            Vector3 pos = world.GetRandomValidWorldPosition(borderInset);
             GameObject chest = Instantiate(chestPrefab, pos, Quaternion.identity);
             if (chest != null && !Mathf.Approximately(spawnedChestScaleMultiplier, 1f))
                 chest.transform.localScale *= spawnedChestScaleMultiplier;

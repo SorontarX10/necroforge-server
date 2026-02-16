@@ -758,6 +758,8 @@ public class ChunkedProceduralLevelGenerator : MonoBehaviour
 
         const int attempts = 20;
         const float chestScaleMultiplier = 0.5f;
+        const float minDistanceFromMapBorder = 10f;
+        float worldSize = worldSizeInChunks * chunkSize;
 
         for (int i = 0; i < attempts; i++)
         {
@@ -773,9 +775,20 @@ public class ChunkedProceduralLevelGenerator : MonoBehaviour
                 100f,
                 LayerMask.GetMask("Ground")))
             {
+                Vector3 spawnPos = hit.point + Vector3.up * 0.2f;
+                float closestEdgeDistance = Mathf.Min(
+                    spawnPos.x,
+                    worldSize - spawnPos.x,
+                    spawnPos.z,
+                    worldSize - spawnPos.z
+                );
+
+                if (closestEdgeDistance < minDistanceFromMapBorder)
+                    continue;
+
                 GameObject chest = Instantiate(
                     prefab,
-                    hit.point + Vector3.up * 0.2f,
+                    spawnPos,
                     Quaternion.identity
                 );
                 if (chest != null)
@@ -788,9 +801,12 @@ public class ChunkedProceduralLevelGenerator : MonoBehaviour
         Debug.LogWarning("[RelicSpawner] Failed to place chest");
     }
 
-    public Vector3 GetRandomValidWorldPosition()
+    public Vector3 GetRandomValidWorldPosition(float minDistanceFromMapBorder = 0f)
     {
         int attempts = 30;
+        float worldSize = worldSizeInChunks * chunkSize;
+        float maxAllowedInset = Mathf.Max(0f, worldSize * 0.5f - 0.5f);
+        float borderInset = Mathf.Clamp(minDistanceFromMapBorder, 0f, maxAllowedInset);
 
         while (attempts-- > 0)
         {
@@ -818,11 +834,31 @@ public class ChunkedProceduralLevelGenerator : MonoBehaviour
                 LayerMask.GetMask("Ground")
             ))
             {
-                return hit.point + Vector3.up * 0.2f;
+                Vector3 spawnPos = hit.point + Vector3.up * 0.2f;
+
+                if (borderInset > 0f)
+                {
+                    float closestEdgeDistance = Mathf.Min(
+                        spawnPos.x,
+                        worldSize - spawnPos.x,
+                        spawnPos.z,
+                        worldSize - spawnPos.z
+                    );
+
+                    if (closestEdgeDistance < borderInset)
+                        continue;
+                }
+
+                return spawnPos;
             }
         }
 
-        Debug.LogWarning("[World] Failed to find valid chest position, using center.");
+        Debug.LogWarning($"[World] Failed to find valid chest position (border inset: {borderInset:0.##}m).");
+
+        float center = worldSize * 0.5f;
+        if (TryGetHeightAtWorld(center, center, out float centerHeight))
+            return new Vector3(center, centerHeight + 0.2f, center);
+
         return Vector3.zero;
     }
 

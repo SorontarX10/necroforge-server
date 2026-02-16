@@ -10,6 +10,8 @@ public class ZombieEyeEmissionController : MonoBehaviour
     public EnemyCombatant enemyCombatant; // optional assignment
 
     [Header("Emission Settings")]
+    [Tooltip("When enabled, full-health emission hue is derived from selected eye materials.")]
+    [SerializeField] private bool deriveColorFromEyeMaterial = true;
     public Color fullHealthEmissionColor = Color.green;
     public Color zeroHealthEmissionColor = Color.black;
     [Tooltip("HDR intensity at full health")]
@@ -198,6 +200,9 @@ public class ZombieEyeEmissionController : MonoBehaviour
         }
 
         float threshold = Mathf.Max(0.001f, bestScore * 0.9f);
+        Vector3 accumulatedColor = Vector3.zero;
+        int accumulatedCount = 0;
+
         for (int i = 0; i < candidates.Count; i++)
         {
             Candidate c = candidates[i];
@@ -236,6 +241,12 @@ public class ZombieEyeEmissionController : MonoBehaviour
 
             runtimeMat.EnableKeyword("_EMISSION");
 
+            if (deriveColorFromEyeMaterial && TryGetMaterialColorSeed(runtimeMat, out Color seed))
+            {
+                accumulatedColor += new Vector3(seed.r, seed.g, seed.b);
+                accumulatedCount++;
+            }
+
             targets.Add(new EmissionTarget
             {
                 renderer = c.renderer,
@@ -244,8 +255,57 @@ public class ZombieEyeEmissionController : MonoBehaviour
             });
         }
 
+        if (deriveColorFromEyeMaterial && accumulatedCount > 0)
+        {
+            Vector3 avg = accumulatedColor / accumulatedCount;
+            fullHealthEmissionColor = new Color(avg.x, avg.y, avg.z, 1f);
+        }
+
         if (targets.Count == 0)
             Debug.LogWarning("[ZombieEyeEmission] No valid eye targets selected. Assign explicitEyeMaterials or eyeRenderers.", this);
+    }
+
+    private static bool TryGetMaterialColorSeed(Material mat, out Color seed)
+    {
+        seed = Color.black;
+        if (mat == null)
+            return false;
+
+        if (mat.HasProperty("_EmissionColor"))
+        {
+            Color emission = mat.GetColor("_EmissionColor");
+            if (TryNormalizeColor(emission, out seed))
+                return true;
+        }
+
+        if (mat.HasProperty("_BaseColor"))
+        {
+            Color baseColor = mat.GetColor("_BaseColor");
+            if (TryNormalizeColor(baseColor, out seed))
+                return true;
+        }
+
+        if (mat.HasProperty("_Color"))
+        {
+            Color color = mat.GetColor("_Color");
+            if (TryNormalizeColor(color, out seed))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryNormalizeColor(Color input, out Color normalized)
+    {
+        float max = Mathf.Max(input.r, Mathf.Max(input.g, input.b));
+        if (max <= 0.0001f)
+        {
+            normalized = Color.black;
+            return false;
+        }
+
+        normalized = new Color(input.r / max, input.g / max, input.b / max, 1f);
+        return true;
     }
 
     private bool MatchesExplicitEyeMaterial(Material mat)

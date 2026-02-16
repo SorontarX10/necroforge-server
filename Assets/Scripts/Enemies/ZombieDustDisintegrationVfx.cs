@@ -133,7 +133,9 @@ namespace GrassSim.Enemies
                     continue;
 
                 var bakedMesh = new Mesh();
-                smr.BakeMesh(bakedMesh, true);
+                // Keep root scaling in spawned piece transform; baking with scale here can double-scale
+                // rigs that already use non-unit import/root scale (e.g. dog variants).
+                smr.BakeMesh(bakedMesh, false);
                 if (bakedMesh.vertexCount <= 0)
                 {
                     Destroy(bakedMesh);
