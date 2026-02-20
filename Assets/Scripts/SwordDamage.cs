@@ -1,6 +1,7 @@
 using UnityEngine;
 using GrassSim.Combat;
 using GrassSim.Core;
+using GrassSim.Telemetry;
 using GrassSim.UI;
 
 public class SwordDamage : MonoBehaviour
@@ -89,8 +90,33 @@ public class SwordDamage : MonoBehaviour
         float lifeSteal = weapon.GetLifeSteal();
         if (lifeSteal > 0f && progression != null)
         {
-            float heal = damage * lifeSteal;
+            float rawHeal = damage * lifeSteal;
+            float heal = CombatBalanceCaps.ClampLifeStealHealPerHit(rawHeal, progression.MaxHealth);
+            if (heal <= 0f)
+                return;
+
+            float healthBefore = progression.CurrentHealth;
+            float maxHealth = progression.MaxHealth;
             progression.Heal(heal);
+            float healthAfter = progression.CurrentHealth;
+            float appliedHeal = Mathf.Max(0f, healthAfter - healthBefore);
+            float overheal = Mathf.Max(0f, heal - appliedHeal);
+
+            float runTimeSeconds = GameTimerController.Instance != null
+                ? Mathf.Max(0f, GameTimerController.Instance.elapsedTime)
+                : 0f;
+            GameplayTelemetryHub.ReportLifeStealApplied(new GameplayTelemetryHub.LifeStealAppliedSample(
+                runTimeSeconds,
+                damage,
+                lifeSteal,
+                rawHeal,
+                heal,
+                appliedHeal,
+                overheal,
+                healthBefore,
+                healthAfter,
+                maxHealth
+            ));
 
             FloatingTextSystem.Instance?.Spawn(
                 progression.transform.position + Vector3.up * 1.6f,

@@ -18,6 +18,7 @@ namespace GrassSim.Enhancers
         private readonly List<ActiveEnhancer> active = new();
 
         public event Action OnChanged;
+        public event Action<ActiveEnhancer, bool> OnEnhancerAddedOrRefreshed;
         public IReadOnlyList<ActiveEnhancer> Active => active;
 
         private void Update()
@@ -52,17 +53,23 @@ namespace GrassSim.Enhancers
             if (def == null)
                 return;
 
+            ActiveEnhancer changedEnhancer = null;
+            bool refreshedExisting = false;
             var existing = active.Find(e => e.Definition == def);
             if (existing != null)
             {
                 // Refresh extends duration instead of creating a duplicate entry.
                 existing.RefreshDuration();
+                changedEnhancer = existing;
+                refreshedExisting = true;
             }
             else
             {
-                active.Add(new ActiveEnhancer(def));
+                changedEnhancer = new ActiveEnhancer(def);
+                active.Add(changedEnhancer);
             }
 
+            OnEnhancerAddedOrRefreshed?.Invoke(changedEnhancer, refreshedExisting);
             RaiseChanged();
         }
 

@@ -14,6 +14,7 @@ public class PlayerRelicController : MonoBehaviour
     public event Action<Combatant, float, bool> OnMeleeHitDealt;
     public event Action<Combatant, float, bool> OnMeleeKill;
     public event Action<Combatant> OnBeforeMeleeHit;
+    public event Action<RelicDefinition, int> OnRelicApplied;
     public event Action OnDodged;
     public event Action<float> OnDamageTaken;
     public event Action<float, float> OnHealed;
@@ -75,6 +76,7 @@ public class PlayerRelicController : MonoBehaviour
 
         if (changed)
         {
+            OnRelicApplied?.Invoke(relic, GetStacks(relic.id));
             OnChanged?.Invoke();
             Progression?.NotifyStatsChanged();
         }

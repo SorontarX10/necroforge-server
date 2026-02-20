@@ -36,6 +36,7 @@ namespace GrassSim.Core
         // Hook for UI
         public event Action<List<UpgradeOption>> OnLevelUpOptionsRolled;
         public event Action<bool> OnUpgradeMenuStateChanged;
+        public event Action<UpgradeOption> OnUpgradeApplied;
         public event Action OnStatsChanged;
 
         public AudioSource audioSource;
@@ -243,6 +244,7 @@ namespace GrassSim.Core
 
             audioSource.PlayOneShot(upgradeClick, 1f);
 
+            OnUpgradeApplied?.Invoke(option);
             OnStatsChanged?.Invoke();
             OnUpgradeMenuStateChanged?.Invoke(false);
 
