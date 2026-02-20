@@ -35,7 +35,12 @@ namespace GrassSim.Upgrades
             }
 
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
         }
 
         public void InitializeFromLibrary(UpgradeLibrary library)

@@ -7,8 +7,8 @@ using GrassSim.Upgrades;
 public class UpgradeSelectionUI : MonoBehaviour
 {
     [Header("Refs")]
-    public Canvas upgradeCanvas;        // <— WAŻNE
-    public GameObject root;              // panel z kartami
+    public Canvas upgradeCanvas;
+    public GameObject root;
     public UpgradeCardUI[] cards;
     public UpgradeStatIconLibrary iconLibrary;
 
@@ -17,30 +17,14 @@ public class UpgradeSelectionUI : MonoBehaviour
 
     private void Awake()
     {
-        ChoiceUiQueue.Clear();
-
-        player = PlayerLocator.GetProgression();
-        if (player == null)
-        {
-            Debug.LogWarning("[UpgradeSelectionUI] Player not found yet, waiting...");
-        }
-        else
-        {
-            player.OnLevelUpOptionsRolled += QueueShow;
-        }
-
+        ResolvePlayer();
         cursor = FindFirstObjectByType<CursorScript>();
-        Hide(); // ⬅️ DOMYŚLNIE UKRYTE
+        Hide();
     }
 
-    void Update()
+    private void Update()
     {
-        if (player == null)
-        {
-            player = PlayerLocator.GetProgression();
-            if (player != null)
-                player.OnLevelUpOptionsRolled += QueueShow;
-        }
+        ResolvePlayer();
     }
 
     private void OnDestroy()
@@ -51,12 +35,29 @@ public class UpgradeSelectionUI : MonoBehaviour
 
     private void QueueShow(List<UpgradeOption> options)
     {
-        List<UpgradeOption> snapshot = options != null ? new List<UpgradeOption>(options) : new List<UpgradeOption>();
+        List<UpgradeOption> snapshot = options != null
+            ? new List<UpgradeOption>(options)
+            : new List<UpgradeOption>();
+
         ChoiceUiQueue.Enqueue(() => ShowNow(snapshot));
     }
 
     private void ShowNow(List<UpgradeOption> options)
     {
+        if (ResolvePlayer() == null)
+        {
+            Hide();
+            ChoiceUiQueue.CompleteCurrent();
+            return;
+        }
+
+        if (cards == null || cards.Length == 0)
+        {
+            Hide();
+            ChoiceUiQueue.CompleteCurrent();
+            return;
+        }
+
         if (options == null || options.Count == 0)
         {
             Hide();
@@ -74,17 +75,19 @@ public class UpgradeSelectionUI : MonoBehaviour
 
         for (int i = 0; i < cards.Length; i++)
         {
-            if (cards[i] == null) continue;
-
-            var opt = (options != null && i < options.Count) ? options[i] : null;
-            cards[i].gameObject.SetActive(opt != null);
-            if (opt == null)
+            UpgradeCardUI card = cards[i];
+            if (card == null)
                 continue;
 
-            cards[i].Bind(
-                opt,
+            UpgradeOption option = i < options.Count ? options[i] : null;
+            card.gameObject.SetActive(option != null);
+            if (option == null)
+                continue;
+
+            card.Bind(
+                option,
                 iconLibrary,
-                RarityColor(opt.rarity),
+                RarityColor(option.rarity),
                 OnPick
             );
         }
@@ -101,37 +104,63 @@ public class UpgradeSelectionUI : MonoBehaviour
 
     private void OnPick(UpgradeOption option)
     {
-        if (option == null || player == null)
-            return;
-
-        // ⬅️ NOWE: zwiększamy weight
-        if (UpgradeWeightRuntime.Instance != null)
+        PlayerProgressionController resolvedPlayer = ResolvePlayer();
+        if (option == null || resolvedPlayer == null)
         {
-            UpgradeWeightRuntime.Instance.OnUpgradePicked(option.stat);
+            Hide();
+            ChoiceUiQueue.CompleteCurrent();
+            return;
         }
 
-        player.ApplyUpgrade(option);
+        if (UpgradeWeightRuntime.Instance != null)
+            UpgradeWeightRuntime.Instance.OnUpgradePicked(option.stat);
+
+        resolvedPlayer.ApplyUpgrade(option);
+
         Hide();
-        cursor?.HideCursor();
+
+        if (ChoiceUiQueue.PendingCount > 0)
+        {
+            Time.timeScale = 0f;
+        }
+        else
+        {
+            cursor?.HideCursor();
+        }
+
         ChoiceUiQueue.CompleteCurrent();
     }
 
-    private Color RarityColor(UpgradeRarity r)
+    private PlayerProgressionController ResolvePlayer()
     {
-        return r switch
+        if (player != null)
+            return player;
+
+        player = PlayerLocator.GetProgression();
+        if (player == null)
+            return null;
+
+        player.OnLevelUpOptionsRolled -= QueueShow;
+        player.OnLevelUpOptionsRolled += QueueShow;
+        return player;
+    }
+
+    private Color RarityColor(UpgradeRarity rarity)
+    {
+        return rarity switch
         {
-            UpgradeRarity.Common     => Hex("#808080"),
-            UpgradeRarity.Uncommon   => Hex("#3CB371"),
-            UpgradeRarity.Rare       => Hex("#3A7BD5"),
-            UpgradeRarity.Legendary  => Hex("#FFD700"), // GOLD
-            UpgradeRarity.Mythic     => Hex("#8A2BE2"), // PURPLE
+            UpgradeRarity.Common => Hex("#808080"),
+            UpgradeRarity.Uncommon => Hex("#3CB371"),
+            UpgradeRarity.Rare => Hex("#3A7BD5"),
+            UpgradeRarity.Legendary => Hex("#FFD700"),
+            UpgradeRarity.Mythic => Hex("#8A2BE2"),
             _ => Color.white
         };
     }
 
     private Color Hex(string hex)
     {
-        ColorUtility.TryParseHtmlString(hex, out var c);
-        return c;
+        ColorUtility.TryParseHtmlString(hex, out Color color);
+        return color;
     }
 }

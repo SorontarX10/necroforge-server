@@ -24,14 +24,14 @@ public class StaminaBarBinder : MonoBehaviour
 
     private float GetCur()
     {
-        if (playerProg != null) return playerProg.currentStamina;
+        if (playerProg != null) return playerProg.CurrentStamina;
         if (agent != null) return agent.stamina;
         return 0f;
     }
 
     private float GetMax()
     {
-        if (playerProg != null && playerProg.stats != null) return playerProg.stats.maxStamina;
+        if (playerProg != null) return playerProg.MaxStamina;
         if (agent != null) return agent.maxStamina;
         return 0f;
     }

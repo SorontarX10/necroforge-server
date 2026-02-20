@@ -64,7 +64,7 @@ public partial class BossEnemyController : MonoBehaviour
     [SerializeField] private float zombieAttackCooldownScale = 1f;
     [SerializeField] private float quickHealthScale = 0.8f;
     [SerializeField] private float quickDamageScale = 1f;
-    [SerializeField] private float quickMoveSpeedScale = 1.55f;
+    [SerializeField] private float quickMoveSpeedScale = 1.38f;
     [SerializeField] private float quickAttackCooldownScale = 0.75f;
     [SerializeField] private float tankHealthScale = 1.75f;
     [SerializeField] private float tankDamageScale = 1.2f;
@@ -72,7 +72,7 @@ public partial class BossEnemyController : MonoBehaviour
     [SerializeField] private float tankAttackCooldownScale = 1.25f;
     [SerializeField] private float dogHealthScale = 0.95f;
     [SerializeField] private float dogDamageScale = 1.05f;
-    [SerializeField] private float dogMoveSpeedScale = 1.85f;
+    [SerializeField] private float dogMoveSpeedScale = 1.62f;
     [SerializeField] private float dogAttackCooldownScale = 0.85f;
 
     [Header("Zombie Skill - Poison")]
@@ -84,7 +84,7 @@ public partial class BossEnemyController : MonoBehaviour
     [SerializeField] private float quickDashInitialDelay = 1.5f;
     [SerializeField] private float quickDashCooldown = 4.2f;
     [SerializeField] private float quickDashDuration = 0.32f;
-    [SerializeField] private float quickDashSpeed = 20f;
+    [SerializeField] private float quickDashSpeed = 18f;
     [SerializeField] private float quickDashMinDistance = 4f;
     [SerializeField] private float quickDashMaxDistance = 18f;
     [SerializeField] private float quickDashAttackRange = 2.1f;

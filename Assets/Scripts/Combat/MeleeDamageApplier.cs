@@ -44,7 +44,11 @@ namespace GrassSim.Combat
 
             float heal = 0f;
             if (lifeSteal > 0f)
-                heal = dmg * Mathf.Clamp01(lifeSteal);
+            {
+                float rawHeal = dmg * Mathf.Clamp01(lifeSteal);
+                float maxHealth = attacker != null ? attacker.MaxHealth : 1f;
+                heal = CombatBalanceCaps.ClampLifeStealHealPerHit(rawHeal, maxHealth);
+            }
 
             return new DamageResult
             {

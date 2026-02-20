@@ -7938,6 +7938,8 @@ MonoBehaviour:
   phaseBTime: 300
   phaseCTime: 600
   endGameTime: 900
+  endRunOnTimeLimit: 0
+  switchToEndPhaseAtTimeLimit: 1
   upgradeLibrary: {fileID: 11400000, guid: bd0ecb2fd74db5e41a189643e3307593, type: 2}
   gameEnded: 0
 --- !u!114 &761045942
@@ -7955,6 +7957,11 @@ MonoBehaviour:
   spawnTimes:
   - 300
   - 600
+  finalBossSpawnTime: 900
+  finalBossHealthMultiplier: 2.8
+  finalBossDamageMultiplier: 1.25
+  finalBossExpMultiplier: 2
+  postFinalBossOverdriveDelay: 60
   bossPrefabsOverride:
   - {fileID: 5728699683654753731, guid: 878ce0f537b440a9994d3065c2ffa0a0, type: 3}
   - {fileID: 5728699683654753731, guid: 12fb65925a4f40088f5ee350ed642477, type: 3}
@@ -7967,8 +7974,8 @@ MonoBehaviour:
   groundMask:
     serializedVersion: 2
     m_Bits: 0
-  bossHealthMultiplier: 10
-  bossDamageMultiplier: 3.5
+  bossHealthMultiplier: 22
+  bossDamageMultiplier: 1.2
   bossExpMultiplier: 5
   rewardChoices: 3
   relicLibrary: {fileID: 0}

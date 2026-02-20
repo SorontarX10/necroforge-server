@@ -22,10 +22,12 @@ public class MainMenuController : MonoBehaviour
 
     void Awake()
     {
-        // 🔒 Start: menu główne widoczne, leaderboard ukryty
+        // Start: main menu visible, secondary panels hidden.
         if (mainMenuRoot) mainMenuRoot.SetActive(true);
         if (leaderboardRoot) leaderboardRoot.SetActive(false);
-        if (leaderboardRoot) optionsRoot.SetActive(false);
+        if (optionsRoot) optionsRoot.SetActive(false);
+
+        ResetMainMenuCameraStack();
     }
 
     // ======================
@@ -42,18 +44,20 @@ public class MainMenuController : MonoBehaviour
     {
         yield return new WaitForSeconds(clickDelay);
 
-        // 🔥 CRITICAL: reset URP camera stack in Main Menu
-        Camera cam = Camera.main;
-        if (cam != null)
-        {
-            var additionalData = cam.GetUniversalAdditionalCameraData();
-            if (additionalData != null && additionalData.cameraStack != null)
-            {
-                additionalData.cameraStack.Clear();
-            }
-        }
+        ResetMainMenuCameraStack();
 
         SceneManager.LoadScene("Loading");
+    }
+
+    private static void ResetMainMenuCameraStack()
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+            return;
+
+        UniversalAdditionalCameraData additionalData = cam.GetUniversalAdditionalCameraData();
+        if (additionalData?.cameraStack != null)
+            additionalData.cameraStack.Clear();
     }
 
     // ======================

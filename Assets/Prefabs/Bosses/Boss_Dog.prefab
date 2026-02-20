@@ -677,7 +677,7 @@ MonoBehaviour:
   zombieAttackCooldownScale: 1
   quickHealthScale: 0.8
   quickDamageScale: 1
-  quickMoveSpeedScale: 1.55
+  quickMoveSpeedScale: 1.38
   quickAttackCooldownScale: 0.75
   tankHealthScale: 1.75
   tankDamageScale: 1.2
@@ -685,7 +685,7 @@ MonoBehaviour:
   tankAttackCooldownScale: 1.25
   dogHealthScale: 0.95
   dogDamageScale: 1.05
-  dogMoveSpeedScale: 1.85
+  dogMoveSpeedScale: 1.62
   dogAttackCooldownScale: 0.85
   zombiePoisonChance: 0.55
   zombiePoisonDuration: 6
@@ -693,7 +693,7 @@ MonoBehaviour:
   quickDashInitialDelay: 1.5
   quickDashCooldown: 4.2
   quickDashDuration: 0.32
-  quickDashSpeed: 20
+  quickDashSpeed: 18
   quickDashMinDistance: 4
   quickDashMaxDistance: 18
   quickDashAttackRange: 2.1

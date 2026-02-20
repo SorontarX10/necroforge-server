@@ -16,9 +16,9 @@ public class HealthBarController : MonoBehaviour
     public void Init(Combatant c)
     {
         combatant = c;
-        playerProg = c.GetComponentInParent<PlayerProgressionController>();
-        enemyCombatant = c.GetComponentInParent<EnemyCombatant>();
-        agent = c.GetComponentInParent<BaseCombatAgent>();
+        playerProg = c != null ? c.GetComponentInParent<PlayerProgressionController>() : null;
+        enemyCombatant = c != null ? c.GetComponentInParent<EnemyCombatant>() : null;
+        agent = c != null ? c.GetComponentInParent<BaseCombatAgent>() : null;
     }
 
     void Update()
@@ -26,15 +26,8 @@ public class HealthBarController : MonoBehaviour
         if (combatant == null || fillImage == null)
             return;
 
-        float current = combatant.currentHealth;
-        float max = 1f;
-
-        if (playerProg != null && playerProg.stats != null)
-            max = playerProg.stats.maxHealth;
-        else if (enemyCombatant != null && enemyCombatant.stats != null)
-            max = enemyCombatant.stats.maxHealth;
-        else if (agent != null)
-            max = agent.maxHealth;
+        float current = combatant.CurrentHealth;
+        float max = Mathf.Max(1f, combatant.MaxHealth);
 
         fillImage.fillAmount = Mathf.Clamp01(current / max);
     }

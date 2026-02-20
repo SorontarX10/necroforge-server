@@ -31,7 +31,7 @@ public class HealthBarBinder : MonoBehaviour
 
     private float GetMaxHp()
     {
-        if (playerProg != null && playerProg.stats != null) return playerProg.stats.maxHealth;
+        if (playerProg != null) return playerProg.MaxHealth;
         if (enemyCombatant != null && enemyCombatant.stats != null) return enemyCombatant.stats.maxHealth;
         return Mathf.Max(1f, combatant.currentHealth);
     }

@@ -13,6 +13,9 @@ public class GameTimerController : MonoBehaviour
     public float phaseBTime = 300f; // X
     public float phaseCTime = 600f; // X
     public float endGameTime = 900f; // Z
+    [Header("Run End Settings")]
+    [SerializeField] private bool endRunOnTimeLimit;
+    [SerializeField] private bool switchToEndPhaseAtTimeLimit = true;
 
     public UpgradeLibrary upgradeLibrary;
 
@@ -41,10 +44,15 @@ public class GameTimerController : MonoBehaviour
         }
 
         Instance = this;
-        DontDestroyOnLoad(gameObject);
 
         if (GetComponent<BossEncounterController>() == null)
             gameObject.AddComponent<BossEncounterController>();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     private void Start()
@@ -78,12 +86,20 @@ public class GameTimerController : MonoBehaviour
 
     private void UpdatePhase()
     {
-        if (elapsedTime >= endGameTime && !gameEnded)
+        if (elapsedTime >= endGameTime)
         {
-            gameEnded = true;
-            CurrentPhase = TimerPhase.End;
-            OnPhaseChanged?.Invoke(CurrentPhase);
-            OnGameEnded?.Invoke();
+            if (switchToEndPhaseAtTimeLimit && CurrentPhase != TimerPhase.End)
+            {
+                CurrentPhase = TimerPhase.End;
+                OnPhaseChanged?.Invoke(CurrentPhase);
+            }
+
+            if (endRunOnTimeLimit && !gameEnded)
+            {
+                gameEnded = true;
+                OnGameEnded?.Invoke();
+            }
+
             return;
         }
 

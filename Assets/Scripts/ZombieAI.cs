@@ -45,8 +45,6 @@ public class ZombieAI : MonoBehaviour
     private Transform currentTarget;
     private Transform cachedTarget;
     private Transform player;
-    private Vector3 wanderTarget;
-    private float nextWanderTime;
     private Animator animator;
     private Vector3 cachedSeparation;
     private float nextTargetScanTime;
@@ -89,7 +87,6 @@ public class ZombieAI : MonoBehaviour
         nextPlayerResolveAt = Time.time + Random.Range(0f, Mathf.Max(0.05f, playerResolveInterval));
 
         EnemyQueryService.ConfigureOwnerBudget(this, Mathf.Max(1, maxQueryCallsPerFrame));
-        PickNewWanderTarget();
     }
 
     private void OnEnable()
@@ -150,14 +147,6 @@ public class ZombieAI : MonoBehaviour
             if (sqr > 0.001f)
                 moveDir = toTarget * (1f / Mathf.Sqrt(sqr));
         }
-        else
-        {
-            Vector3 toWander = wanderTarget - transform.position;
-            toWander.y = 0f;
-            float sqr = toWander.sqrMagnitude;
-            if (sqr > 0.01f)
-                moveDir = toWander * (1f / Mathf.Sqrt(sqr));
-        }
 
         float attackStopDistanceSqr = attackStopDistance * attackStopDistance;
         if (currentTarget == null || HorizontalDistanceSqr(transform.position, currentTarget.position) > attackStopDistanceSqr)
@@ -183,9 +172,6 @@ public class ZombieAI : MonoBehaviour
         {
             rb.linearVelocity = Vector3.zero;
         }
-
-        if (currentTarget == null && Time.time >= nextWanderTime)
-            PickNewWanderTarget();
 
         if (animator != null)
             animator.SetFloat("Speed", new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude);
@@ -250,38 +236,13 @@ public class ZombieAI : MonoBehaviour
 
         nextTargetScanTime = Time.time + interval;
 
-        Collider[] hits = EnemyQueryService.OverlapSphere(
-            transform.position,
-            detectionRadius,
-            targetLayers,
-            QueryTriggerInteraction.Ignore,
-            this,
-            maxQueriesPerFrame: Mathf.Max(1, maxQueryCallsPerFrame)
-        );
-
-        int hitCount = EnemyQueryService.GetLastHitCount(this);
-        Transform bestTarget = null;
-        float best = float.MaxValue;
-
-        for (int i = 0; i < hitCount; i++)
+        if (player != null && player.gameObject.activeInHierarchy)
         {
-            Collider hit = hits[i];
-            if (hit == null)
-                continue;
-
-            Transform candidate = hit.transform;
-            if (candidate == transform || candidate.IsChildOf(transform))
-                continue;
-
-            float sqrDistance = HorizontalDistanceSqr(candidate.position, transform.position);
-            if (sqrDistance < best)
-            {
-                best = sqrDistance;
-                bestTarget = candidate;
-            }
+            cachedTarget = player;
+            return;
         }
 
-        cachedTarget = bestTarget;
+        cachedTarget = null;
     }
 
     private void RefreshSeparationIfNeeded()
@@ -338,13 +299,6 @@ public class ZombieAI : MonoBehaviour
         }
 
         cachedSeparation = count > 0 ? force / count : Vector3.zero;
-    }
-
-    private void PickNewWanderTarget()
-    {
-        Vector2 rnd = Random.insideUnitCircle * wanderRadius;
-        wanderTarget = transform.position + new Vector3(rnd.x, 0f, rnd.y);
-        nextWanderTime = Time.time + wanderInterval;
     }
 
     private static float HorizontalDistanceSqr(Vector3 a, Vector3 b)

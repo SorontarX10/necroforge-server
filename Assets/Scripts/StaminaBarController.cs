@@ -25,8 +25,8 @@ public class StaminaBarController : MonoBehaviour
 
         if (playerProg != null)
         {
-            current = playerProg.currentStamina;
-            max = playerProg.stats != null ? playerProg.stats.maxStamina : 0f;
+            current = playerProg.CurrentStamina;
+            max = playerProg.MaxStamina;
         }
         else if (agent != null)
         {

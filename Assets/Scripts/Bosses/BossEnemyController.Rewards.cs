@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using GrassSim.Core;
 using GrassSim.Enemies;
 
 public partial class BossEnemyController : MonoBehaviour
@@ -54,6 +55,7 @@ public partial class BossEnemyController : MonoBehaviour
     {
         List<RelicDefinition> pool = new();
         var all = relicLibrary.relics;
+        PlayerRelicController rewardRelics = ResolveRewardRelics();
 
         for (int i = 0; i < all.Count; i++)
         {
@@ -61,8 +63,16 @@ public partial class BossEnemyController : MonoBehaviour
             if (relic == null)
                 continue;
 
-            if (relic.rarity == RelicRarity.Legendary || relic.rarity == RelicRarity.Mythic)
-                pool.Add(relic);
+            if (relic.rarity != RelicRarity.Legendary && relic.rarity != RelicRarity.Mythic)
+                continue;
+
+            if (rewardRelics != null && !rewardRelics.CanAcceptRelic(relic))
+                continue;
+
+            if (relic.effect == null || string.IsNullOrWhiteSpace(relic.id))
+                continue;
+
+            pool.Add(relic);
         }
 
         if (pool.Count == 0)
@@ -78,12 +88,28 @@ public partial class BossEnemyController : MonoBehaviour
             uniquePool.RemoveAt(idx);
         }
 
-        while (result.Count < count)
+        return result;
+    }
+
+    private PlayerRelicController ResolveRewardRelics()
+    {
+        if (playerRelics != null)
+            return playerRelics;
+
+        if (playerCombatant != null)
         {
-            int idx = Random.Range(0, pool.Count);
-            result.Add(pool[idx]);
+            playerRelics = playerCombatant.GetComponent<PlayerRelicController>();
+            if (playerRelics != null)
+                return playerRelics;
         }
 
-        return result;
+        var progression = PlayerLocator.GetProgression();
+        if (progression != null)
+            playerRelics = progression.GetComponent<PlayerRelicController>();
+
+        if (playerRelics == null)
+            playerRelics = FindFirstObjectByType<PlayerRelicController>();
+
+        return playerRelics;
     }
 }

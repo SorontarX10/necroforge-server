@@ -5,15 +5,7 @@ public class QuitToMainMenu : MonoBehaviour
 {
     public void Quit()
     {
-        // ⛔ ZATRZYMAJ MUZYKĘ
-        var music = FindFirstObjectByType<MusicPhaseController>();
-        if (music != null)
-        {
-            Destroy(music.gameObject);
-        }
-
-        // przywróć czas i kursor
-        Time.timeScale = 1f;
+        PauseMenuController.PrepareForMainMenuTransition();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 

@@ -1,4 +1,5 @@
 using UnityEngine;
+using GrassSim.Core;
 using GrassSim.UI;
 
 public class ChestRelicTrigger : MonoBehaviour
@@ -7,7 +8,7 @@ public class ChestRelicTrigger : MonoBehaviour
     public int relicChoices = 3;
 
     [Header("Data")]
-    public RelicLibrary relicLibrary; // ScriptableObject – OK w prefabie
+    public RelicLibrary relicLibrary;
 
     private RelicSelectionUI relicUI;
     private bool used;
@@ -15,7 +16,6 @@ public class ChestRelicTrigger : MonoBehaviour
 
     private void Awake()
     {
-        // NIE w OnTrigger – tylko raz
         relicUI = FindFirstObjectByType<RelicSelectionUI>();
 
         if (relicUI == null)
@@ -37,13 +37,16 @@ public class ChestRelicTrigger : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (used) return;
-        if (!other.CompareTag("Player")) return;
+        if (used)
+            return;
+
+        if (!other.CompareTag("Player"))
+            return;
 
         if (relicUI == null || relicLibrary == null)
             return;
 
-        currentPlayer = other.GetComponentInParent<PlayerRelicController>();
+        currentPlayer = ResolvePlayer(other);
         used = true;
         OpenChest();
     }
@@ -60,10 +63,36 @@ public class ChestRelicTrigger : MonoBehaviour
 
     private void OpenChest()
     {
+        ResolvePlayer();
+
         var relics = relicLibrary.Roll(relicChoices, currentPlayer);
         relicUI.Show(relics);
 
-        // anim / sfx możesz tu dorzucić
         gameObject.SetActive(false);
+    }
+
+    private PlayerRelicController ResolvePlayer(Collider source = null)
+    {
+        if (currentPlayer != null)
+            return currentPlayer;
+
+        if (source != null)
+        {
+            currentPlayer = source.GetComponent<PlayerRelicController>();
+            if (currentPlayer == null)
+                currentPlayer = source.GetComponentInParent<PlayerRelicController>();
+        }
+
+        if (currentPlayer == null)
+        {
+            var progression = PlayerLocator.GetProgression();
+            if (progression != null)
+                currentPlayer = progression.GetComponent<PlayerRelicController>();
+        }
+
+        if (currentPlayer == null)
+            currentPlayer = FindFirstObjectByType<PlayerRelicController>();
+
+        return currentPlayer;
     }
 }

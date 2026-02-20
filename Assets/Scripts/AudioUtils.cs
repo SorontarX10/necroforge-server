@@ -34,6 +34,35 @@ public static class AudioUtils
         src.PlayOneShot(clip, Mathf.Clamp01(volume));
     }
 
+    public static void StopAllAndReset()
+    {
+        if (emitters != null)
+        {
+            for (int i = 0; i < emitters.Length; i++)
+            {
+                AudioSource src = emitters[i];
+                if (src == null)
+                    continue;
+
+                src.Stop();
+                src.clip = null;
+            }
+        }
+
+        if (host != null)
+        {
+            if (Application.isPlaying)
+                Object.Destroy(host);
+            else
+                Object.DestroyImmediate(host);
+        }
+
+        host = null;
+        emitters = null;
+        emitterIndex = 0;
+        initialized = false;
+    }
+
     private static AudioSource RentEmitter()
     {
         int start = emitterIndex;

@@ -9,6 +9,13 @@ public class BossEncounterController : MonoBehaviour
     [Header("Boss Spawn Times (seconds)")]
     [SerializeField] private List<float> spawnTimes = new() { 300f, 600f };
 
+    [Header("Final Boss")]
+    [SerializeField] private float finalBossSpawnTime = 900f;
+    [SerializeField] private float finalBossHealthMultiplier = 2.8f;
+    [SerializeField] private float finalBossDamageMultiplier = 1.25f;
+    [SerializeField] private float finalBossExpMultiplier = 2f;
+    [SerializeField] private float postFinalBossOverdriveDelay = 60f;
+
     [Header("Optional Prefab Override")]
     [SerializeField] private List<GameObject> bossPrefabsOverride = new();
 
@@ -20,8 +27,8 @@ public class BossEncounterController : MonoBehaviour
     [SerializeField] private LayerMask groundMask;
 
     [Header("Boss Buff")]
-    [SerializeField] private float bossHealthMultiplier = 10f;
-    [SerializeField] private float bossDamageMultiplier = 3.5f;
+    [SerializeField] private float bossHealthMultiplier = 22f;
+    [SerializeField] private float bossDamageMultiplier = 1.2f;
     [SerializeField] private int bossExpMultiplier = 5;
 
     [Header("Boss Reward")]
@@ -30,17 +37,43 @@ public class BossEncounterController : MonoBehaviour
     [SerializeField] private RelicSelectionUI relicSelectionUI;
 
     private readonly List<GameObject> cachedBossPrefabs = new();
+
     private GameTimerController timer;
     private BossEnemyController activeBoss;
     private int nextSpawnIndex;
-    private int queuedSpawns;
+    private int queuedRegularSpawns;
+    private bool queuedFinalBossSpawn;
     private float lastElapsedTime;
+    private bool finalBossScheduleTriggered;
+    private bool finalBossSpawned;
+    private float finalBossSpawnedAt = -1f;
     private bool missingPrefabsWarningShown;
 
+    public static BossEncounterController Instance { get; private set; }
     public BossEnemyController ActiveBoss => activeBoss != null && activeBoss.IsAlive ? activeBoss : null;
+    public bool HasSpawnedFinalBoss => finalBossSpawned;
+    public float FinalBossSpawnedAt => finalBossSpawnedAt;
+    public float PostFinalBossOverdriveDelay => postFinalBossOverdriveDelay;
+
+    public float GetPostFinalBossOverdriveElapsed(float runSeconds)
+    {
+        if (!finalBossSpawned)
+            return 0f;
+
+        float start = finalBossSpawnedAt + postFinalBossOverdriveDelay;
+        return Mathf.Max(0f, runSeconds - start);
+    }
 
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+
+        Instance = this;
+
         timer = GetComponent<GameTimerController>();
         if (timer == null)
             timer = GameTimerController.Instance;
@@ -48,6 +81,12 @@ public class BossEncounterController : MonoBehaviour
         NormalizeSpawnTimes();
         ResolveRewardReferences();
         RebuildBossPrefabCache(logIfMissing: false);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     private void OnValidate()
@@ -58,8 +97,13 @@ public class BossEncounterController : MonoBehaviour
         spawnYOffset = Mathf.Max(0f, spawnYOffset);
         rewardChoices = Mathf.Clamp(rewardChoices, 1, 3);
         bossHealthMultiplier = Mathf.Max(1f, bossHealthMultiplier);
-        bossDamageMultiplier = Mathf.Max(1f, bossDamageMultiplier);
+        bossDamageMultiplier = Mathf.Max(0.1f, bossDamageMultiplier);
         bossExpMultiplier = Mathf.Max(1, bossExpMultiplier);
+        finalBossSpawnTime = Mathf.Max(1f, finalBossSpawnTime);
+        finalBossHealthMultiplier = Mathf.Max(1f, finalBossHealthMultiplier);
+        finalBossDamageMultiplier = Mathf.Max(0.1f, finalBossDamageMultiplier);
+        finalBossExpMultiplier = Mathf.Max(1f, finalBossExpMultiplier);
+        postFinalBossOverdriveDelay = Mathf.Max(0f, postFinalBossOverdriveDelay);
     }
 
     private void Update()
@@ -75,14 +119,28 @@ public class BossEncounterController : MonoBehaviour
 
         while (nextSpawnIndex < spawnTimes.Count && elapsed >= spawnTimes[nextSpawnIndex])
         {
-            TrySpawnOrQueueBoss();
+            TrySpawnOrQueueBoss(isFinalBoss: false);
             nextSpawnIndex++;
         }
 
-        if (activeBoss == null && queuedSpawns > 0)
+        if (!finalBossScheduleTriggered && elapsed >= finalBossSpawnTime)
         {
-            if (SpawnBoss(logIfMissing: true))
-                queuedSpawns--;
+            finalBossScheduleTriggered = true;
+            TrySpawnOrQueueBoss(isFinalBoss: true);
+        }
+
+        if (activeBoss == null)
+        {
+            if (queuedFinalBossSpawn)
+            {
+                if (SpawnBoss(isFinalBoss: true, logIfMissing: true))
+                    queuedFinalBossSpawn = false;
+            }
+            else if (queuedRegularSpawns > 0)
+            {
+                if (SpawnBoss(isFinalBoss: false, logIfMissing: true))
+                    queuedRegularSpawns--;
+            }
         }
     }
 
@@ -98,8 +156,12 @@ public class BossEncounterController : MonoBehaviour
     private void ResetSchedule()
     {
         nextSpawnIndex = 0;
-        queuedSpawns = 0;
         activeBoss = null;
+        queuedRegularSpawns = 0;
+        queuedFinalBossSpawn = false;
+        finalBossScheduleTriggered = false;
+        finalBossSpawned = false;
+        finalBossSpawnedAt = -1f;
     }
 
     private void NormalizeSpawnTimes()
@@ -117,19 +179,27 @@ public class BossEncounterController : MonoBehaviour
         }
     }
 
-    private void TrySpawnOrQueueBoss()
+    private void TrySpawnOrQueueBoss(bool isFinalBoss)
     {
         if (activeBoss != null && activeBoss.IsAlive)
         {
-            queuedSpawns++;
+            if (isFinalBoss)
+                queuedFinalBossSpawn = true;
+            else
+                queuedRegularSpawns++;
             return;
         }
 
-        if (!SpawnBoss(logIfMissing: true))
-            queuedSpawns++;
+        if (!SpawnBoss(isFinalBoss, logIfMissing: true))
+        {
+            if (isFinalBoss)
+                queuedFinalBossSpawn = true;
+            else
+                queuedRegularSpawns++;
+        }
     }
 
-    private bool SpawnBoss(bool logIfMissing)
+    private bool SpawnBoss(bool isFinalBoss, bool logIfMissing)
     {
         if (!EnsureBossPrefabs(logIfMissing))
             return false;
@@ -158,20 +228,38 @@ public class BossEncounterController : MonoBehaviour
 
         ResolveRewardReferences();
 
+        float healthMultiplier = bossHealthMultiplier;
+        float damageMultiplier = bossDamageMultiplier;
+        int expMultiplier = bossExpMultiplier;
+
+        if (isFinalBoss)
+        {
+            healthMultiplier *= finalBossHealthMultiplier;
+            damageMultiplier *= finalBossDamageMultiplier;
+            expMultiplier = Mathf.Max(1, Mathf.RoundToInt(expMultiplier * finalBossExpMultiplier));
+        }
+
         boss.Initialize(
             owner: this,
             relicLibrary: relicLibrary,
             relicSelectionUI: relicSelectionUI,
             rewardChoices: rewardChoices,
-            healthMultiplier: bossHealthMultiplier,
-            damageMultiplier: bossDamageMultiplier,
-            expMultiplier: bossExpMultiplier,
+            healthMultiplier: healthMultiplier,
+            damageMultiplier: damageMultiplier,
+            expMultiplier: expMultiplier,
             groundMask: GetGroundMask(),
             groundRayHeight: spawnRayHeight,
             groundSnapOffset: spawnYOffset
         );
 
         activeBoss = boss;
+
+        if (isFinalBoss)
+        {
+            finalBossSpawned = true;
+            finalBossSpawnedAt = timer != null ? timer.elapsedTime : lastElapsedTime;
+        }
+
         return true;
     }
 

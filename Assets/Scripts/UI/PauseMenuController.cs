@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
+using GrassSim.Core;
+using GrassSim.UI;
 
 public class PauseMenuController : MonoBehaviour
 {
@@ -22,8 +24,16 @@ public class PauseMenuController : MonoBehaviour
         }
         Instance = this;
 
-        pauseRoot.SetActive(false);
+        if (pauseRoot != null)
+            pauseRoot.SetActive(false);
+
         if (optionsRoot) optionsRoot.SetActive(false);
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     void Update()
@@ -50,7 +60,8 @@ public class PauseMenuController : MonoBehaviour
         isPaused = true;
         Time.timeScale = 0f;
 
-        pauseRoot.SetActive(true);
+        if (pauseRoot != null)
+            pauseRoot.SetActive(true);
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -61,7 +72,8 @@ public class PauseMenuController : MonoBehaviour
         isPaused = false;
         Time.timeScale = 1f;
 
-        pauseRoot.SetActive(false);
+        if (pauseRoot != null)
+            pauseRoot.SetActive(false);
         if (optionsRoot) optionsRoot.SetActive(false);
 
         Cursor.lockState = CursorLockMode.Locked;
@@ -82,12 +94,24 @@ public class PauseMenuController : MonoBehaviour
 
     public void QuitToMainMenu()
     {
+        PrepareForMainMenuTransition();
+        SceneManager.LoadScene("MainMenu");
+    }
+
+    public static void PrepareForMainMenuTransition()
+    {
         Time.timeScale = 1f;
+        AudioListener.pause = false;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        ChoiceUiQueue.Clear();
+        PlayerLocator.Invalidate();
 
         var music = FindFirstObjectByType<MusicPhaseController>();
         if (music != null)
             music.StopAllMusic();
 
-        SceneManager.LoadScene("MainMenu");
+        AudioUtils.StopAllAndReset();
     }
 }

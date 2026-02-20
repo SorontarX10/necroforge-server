@@ -588,35 +588,14 @@ public class HordeAISystem : MonoBehaviour
 
         Vector3 position = tr.position;
         Vector3 moveDir = Vector3.zero;
-        bool hasPlayerTarget = false;
 
         if (player != null && player.gameObject.activeInHierarchy)
         {
             Vector3 toPlayer = player.position - position;
             toPlayer.y = 0f;
             float sqrToPlayer = toPlayer.sqrMagnitude;
-            if (sqrToPlayer <= ai.detectionRadius * ai.detectionRadius)
-            {
-                hasPlayerTarget = true;
-                if (sqrToPlayer > 0.001f)
-                    moveDir = toPlayer * (1f / Mathf.Sqrt(sqrToPlayer));
-            }
-        }
-
-        if (!hasPlayerTarget)
-        {
-            bool reachedWanderTarget = HorizontalDistanceSqr(position, state.wanderTarget) <= 0.16f;
-            if (Time.time >= state.nextWanderAt || reachedWanderTarget)
-            {
-                state.wanderTarget = PickWanderTarget(position, ai.wanderRadius);
-                state.nextWanderAt = Time.time + Mathf.Max(0.1f, ai.wanderInterval);
-            }
-
-            Vector3 toWander = state.wanderTarget - position;
-            toWander.y = 0f;
-            float sqr = toWander.sqrMagnitude;
-            if (sqr > 0.01f)
-                moveDir = toWander * (1f / Mathf.Sqrt(sqr));
+            if (sqrToPlayer > 0.001f)
+                moveDir = toPlayer * (1f / Mathf.Sqrt(sqrToPlayer));
         }
 
         if (moveDir.sqrMagnitude > 0.001f)

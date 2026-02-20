@@ -7,11 +7,13 @@ using GrassSim.UI;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Scripting;
 using UnityEngine.UI;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
+[Preserve]
 public class WorldMapController : MonoBehaviour
 {
     [Header("Input")]
@@ -47,6 +49,13 @@ public class WorldMapController : MonoBehaviour
     [SerializeField, Min(4f)] private float chestMarkerSize = 10f;
     [SerializeField, Min(4f)] private float enhancerMarkerSize = 8f;
 
+    [Header("Minimap")]
+    [SerializeField] private bool showMinimap = true;
+    [SerializeField, Min(96f)] private float minimapSize = 240f;
+    [SerializeField, Min(0f)] private float minimapPadding = 24f;
+    [SerializeField, Min(0f)] private float minimapInnerPadding = 8f;
+    [SerializeField] private Color minimapBackdropColor = new Color(0.04f, 0.05f, 0.07f, 0.9f);
+
     private ChunkedProceduralLevelGenerator worldGenerator;
     private Transform player;
     private Rect worldRectXZ;
@@ -58,6 +67,11 @@ public class WorldMapController : MonoBehaviour
     private RawImage fogImage;
     private RectTransform markerLayer;
     private RectTransform playerMarker;
+    private GameObject minimapRoot;
+    private RawImage minimapImage;
+    private RawImage minimapFogImage;
+    private RectTransform minimapMarkerLayer;
+    private RectTransform minimapPlayerMarker;
 
     private Texture2D mapTexture;
     private Texture2D fogTexture;
@@ -70,9 +84,13 @@ public class WorldMapController : MonoBehaviour
     private float nextRevealTime;
     private byte unexploredAlphaByte;
     private bool collectibleMarkersDirty = true;
+    private bool legacyFallbackChecked;
+    private bool legacyFallbackAvailable = true;
 
     private readonly Dictionary<int, MapTargetMarker> chestMarkers = new Dictionary<int, MapTargetMarker>();
     private readonly Dictionary<int, MapTargetMarker> enhancerMarkers = new Dictionary<int, MapTargetMarker>();
+    private readonly Dictionary<int, MapTargetMarker> minimapChestMarkers = new Dictionary<int, MapTargetMarker>();
+    private readonly Dictionary<int, MapTargetMarker> minimapEnhancerMarkers = new Dictionary<int, MapTargetMarker>();
     private readonly HashSet<int> markerActiveIds = new HashSet<int>(128);
     private readonly List<int> markerIdsToRemove = new List<int>(64);
     private readonly List<ChestRelicTrigger> chestSceneBuffer = new List<ChestRelicTrigger>(64);
@@ -97,6 +115,7 @@ public class WorldMapController : MonoBehaviour
         public RectTransform rect;
     }
 
+    [Preserve]
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
@@ -144,7 +163,12 @@ public class WorldMapController : MonoBehaviour
         collectibleMarkersDirty = true;
         RefreshCollectibleMarkersFromRegistry(forceRefresh: true);
 
-        mapRoot.SetActive(false);
+        if (mapRoot != null)
+            mapRoot.SetActive(false);
+
+        if (minimapRoot != null)
+            minimapRoot.SetActive(showMinimap);
+
         mapVisible = false;
         SetCaptureOverlayVisible(true);
 
@@ -189,7 +213,8 @@ public class WorldMapController : MonoBehaviour
         HandleToggleInput();
         UpdateFog();
 
-        if (mapVisible)
+        bool anyMapVisible = mapVisible || (minimapRoot != null && minimapRoot.activeSelf);
+        if (anyMapVisible)
         {
             RefreshCollectibleMarkersFromRegistry(forceRefresh: false);
             UpdatePlayerMarker();
@@ -203,27 +228,59 @@ public class WorldMapController : MonoBehaviour
 
 #if ENABLE_INPUT_SYSTEM
         var keyboard = Keyboard.current;
-        toggleRequested = keyboard != null && keyboard.mKey.wasPressedThisFrame;
+        if (keyboard != null)
+            toggleRequested = keyboard.mKey.wasPressedThisFrame;
 #endif
 
 #if ENABLE_LEGACY_INPUT_MANAGER
         if (!toggleRequested)
             toggleRequested = Input.GetKeyDown(legacyToggleKey);
+#else
+        if (!toggleRequested)
+            toggleRequested = TryLegacyToggleFallback();
 #endif
 
         if (toggleRequested)
             SetMapVisible(!mapVisible);
     }
 
+    private bool TryLegacyToggleFallback()
+    {
+        if (!legacyFallbackAvailable)
+            return false;
+
+        if (!legacyFallbackChecked)
+        {
+            legacyFallbackChecked = true;
+            try
+            {
+                _ = Input.anyKey;
+            }
+            catch
+            {
+                legacyFallbackAvailable = false;
+                return false;
+            }
+        }
+
+        try
+        {
+            return Input.GetKeyDown(KeyCode.M);
+        }
+        catch
+        {
+            legacyFallbackAvailable = false;
+            return false;
+        }
+    }
+
     private void SetMapVisible(bool visible)
     {
-        if (mapRoot == null)
-            return;
+        mapVisible = visible && mapRoot != null;
+        if (mapRoot != null)
+            mapRoot.SetActive(mapVisible);
 
-        mapVisible = visible;
-        mapRoot.SetActive(visible);
-
-        if (visible)
+        if (mapVisible)
         {
             collectibleMarkersDirty = true;
             RefreshCollectibleMarkersFromRegistry(forceRefresh: true);
@@ -247,27 +304,33 @@ public class WorldMapController : MonoBehaviour
 
     private void RefreshCollectibleMarkersFromRegistry(bool forceRefresh)
     {
-        if (markerLayer == null)
-            return;
-
         if (!forceRefresh && !collectibleMarkersDirty)
             return;
 
         MapCollectibleRegistry.GetActiveChests(chestSceneBuffer);
-        SyncMarkers(chestSceneBuffer, chestMarkers, chestMarkerColor, chestMarkerSize);
+        SyncMarkers(chestSceneBuffer, chestMarkers, markerLayer, chestMarkerColor, chestMarkerSize);
+        SyncMarkers(chestSceneBuffer, minimapChestMarkers, minimapMarkerLayer, chestMarkerColor, chestMarkerSize);
 
         MapCollectibleRegistry.GetActiveEnhancers(enhancerSceneBuffer);
-        SyncMarkers(enhancerSceneBuffer, enhancerMarkers, enhancerMarkerColor, enhancerMarkerSize);
+        SyncMarkers(enhancerSceneBuffer, enhancerMarkers, markerLayer, enhancerMarkerColor, enhancerMarkerSize);
+        SyncMarkers(enhancerSceneBuffer, minimapEnhancerMarkers, minimapMarkerLayer, enhancerMarkerColor, enhancerMarkerSize);
         collectibleMarkersDirty = false;
     }
 
     private void SyncMarkers<T>(
         IReadOnlyList<T> sceneTargets,
         Dictionary<int, MapTargetMarker> markerSet,
+        RectTransform targetLayer,
         Color markerTint,
         float markerSize
     ) where T : Component
     {
+        if (targetLayer == null)
+        {
+            ClearMarkerSet(markerSet);
+            return;
+        }
+
         if (sceneTargets == null)
             return;
 
@@ -296,7 +359,7 @@ public class WorldMapController : MonoBehaviour
             markerSet[id] = new MapTargetMarker
             {
                 target = target.transform,
-                rect = CreateMapMarker(markerTint, markerSize, target.name)
+                rect = CreateMapMarker(targetLayer, markerTint, markerSize, target.name)
             };
         }
 
@@ -326,10 +389,25 @@ public class WorldMapController : MonoBehaviour
         markerIdsToRemove.Clear();
     }
 
-    private RectTransform CreateMapMarker(Color tint, float size, string targetName)
+    private static void ClearMarkerSet(Dictionary<int, MapTargetMarker> markerSet)
+    {
+        if (markerSet == null || markerSet.Count == 0)
+            return;
+
+        foreach (var kv in markerSet)
+        {
+            MapTargetMarker marker = kv.Value;
+            if (marker != null && marker.rect != null)
+                Object.Destroy(marker.rect.gameObject);
+        }
+
+        markerSet.Clear();
+    }
+
+    private RectTransform CreateMapMarker(RectTransform parent, Color tint, float size, string targetName)
     {
         var go = new GameObject($"Marker_{targetName}", typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(markerLayer, false);
+        go.transform.SetParent(parent, false);
 
         var rect = (RectTransform)go.transform;
         rect.anchorMin = Vector2.zero;
@@ -346,19 +424,21 @@ public class WorldMapController : MonoBehaviour
 
     private void UpdateCollectibleMarkerPositions()
     {
-        if (mapImage == null)
-            return;
-
-        UpdateMarkerDictionaryPositions(chestMarkers);
-        UpdateMarkerDictionaryPositions(enhancerMarkers);
+        UpdateMarkerDictionaryPositions(chestMarkers, mapImage);
+        UpdateMarkerDictionaryPositions(enhancerMarkers, mapImage);
+        UpdateMarkerDictionaryPositions(minimapChestMarkers, minimapImage);
+        UpdateMarkerDictionaryPositions(minimapEnhancerMarkers, minimapImage);
     }
 
-    private void UpdateMarkerDictionaryPositions(Dictionary<int, MapTargetMarker> markerSet)
+    private void UpdateMarkerDictionaryPositions(
+        Dictionary<int, MapTargetMarker> markerSet,
+        RawImage targetMapImage
+    )
     {
-        if (markerSet == null || markerSet.Count == 0 || mapImage == null)
+        if (markerSet == null || markerSet.Count == 0 || targetMapImage == null)
             return;
 
-        Rect mapRect = mapImage.rectTransform.rect;
+        Rect mapRect = targetMapImage.rectTransform.rect;
 
         foreach (var kv in markerSet)
         {
@@ -766,6 +846,110 @@ public class WorldMapController : MonoBehaviour
         var headingImage = headingGo.GetComponent<Image>();
         headingImage.color = playerHeadingColor;
         headingImage.raycastTarget = false;
+
+        if (showMinimap)
+            BuildMinimap(canvasGo.transform);
+        else
+            minimapRoot = null;
+    }
+
+    private void BuildMinimap(Transform canvasRoot)
+    {
+        minimapRoot = new GameObject("MiniMapRoot", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+        minimapRoot.transform.SetParent(canvasRoot, false);
+
+        RectTransform minimapRect = (RectTransform)minimapRoot.transform;
+        minimapRect.anchorMin = new Vector2(1f, 0f);
+        minimapRect.anchorMax = new Vector2(1f, 0f);
+        minimapRect.pivot = new Vector2(1f, 0f);
+        minimapRect.sizeDelta = new Vector2(minimapSize, minimapSize);
+        minimapRect.anchoredPosition = new Vector2(-minimapPadding, minimapPadding);
+
+        Image minimapBackdrop = minimapRoot.GetComponent<Image>();
+        minimapBackdrop.color = minimapBackdropColor;
+        minimapBackdrop.raycastTarget = false;
+
+        CanvasGroup group = minimapRoot.GetComponent<CanvasGroup>();
+        group.interactable = false;
+        group.blocksRaycasts = false;
+
+        var maskGo = new GameObject("MiniMapMask", typeof(RectTransform), typeof(Image), typeof(Mask));
+        maskGo.transform.SetParent(minimapRoot.transform, false);
+
+        RectTransform maskRect = (RectTransform)maskGo.transform;
+        maskRect.anchorMin = Vector2.zero;
+        maskRect.anchorMax = Vector2.one;
+        maskRect.offsetMin = Vector2.one * minimapInnerPadding;
+        maskRect.offsetMax = -Vector2.one * minimapInnerPadding;
+
+        Image maskImage = maskGo.GetComponent<Image>();
+        maskImage.color = frameColor;
+        maskImage.raycastTarget = false;
+
+        Mask mask = maskGo.GetComponent<Mask>();
+        mask.showMaskGraphic = true;
+
+        var mapGo = new GameObject("MiniMapImage", typeof(RectTransform), typeof(RawImage));
+        mapGo.transform.SetParent(maskGo.transform, false);
+
+        RectTransform mapRect = (RectTransform)mapGo.transform;
+        mapRect.anchorMin = Vector2.zero;
+        mapRect.anchorMax = Vector2.one;
+        mapRect.offsetMin = Vector2.zero;
+        mapRect.offsetMax = Vector2.zero;
+
+        minimapImage = mapGo.GetComponent<RawImage>();
+        minimapImage.color = Color.white;
+        minimapImage.raycastTarget = false;
+
+        var fogGo = new GameObject("MiniMapFog", typeof(RectTransform), typeof(RawImage));
+        fogGo.transform.SetParent(mapGo.transform, false);
+
+        RectTransform fogRect = (RectTransform)fogGo.transform;
+        fogRect.anchorMin = Vector2.zero;
+        fogRect.anchorMax = Vector2.one;
+        fogRect.offsetMin = Vector2.zero;
+        fogRect.offsetMax = Vector2.zero;
+
+        minimapFogImage = fogGo.GetComponent<RawImage>();
+        minimapFogImage.color = Color.white;
+        minimapFogImage.raycastTarget = false;
+
+        var markersGo = new GameObject("MiniMapMarkersLayer", typeof(RectTransform));
+        markersGo.transform.SetParent(mapGo.transform, false);
+        minimapMarkerLayer = (RectTransform)markersGo.transform;
+        minimapMarkerLayer.anchorMin = Vector2.zero;
+        minimapMarkerLayer.anchorMax = Vector2.one;
+        minimapMarkerLayer.offsetMin = Vector2.zero;
+        minimapMarkerLayer.offsetMax = Vector2.zero;
+
+        var markerGo = new GameObject("MiniMapPlayerMarker", typeof(RectTransform), typeof(Image));
+        markerGo.transform.SetParent(mapGo.transform, false);
+
+        minimapPlayerMarker = (RectTransform)markerGo.transform;
+        minimapPlayerMarker.anchorMin = Vector2.zero;
+        minimapPlayerMarker.anchorMax = Vector2.zero;
+        minimapPlayerMarker.pivot = new Vector2(0.5f, 0.5f);
+        minimapPlayerMarker.sizeDelta = new Vector2(9f, 9f);
+        minimapPlayerMarker.anchoredPosition = Vector2.zero;
+
+        Image markerImage = markerGo.GetComponent<Image>();
+        markerImage.color = markerColor;
+        markerImage.raycastTarget = false;
+
+        var headingGo = new GameObject("MiniMapPlayerHeading", typeof(RectTransform), typeof(Image));
+        headingGo.transform.SetParent(markerGo.transform, false);
+
+        RectTransform headingRect = (RectTransform)headingGo.transform;
+        headingRect.anchorMin = new Vector2(0.5f, 0.5f);
+        headingRect.anchorMax = new Vector2(0.5f, 0.5f);
+        headingRect.pivot = new Vector2(0.5f, 0f);
+        headingRect.sizeDelta = new Vector2(2f, 10f);
+        headingRect.anchoredPosition = new Vector2(0f, 4f);
+
+        Image headingImage = headingGo.GetComponent<Image>();
+        headingImage.color = playerHeadingColor;
+        headingImage.raycastTarget = false;
     }
 
     private IEnumerator BakeMapTextureRoutine()
@@ -790,6 +974,8 @@ public class WorldMapController : MonoBehaviour
             yield return null;
             mapTexture = CaptureTopDownTexture();
             mapImage.texture = mapTexture;
+            if (minimapImage != null)
+                minimapImage.texture = mapTexture;
         }
         finally
         {
@@ -881,6 +1067,8 @@ public class WorldMapController : MonoBehaviour
 
         if (fogImage != null)
             fogImage.texture = fogTexture;
+        if (minimapFogImage != null)
+            minimapFogImage.texture = fogTexture;
     }
 
     private void RevealAround(Vector3 worldPosition)
@@ -954,36 +1142,36 @@ public class WorldMapController : MonoBehaviour
 
     private void UpdatePlayerMarker()
     {
-        if (player == null || playerMarker == null || mapImage == null)
+        if (player == null)
+            return;
+
+        UpdatePlayerMarker(playerMarker, mapImage);
+        UpdatePlayerMarker(minimapPlayerMarker, minimapImage);
+    }
+
+    private void UpdatePlayerMarker(RectTransform marker, RawImage targetMapImage)
+    {
+        if (marker == null || targetMapImage == null)
             return;
 
         Vector2 uv = WorldToMapUv(player.position);
-        Rect rect = mapImage.rectTransform.rect;
+        Rect rect = targetMapImage.rectTransform.rect;
 
-        playerMarker.anchoredPosition = new Vector2(
+        marker.anchoredPosition = new Vector2(
             uv.x * rect.width,
             uv.y * rect.height
         );
-        playerMarker.localRotation = Quaternion.Euler(0f, 0f, -player.eulerAngles.y);
+        marker.localRotation = Quaternion.Euler(0f, 0f, -player.eulerAngles.y);
     }
 
     private void OnDestroy()
     {
         MapCollectibleRegistry.RegistryChanged -= HandleCollectibleRegistryChanged;
 
-        foreach (var kv in chestMarkers)
-        {
-            if (kv.Value != null && kv.Value.rect != null)
-                Destroy(kv.Value.rect.gameObject);
-        }
-        chestMarkers.Clear();
-
-        foreach (var kv in enhancerMarkers)
-        {
-            if (kv.Value != null && kv.Value.rect != null)
-                Destroy(kv.Value.rect.gameObject);
-        }
-        enhancerMarkers.Clear();
+        ClearMarkerSet(chestMarkers);
+        ClearMarkerSet(enhancerMarkers);
+        ClearMarkerSet(minimapChestMarkers);
+        ClearMarkerSet(minimapEnhancerMarkers);
 
         if (mapTexture != null)
             Destroy(mapTexture);

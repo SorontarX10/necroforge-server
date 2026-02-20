@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GrassSim.Core;
 using GrassSim.UI;
 using UnityEngine;
 
@@ -9,11 +10,10 @@ public class RelicSelectionUI : MonoBehaviour
 
     private PlayerRelicController player;
     private CursorScript cursor;
+    private readonly List<RelicDefinition> eligibleRelics = new(8);
 
     private void Awake()
     {
-        ChoiceUiQueue.Clear();
-
         if (root != null)
             root.SetActive(false);
 
@@ -29,7 +29,8 @@ public class RelicSelectionUI : MonoBehaviour
 
     private void ShowNow(List<RelicDefinition> relics)
     {
-        if (relics == null || relics.Count == 0)
+        BuildEligibleList(relics);
+        if (eligibleRelics.Count == 0)
         {
             Hide();
             ChoiceUiQueue.CompleteCurrent();
@@ -43,29 +44,42 @@ public class RelicSelectionUI : MonoBehaviour
         cursor?.ShowCursor();
         UnlockCursor();
 
-        player = FindFirstObjectByType<PlayerRelicController>();
+        ResolvePlayer();
 
-        if (cards == null)
+        if (cards == null || cards.Length == 0)
+        {
+            Hide();
+            ChoiceUiQueue.CompleteCurrent();
             return;
+        }
 
         for (int i = 0; i < cards.Length; i++)
         {
             if (cards[i] == null)
                 continue;
 
-            RelicDefinition relic = i < relics.Count ? relics[i] : null;
+            RelicDefinition relic = i < eligibleRelics.Count ? eligibleRelics[i] : null;
             cards[i].Bind(relic, OnPick);
         }
     }
 
     private void OnPick(RelicDefinition relic)
     {
-        if (relic == null || player == null)
+        PlayerRelicController resolvedPlayer = ResolvePlayer();
+        if (relic == null || resolvedPlayer == null)
+        {
+            Hide();
+            ChoiceUiQueue.CompleteCurrent();
             return;
+        }
 
-        bool applied = player.AddRelic(relic);
+        bool applied = resolvedPlayer.AddRelic(relic);
         if (!applied)
+        {
+            Hide();
+            ChoiceUiQueue.CompleteCurrent();
             return;
+        }
 
         Hide();
         ChoiceUiQueue.CompleteCurrent();
@@ -77,13 +91,54 @@ public class RelicSelectionUI : MonoBehaviour
             root.SetActive(false);
 
         bool hasPendingModal = ChoiceUiQueue.PendingCount > 0;
-        bool upgradeModalActive = player != null && player.Progression != null && player.Progression.IsChoosingUpgrade;
+        PlayerRelicController resolvedPlayer = player != null ? player : ResolvePlayer();
+        bool upgradeModalActive =
+            resolvedPlayer != null
+            && resolvedPlayer.Progression != null
+            && resolvedPlayer.Progression.IsChoosingUpgrade;
+
         if (!hasPendingModal && !upgradeModalActive)
         {
             cursor?.HideCursor();
             LockCursor();
             Time.timeScale = 1f;
         }
+    }
+
+    private void BuildEligibleList(List<RelicDefinition> relics)
+    {
+        eligibleRelics.Clear();
+        if (relics == null || relics.Count == 0)
+            return;
+
+        PlayerRelicController resolvedPlayer = ResolvePlayer();
+        for (int i = 0; i < relics.Count; i++)
+        {
+            RelicDefinition relic = relics[i];
+            if (relic == null)
+                continue;
+
+            if (resolvedPlayer != null && !resolvedPlayer.CanAcceptRelic(relic))
+                continue;
+
+            eligibleRelics.Add(relic);
+        }
+    }
+
+    private PlayerRelicController ResolvePlayer()
+    {
+        if (player != null)
+            return player;
+
+        player = FindFirstObjectByType<PlayerRelicController>();
+        if (player != null)
+            return player;
+
+        PlayerProgressionController progression = PlayerLocator.GetProgression();
+        if (progression != null)
+            player = progression.GetComponent<PlayerRelicController>();
+
+        return player;
     }
 
     private static void UnlockCursor()
