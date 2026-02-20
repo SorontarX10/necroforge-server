@@ -1,5 +1,6 @@
 using UnityEngine;
 using GrassSim.Core;
+using GrassSim.Telemetry;
 using GrassSim.UI;
 
 public class ChestRelicTrigger : MonoBehaviour
@@ -65,10 +66,96 @@ public class ChestRelicTrigger : MonoBehaviour
     {
         ResolvePlayer();
 
-        var relics = relicLibrary.Roll(relicChoices, currentPlayer);
-        relicUI.Show(relics);
+        RelicLibrary.RollResult roll = relicLibrary.RollWithDiagnostics(relicChoices, currentPlayer);
+        ReportRelicRollTelemetry(roll);
+        relicUI.Show(roll.offered);
 
         gameObject.SetActive(false);
+    }
+
+    private void ReportRelicRollTelemetry(RelicLibrary.RollResult roll)
+    {
+        if (roll == null)
+            return;
+
+        GameplayTelemetryHub.RelicOptionSample[] offered = BuildOfferedSamples(roll.offered);
+        GameplayTelemetryHub.RejectedRelicOptionSample[] rejected = BuildRejectedSamples(roll.rejected);
+
+        GameplayTelemetryHub.ReportRelicOptionsRolled(
+            new GameplayTelemetryHub.RelicOptionsRolledSample(
+                GetRunTimeSeconds(),
+                "chest",
+                offered,
+                rejected
+            )
+        );
+    }
+
+    private GameplayTelemetryHub.RelicOptionSample[] BuildOfferedSamples(System.Collections.Generic.List<RelicDefinition> offered)
+    {
+        if (offered == null || offered.Count == 0)
+            return System.Array.Empty<GameplayTelemetryHub.RelicOptionSample>();
+
+        GameplayTelemetryHub.RelicOptionSample[] samples = new GameplayTelemetryHub.RelicOptionSample[offered.Count];
+        for (int i = 0; i < offered.Count; i++)
+        {
+            RelicDefinition relic = offered[i];
+            string id = relic != null ? relic.id : "unknown";
+            string displayName = relic != null && !string.IsNullOrWhiteSpace(relic.displayName)
+                ? relic.displayName
+                : (relic != null ? relic.name : "Unknown");
+            string rarity = relic != null ? relic.rarity.ToString() : "Unknown";
+            int stacks = currentPlayer != null && relic != null ? currentPlayer.GetStacks(id) : 0;
+            int maxStacks = currentPlayer != null && relic != null
+                ? currentPlayer.GetEffectiveMaxStacks(relic)
+                : (relic != null ? Mathf.Max(1, relic.maxStacks) : 1);
+
+            samples[i] = new GameplayTelemetryHub.RelicOptionSample(
+                id,
+                displayName,
+                rarity,
+                stacks,
+                maxStacks
+            );
+        }
+
+        return samples;
+    }
+
+    private GameplayTelemetryHub.RejectedRelicOptionSample[] BuildRejectedSamples(System.Collections.Generic.List<RelicLibrary.RejectedRelicOption> rejected)
+    {
+        if (rejected == null || rejected.Count == 0)
+            return System.Array.Empty<GameplayTelemetryHub.RejectedRelicOptionSample>();
+
+        GameplayTelemetryHub.RejectedRelicOptionSample[] samples = new GameplayTelemetryHub.RejectedRelicOptionSample[rejected.Count];
+        for (int i = 0; i < rejected.Count; i++)
+        {
+            RelicLibrary.RejectedRelicOption entry = rejected[i];
+            RelicDefinition relic = entry != null ? entry.relic : null;
+            string id = relic != null ? relic.id : "unknown";
+            string displayName = relic != null && !string.IsNullOrWhiteSpace(relic.displayName)
+                ? relic.displayName
+                : (relic != null ? relic.name : "Unknown");
+            string rarity = relic != null ? relic.rarity.ToString() : "Unknown";
+            int stacks = currentPlayer != null && relic != null ? currentPlayer.GetStacks(id) : 0;
+            int maxStacks = currentPlayer != null && relic != null
+                ? currentPlayer.GetEffectiveMaxStacks(relic)
+                : (relic != null ? Mathf.Max(1, relic.maxStacks) : 1);
+            string reason = entry != null && !string.IsNullOrWhiteSpace(entry.reason)
+                ? entry.reason
+                : "unknown";
+
+            samples[i] = new GameplayTelemetryHub.RejectedRelicOptionSample(
+                id,
+                displayName,
+                rarity,
+                reason,
+                stacks,
+                maxStacks
+            );
+        }
+
+        return samples;
     }
 
     private PlayerRelicController ResolvePlayer(Collider source = null)
@@ -94,5 +181,13 @@ public class ChestRelicTrigger : MonoBehaviour
             currentPlayer = FindFirstObjectByType<PlayerRelicController>();
 
         return currentPlayer;
+    }
+
+    private static float GetRunTimeSeconds()
+    {
+        if (GameTimerController.Instance != null)
+            return Mathf.Max(0f, GameTimerController.Instance.elapsedTime);
+
+        return 0f;
     }
 }

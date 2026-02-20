@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using GrassSim.Enhancers;
+using GrassSim.Telemetry;
 using UnityEngine;
 
 namespace GrassSim.UI
@@ -93,7 +94,7 @@ namespace GrassSim.UI
         public static bool IsShowing => isShowing;
         public static int PendingCount => queue.Count;
 
-        public static void Enqueue(Action showAction)
+        public static void Enqueue(Action showAction, string source = null)
         {
             if (showAction == null)
                 return;
@@ -101,21 +102,25 @@ namespace GrassSim.UI
             if (isShowing)
             {
                 queue.Enqueue(showAction);
+                ReportQueueChanged("enqueued", source);
                 return;
             }
 
             isShowing = true;
+            ReportQueueChanged("shown", source);
             InvokeSafely(showAction);
         }
 
-        public static void CompleteCurrent()
+        public static void CompleteCurrent(string source = null)
         {
             if (queue.Count == 0)
             {
                 isShowing = false;
+                ReportQueueChanged("idle", source);
                 return;
             }
 
+            ReportQueueChanged("advance", source);
             InvokeSafely(queue.Dequeue());
         }
 
@@ -123,6 +128,7 @@ namespace GrassSim.UI
         {
             queue.Clear();
             isShowing = false;
+            ReportQueueChanged("clear", "system");
         }
 
         private static void InvokeSafely(Action action)
@@ -134,8 +140,29 @@ namespace GrassSim.UI
             catch (Exception ex)
             {
                 Debug.LogException(ex);
-                CompleteCurrent();
+                CompleteCurrent("exception");
             }
+        }
+
+        private static void ReportQueueChanged(string action, string source)
+        {
+            GameplayTelemetryHub.ReportChoiceQueueChanged(
+                new GameplayTelemetryHub.ChoiceQueueSample(
+                    GetRunTimeSeconds(),
+                    string.IsNullOrWhiteSpace(source) ? "unknown" : source,
+                    string.IsNullOrWhiteSpace(action) ? "unknown" : action,
+                    queue.Count,
+                    isShowing
+                )
+            );
+        }
+
+        private static float GetRunTimeSeconds()
+        {
+            if (GameTimerController.Instance != null)
+                return Mathf.Max(0f, GameTimerController.Instance.elapsedTime);
+
+            return 0f;
         }
     }
 }

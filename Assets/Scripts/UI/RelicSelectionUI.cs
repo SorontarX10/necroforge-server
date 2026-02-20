@@ -24,7 +24,7 @@ public class RelicSelectionUI : MonoBehaviour
     public void Show(List<RelicDefinition> relics)
     {
         List<RelicDefinition> snapshot = relics != null ? new List<RelicDefinition>(relics) : new List<RelicDefinition>();
-        ChoiceUiQueue.Enqueue(() => ShowNow(snapshot));
+        ChoiceUiQueue.Enqueue(() => ShowNow(snapshot), "relic_selection");
     }
 
     private void ShowNow(List<RelicDefinition> relics)
@@ -33,7 +33,7 @@ public class RelicSelectionUI : MonoBehaviour
         if (eligibleRelics.Count == 0)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("relic_selection_empty");
             return;
         }
 
@@ -49,7 +49,7 @@ public class RelicSelectionUI : MonoBehaviour
         if (cards == null || cards.Length == 0)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("relic_selection_no_cards");
             return;
         }
 
@@ -69,7 +69,7 @@ public class RelicSelectionUI : MonoBehaviour
         if (relic == null || resolvedPlayer == null)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("relic_selection_invalid_pick");
             return;
         }
 
@@ -77,12 +77,12 @@ public class RelicSelectionUI : MonoBehaviour
         if (!applied)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("relic_selection_rejected_pick");
             return;
         }
 
         Hide();
-        ChoiceUiQueue.CompleteCurrent();
+        ChoiceUiQueue.CompleteCurrent("relic_selection_pick");
     }
 
     private void Hide()

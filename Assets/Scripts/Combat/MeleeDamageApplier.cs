@@ -35,7 +35,7 @@ namespace GrassSim.Combat
                 }
             }
 
-            critChance = Mathf.Clamp01(critChance);
+            critChance = CombatBalanceCaps.ClampCritChance(critChance);
             critMultiplier = Mathf.Max(1f, critMultiplier);
 
             bool isCrit = Random.value < critChance;
@@ -45,7 +45,7 @@ namespace GrassSim.Combat
             float heal = 0f;
             if (lifeSteal > 0f)
             {
-                float rawHeal = dmg * Mathf.Clamp01(lifeSteal);
+                float rawHeal = dmg * CombatBalanceCaps.ApplyLifeStealDiminishing(lifeSteal);
                 float maxHealth = attacker != null ? attacker.MaxHealth : 1f;
                 heal = CombatBalanceCaps.ClampLifeStealHealPerHit(rawHeal, maxHealth);
             }

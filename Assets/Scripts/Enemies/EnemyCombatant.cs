@@ -3,6 +3,7 @@ using GrassSim.AI;
 using GrassSim.Combat;
 using GrassSim.Core;
 using GrassSim.Stats;
+using GrassSim.Telemetry;
 
 namespace GrassSim.Enemies
 {
@@ -37,6 +38,12 @@ namespace GrassSim.Enemies
             // Pooled enemies must always start in a fresh state.
             handledDeath = false;
             sharedMeleeHitAvailableAt = -999f;
+            ReportLifecycle("spawned");
+        }
+
+        private void OnDisable()
+        {
+            ReportLifecycle(handledDeath ? "despawned_after_death" : "despawned");
         }
 
         // 🔥 WOŁANE PRZEZ Combatant.SendMessage
@@ -49,6 +56,7 @@ namespace GrassSim.Enemies
             handledDeath = true;
 
             TryPlayZombieDisintegrationVfx();
+            ReportLifecycle("died");
 
             if (stats == null) return;
 
@@ -141,6 +149,52 @@ namespace GrassSim.Enemies
             }
 
             AudioUtils.PlayClipAtPoint(clip, transform.position, 1f);
+        }
+
+        private void ReportLifecycle(string lifecycle)
+        {
+            if (string.IsNullOrWhiteSpace(lifecycle))
+                return;
+
+            BossEnemyController boss = GetComponent<BossEnemyController>();
+            string enemyType = ResolveEnemyTypeLabel(boss != null);
+
+            GameplayTelemetryHub.ReportEnemyLifecycle(
+                new GameplayTelemetryHub.EnemyLifecycleSample(
+                    GetRunTimeSeconds(),
+                    lifecycle,
+                    simId,
+                    GetInstanceID(),
+                    enemyType,
+                    boss != null
+                )
+            );
+        }
+
+        private string ResolveEnemyTypeLabel(bool isBoss)
+        {
+            string baseName = stats != null ? stats.name : gameObject.name;
+            if (string.IsNullOrWhiteSpace(baseName))
+                baseName = "Unknown";
+
+            string normalized = baseName
+                .Replace("(Clone)", string.Empty)
+                .Replace("_RuntimeDifficulty", string.Empty)
+                .Replace("_BossRuntime", string.Empty)
+                .Trim();
+
+            if (string.IsNullOrWhiteSpace(normalized))
+                normalized = "Unknown";
+
+            return isBoss ? $"Boss/{normalized}" : $"Enemy/{normalized}";
+        }
+
+        private static float GetRunTimeSeconds()
+        {
+            if (GameTimerController.Instance != null)
+                return Mathf.Max(0f, GameTimerController.Instance.elapsedTime);
+
+            return 0f;
         }
 
         private void EnsureEyeEmissionController()

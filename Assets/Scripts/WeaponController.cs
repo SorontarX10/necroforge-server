@@ -555,7 +555,7 @@ public class WeaponController : MonoBehaviour
         EnsureRelicFrameCache();
         baseCrit += cachedRelicCritChanceBonus;
 
-        return Mathf.Clamp01(baseCrit);
+        return CombatBalanceCaps.ClampCritChance(baseCrit);
     }
 
     public float GetCritMultiplier()
@@ -578,6 +578,11 @@ public class WeaponController : MonoBehaviour
     }
 
     public float GetLifeSteal()
+    {
+        return CombatBalanceCaps.ApplyLifeStealDiminishing(GetLifeStealRequested());
+    }
+
+    public float GetLifeStealRequested()
     {
         float baseLS = 0f;
 

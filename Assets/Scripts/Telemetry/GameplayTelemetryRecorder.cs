@@ -8,6 +8,7 @@ using GrassSim.Core;
 using GrassSim.Enemies;
 using GrassSim.Enhancers;
 using GrassSim.Stats;
+using GrassSim.UI;
 using GrassSim.Upgrades;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -22,6 +23,9 @@ namespace GrassSim.Telemetry
         private const float FlushIntervalSeconds = 1f;
         private const int FlushLineThreshold = 24;
         private const float TargetTrackerMaxIdleSeconds = 45f;
+        private const int TelemetrySchemaVersion = 2;
+        private const float WarningLowHealthThreshold = 0.35f;
+        private const float CriticalLowHealthThreshold = 0.2f;
         private const bool MirrorToProjectResultsInEditor = true;
 
         private static GameplayTelemetryRecorder instance;
@@ -30,10 +34,14 @@ namespace GrassSim.Telemetry
         [Serializable]
         private sealed class TelemetryRecord
         {
+            public int schema_version;
             public string event_type;
             public string run_id;
             public string utc_timestamp;
             public string scene_name;
+            public string app_version;
+            public string unity_version;
+            public string platform;
             public int frame;
             public float run_time_s;
             public float realtime_since_startup_s;
@@ -41,14 +49,21 @@ namespace GrassSim.Telemetry
             public PlayerSnapshot player;
             public WorldSnapshot world;
             public DifficultySnapshot difficulty;
+            public CombatContext combat_context;
             public RunCounters counters;
             public UpgradeOptionData[] upgrade_options;
             public UpgradeOptionData upgrade_selected;
+            public UpgradeContributionData[] upgrade_contributions;
             public RelicAppliedData relic_applied;
             public EnhancerAppliedData enhancer_applied;
             public MeleeHitData melee_hit;
             public MeleeKillData melee_kill;
+            public IncomingDamageData incoming_damage;
             public LifeStealData lifesteal;
+            public RelicRollData relic_roll;
+            public EnemyLifecycleData enemy_lifecycle;
+            public ChoiceQueueData choice_queue;
+            public LowHealthData low_health;
             public EnemyPressureSnapshot enemy_pressure;
             public EnemyHitSummary[] enemy_hit_summary;
         }
@@ -61,14 +76,32 @@ namespace GrassSim.Telemetry
             public int exp_to_next;
             public float current_health;
             public float max_health;
+            public float health_ratio;
             public float current_stamina;
             public float max_stamina;
             public float barrier;
             public StatBlock base_stats;
             public StatBlock runtime_stats;
             public StatBlock effective_stats;
+            public UpgradeContributionData[] upgrade_contributions;
             public RelicStackData[] relics;
             public EnhancerSnapshot[] enhancers;
+        }
+
+        [Serializable]
+        private sealed class CombatContext
+        {
+            public int player_level;
+            public float player_current_health;
+            public float player_max_health;
+            public float player_health_ratio;
+            public float player_barrier;
+            public float player_damage;
+            public float player_crit_chance;
+            public float player_life_steal;
+            public int difficulty;
+            public int active_enemy_count;
+            public int simulated_enemy_count;
         }
 
         [Serializable]
@@ -126,11 +159,25 @@ namespace GrassSim.Telemetry
             public float total_melee_damage;
             public float total_hits_to_kill;
             public float average_hits_to_kill;
+            public int incoming_damage_events;
+            public int incoming_damage_dodged;
+            public int incoming_damage_blocked;
+            public float total_incoming_raw_damage;
+            public float total_incoming_final_damage;
+            public float total_incoming_barrier_absorbed;
+            public int relic_rolls;
+            public int relic_roll_rejections;
+            public int choice_queue_events;
             public int lifesteal_events;
             public float lifesteal_raw_heal;
-            public float lifesteal_capped_heal;
+            public float lifesteal_per_hit_capped_heal;
+            public float lifesteal_per_second_capped_heal;
             public float lifesteal_applied_heal;
             public float lifesteal_overheal;
+            public int low_hp_warning_entries;
+            public int low_hp_critical_entries;
+            public float time_below_warning_s;
+            public float time_below_critical_s;
         }
 
         [Serializable]
@@ -163,6 +210,19 @@ namespace GrassSim.Telemetry
             public int stacks;
             public int max_stacks;
             public bool stackable;
+            public float damage_multiplier;
+            public float crit_chance_bonus;
+            public float crit_multiplier_bonus;
+            public float life_steal_bonus;
+            public float swing_speed_bonus;
+            public float speed_bonus;
+            public float max_health_bonus;
+            public float stamina_regen_bonus;
+            public float damage_reduction_bonus;
+            public float dodge_chance_bonus;
+            public float sword_length_bonus;
+            public float stamina_swing_override;
+            public float exp_gain_multiplier;
         }
 
         [Serializable]
@@ -186,6 +246,18 @@ namespace GrassSim.Telemetry
             public float remaining_duration_s;
             public float total_duration_s;
             public float strength_01;
+            public EnhancerStatContribution[] contributions;
+        }
+
+        [Serializable]
+        private sealed class EnhancerStatContribution
+        {
+            public string stat;
+            public string math_mode;
+            public float max_bonus;
+            public float scaled_bonus;
+            public float additive_component;
+            public float multiplicative_component;
         }
 
         [Serializable]
@@ -226,14 +298,101 @@ namespace GrassSim.Telemetry
         private sealed class LifeStealData
         {
             public float damage_dealt;
-            public float life_steal_percent;
+            public float life_steal_percent_requested;
+            public float life_steal_percent_effective;
             public float raw_heal;
-            public float capped_heal;
+            public float per_hit_capped_heal;
+            public float per_second_capped_heal;
             public float applied_heal;
             public float overheal;
+            public float life_steal_per_second_cap;
             public float health_before;
             public float health_after;
             public float max_health;
+        }
+
+        [Serializable]
+        private sealed class IncomingDamageData
+        {
+            public float raw_damage;
+            public float reduction;
+            public float damage_after_reduction;
+            public bool dodged;
+            public bool blocked;
+            public float barrier_before;
+            public float barrier_absorbed;
+            public float barrier_after;
+            public float final_damage;
+            public float health_before;
+            public float health_after;
+            public float max_health;
+        }
+
+        [Serializable]
+        private sealed class RelicRollData
+        {
+            public string source;
+            public RelicRollOptionData[] offered;
+            public RejectedRelicRollOptionData[] rejected;
+        }
+
+        [Serializable]
+        private sealed class RelicRollOptionData
+        {
+            public string id;
+            public string display_name;
+            public string rarity;
+            public int current_stacks;
+            public int max_stacks;
+        }
+
+        [Serializable]
+        private sealed class RejectedRelicRollOptionData
+        {
+            public string id;
+            public string display_name;
+            public string rarity;
+            public string reason;
+            public int current_stacks;
+            public int max_stacks;
+        }
+
+        [Serializable]
+        private sealed class EnemyLifecycleData
+        {
+            public string lifecycle;
+            public int sim_id;
+            public int enemy_instance_id;
+            public string enemy_type;
+            public bool is_boss;
+        }
+
+        [Serializable]
+        private sealed class ChoiceQueueData
+        {
+            public string source;
+            public string action;
+            public int pending_count;
+            public bool is_showing;
+        }
+
+        [Serializable]
+        private sealed class LowHealthData
+        {
+            public float threshold_ratio;
+            public bool entered;
+            public float current_health;
+            public float max_health;
+            public float health_ratio;
+            public float seconds_since_enter;
+            public float total_seconds_under_threshold;
+        }
+
+        [Serializable]
+        private sealed class UpgradeContributionData
+        {
+            public string stat;
+            public float total_value;
         }
 
         [Serializable]
@@ -259,6 +418,8 @@ namespace GrassSim.Telemetry
             public float total_damage;
             public float average_hits_per_kill;
             public float average_damage_per_kill;
+            public float p50_hits_per_kill;
+            public float p90_hits_per_kill;
             public float max_threat_seen;
         }
 
@@ -283,6 +444,7 @@ namespace GrassSim.Telemetry
             public float totalHitsToKill;
             public float totalDamageToKill;
             public float maxThreatSeen;
+            public readonly List<int> hitsToKillSamples = new(16);
         }
 
         private readonly struct EnemyRuntimeInfo
@@ -351,16 +513,37 @@ namespace GrassSim.Telemetry
         private int meleeKills;
         private float totalMeleeDamage;
         private float totalHitsToKill;
+        private int incomingDamageEvents;
+        private int incomingDamageDodged;
+        private int incomingDamageBlocked;
+        private float totalIncomingRawDamage;
+        private float totalIncomingFinalDamage;
+        private float totalIncomingBarrierAbsorbed;
+        private int relicRolls;
+        private int relicRollRejections;
+        private int choiceQueueEvents;
         private int lifeStealEvents;
         private float totalLifeStealRaw;
-        private float totalLifeStealCapped;
+        private float totalLifeStealPerHitCapped;
+        private float totalLifeStealPerSecondCapped;
         private float totalLifeStealApplied;
         private float totalLifeStealOverheal;
+        private int lowHpWarningEntries;
+        private int lowHpCriticalEntries;
+        private float lowHpWarningTotalSeconds;
+        private float lowHpCriticalTotalSeconds;
+        private bool lowHpWarningActive;
+        private bool lowHpCriticalActive;
+        private float lowHpWarningEnteredAt = -1f;
+        private float lowHpCriticalEnteredAt = -1f;
+        private string pendingExitReason;
 
         private readonly Dictionary<int, TargetHitTracker> targetHitTrackers = new(256);
         private readonly Dictionary<string, EnemyHitAggregate> enemyHitAggregates = new(64);
+        private readonly Dictionary<StatType, float> upgradeContributions = new(16);
         private readonly List<int> targetTrackerIdsToRemove = new(128);
         private readonly List<EnemyHitSummary> enemyHitSummaryBuffer = new(64);
+        private readonly List<UpgradeContributionData> upgradeContributionBuffer = new(16);
         private readonly List<RelicStackData> relicBuffer = new(16);
         private readonly List<EnhancerSnapshot> enhancerBuffer = new(16);
         private readonly StringBuilder writeBuffer = new(8192);
@@ -433,6 +616,8 @@ namespace GrassSim.Telemetry
                 return;
             }
 
+            UpdateLowHealthState(GetRunTimeSeconds(), flushOnly: false);
+
             float runTime = GetRunTimeSeconds();
             if (runTime >= nextSnapshotAt)
             {
@@ -503,9 +688,25 @@ namespace GrassSim.Telemetry
         {
             reason = null;
 
+            if (!string.IsNullOrWhiteSpace(pendingExitReason))
+            {
+                reason = pendingExitReason;
+                pendingExitReason = null;
+                return true;
+            }
+
+            string activeScene = SceneManager.GetActiveScene().name;
+            if (string.Equals(activeScene, "MainMenu", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = "quit_to_menu";
+                return true;
+            }
+
             if (timer == null)
             {
-                reason = "timer_missing";
+                reason = string.Equals(activeScene, "Loading", StringComparison.OrdinalIgnoreCase)
+                    ? "scene_transition_loading"
+                    : "timer_missing";
                 return true;
             }
 
@@ -560,6 +761,7 @@ namespace GrassSim.Telemetry
             record.enemy_pressure = CollectEnemyPressureSnapshot();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
             FlushBufferedLines(force: true);
         }
@@ -572,6 +774,8 @@ namespace GrassSim.Telemetry
                 return;
             }
 
+            UpdateLowHealthState(GetRunTimeSeconds(), flushOnly: true);
+
             TelemetryRecord record = CreateRecord("run_ended");
             record.reason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
             record.player = CollectPlayerSnapshot();
@@ -580,6 +784,7 @@ namespace GrassSim.Telemetry
             record.enemy_pressure = CollectEnemyPressureSnapshot();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
 
             FlushBufferedLines(force: true);
@@ -636,7 +841,12 @@ namespace GrassSim.Telemetry
 
             if (!subscribedToHub)
             {
+                GameplayTelemetryHub.OnIncomingDamage += HandleIncomingDamage;
+                GameplayTelemetryHub.OnRelicOptionsRolled += HandleRelicOptionsRolled;
+                GameplayTelemetryHub.OnEnemyLifecycle += HandleEnemyLifecycle;
                 GameplayTelemetryHub.OnLifeStealApplied += HandleLifeStealApplied;
+                GameplayTelemetryHub.OnChoiceQueueChanged += HandleChoiceQueueChanged;
+                GameplayTelemetryHub.OnRunExitRequested += HandleRunExitRequested;
                 subscribedToHub = true;
             }
         }
@@ -666,7 +876,12 @@ namespace GrassSim.Telemetry
 
             if (subscribedToHub)
             {
+                GameplayTelemetryHub.OnIncomingDamage -= HandleIncomingDamage;
+                GameplayTelemetryHub.OnRelicOptionsRolled -= HandleRelicOptionsRolled;
+                GameplayTelemetryHub.OnEnemyLifecycle -= HandleEnemyLifecycle;
                 GameplayTelemetryHub.OnLifeStealApplied -= HandleLifeStealApplied;
+                GameplayTelemetryHub.OnChoiceQueueChanged -= HandleChoiceQueueChanged;
+                GameplayTelemetryHub.OnRunExitRequested -= HandleRunExitRequested;
                 subscribedToHub = false;
             }
         }
@@ -682,6 +897,7 @@ namespace GrassSim.Telemetry
             record.upgrade_options = ConvertUpgradeOptions(options);
             record.player = CollectPlayerSnapshot();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
         }
 
@@ -691,11 +907,16 @@ namespace GrassSim.Telemetry
                 return;
 
             upgradesApplied++;
+            if (upgradeContributions.TryGetValue(option.stat, out float existingValue))
+                upgradeContributions[option.stat] = existingValue + option.value;
+            else
+                upgradeContributions[option.stat] = option.value;
 
             TelemetryRecord record = CreateRecord("upgrade_applied");
             record.upgrade_selected = ConvertUpgradeOption(option);
             record.player = CollectPlayerSnapshot();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
         }
 
@@ -713,11 +934,12 @@ namespace GrassSim.Telemetry
                 display_name = string.IsNullOrWhiteSpace(relic.displayName) ? relic.name : relic.displayName,
                 rarity = relic.rarity.ToString(),
                 new_stacks = Mathf.Max(0, newStacks),
-                max_stacks = Mathf.Max(1, relic.maxStacks),
+                max_stacks = relics != null ? relics.GetEffectiveMaxStacks(relic) : Mathf.Max(1, relic.maxStacks),
                 stackable = relic.stackable
             };
             record.player = CollectPlayerSnapshot();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
         }
 
@@ -742,6 +964,7 @@ namespace GrassSim.Telemetry
             };
             record.player = CollectPlayerSnapshot();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
         }
 
@@ -785,6 +1008,7 @@ namespace GrassSim.Telemetry
                 enemy_attack_cooldown = enemyInfo.attackCooldown,
                 enemy_threat_score = enemyInfo.threatScore
             };
+            record.combat_context = CollectCombatContext();
             EnqueueRecord(record);
         }
 
@@ -807,6 +1031,7 @@ namespace GrassSim.Telemetry
             aggregate.totalHitsToKill += hitsToKill;
             aggregate.totalDamageToKill += damageToKill;
             aggregate.maxThreatSeen = Mathf.Max(aggregate.maxThreatSeen, enemyInfo.threatScore);
+            aggregate.hitsToKillSamples.Add(hitsToKill);
 
             TelemetryRecord record = CreateRecord("melee_kill");
             record.melee_kill = new MeleeKillData
@@ -824,9 +1049,119 @@ namespace GrassSim.Telemetry
                 enemy_attack_cooldown = enemyInfo.attackCooldown,
                 enemy_threat_score = enemyInfo.threatScore
             };
+            record.combat_context = CollectCombatContext();
             EnqueueRecord(record);
 
             targetHitTrackers.Remove(enemyInfo.instanceId);
+        }
+
+        private void HandleIncomingDamage(GameplayTelemetryHub.IncomingDamageSample sample)
+        {
+            if (!runActive)
+                return;
+
+            incomingDamageEvents++;
+            totalIncomingRawDamage += Mathf.Max(0f, sample.rawDamage);
+            totalIncomingFinalDamage += Mathf.Max(0f, sample.finalDamage);
+            totalIncomingBarrierAbsorbed += Mathf.Max(0f, sample.barrierAbsorbed);
+            if (sample.dodged)
+                incomingDamageDodged++;
+            if (sample.blocked)
+                incomingDamageBlocked++;
+
+            TelemetryRecord record = CreateRecord("incoming_damage");
+            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.incoming_damage = new IncomingDamageData
+            {
+                raw_damage = sample.rawDamage,
+                reduction = sample.reduction,
+                damage_after_reduction = sample.damageAfterReduction,
+                dodged = sample.dodged,
+                blocked = sample.blocked,
+                barrier_before = sample.barrierBefore,
+                barrier_absorbed = sample.barrierAbsorbed,
+                barrier_after = sample.barrierAfter,
+                final_damage = sample.finalDamage,
+                health_before = sample.healthBefore,
+                health_after = sample.healthAfter,
+                max_health = sample.maxHealth
+            };
+            record.combat_context = CollectCombatContext();
+            EnqueueRecord(record);
+        }
+
+        private void HandleRelicOptionsRolled(GameplayTelemetryHub.RelicOptionsRolledSample sample)
+        {
+            if (!runActive)
+                return;
+
+            relicRolls++;
+            int rejectedCount = sample.rejected != null ? sample.rejected.Length : 0;
+            relicRollRejections += Mathf.Max(0, rejectedCount);
+
+            TelemetryRecord record = CreateRecord("relic_options_rolled");
+            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.relic_roll = new RelicRollData
+            {
+                source = string.IsNullOrWhiteSpace(sample.source) ? "unknown" : sample.source,
+                offered = ConvertRelicRollOffered(sample.offered),
+                rejected = ConvertRelicRollRejected(sample.rejected)
+            };
+            record.counters = CollectRunCounters();
+            EnqueueRecord(record);
+        }
+
+        private void HandleEnemyLifecycle(GameplayTelemetryHub.EnemyLifecycleSample sample)
+        {
+            if (!runActive)
+                return;
+
+            TelemetryRecord record = CreateRecord("enemy_lifecycle");
+            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.enemy_lifecycle = new EnemyLifecycleData
+            {
+                lifecycle = string.IsNullOrWhiteSpace(sample.lifecycle) ? "unknown" : sample.lifecycle,
+                sim_id = sample.simId,
+                enemy_instance_id = sample.enemyInstanceId,
+                enemy_type = string.IsNullOrWhiteSpace(sample.enemyType) ? "Enemy/Unknown" : sample.enemyType,
+                is_boss = sample.isBoss
+            };
+            record.combat_context = CollectCombatContext();
+            EnqueueRecord(record);
+        }
+
+        private void HandleChoiceQueueChanged(GameplayTelemetryHub.ChoiceQueueSample sample)
+        {
+            if (!runActive)
+                return;
+
+            choiceQueueEvents++;
+
+            TelemetryRecord record = CreateRecord("choice_queue_changed");
+            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.choice_queue = new ChoiceQueueData
+            {
+                source = string.IsNullOrWhiteSpace(sample.source) ? "unknown" : sample.source,
+                action = string.IsNullOrWhiteSpace(sample.action) ? "unknown" : sample.action,
+                pending_count = Mathf.Max(0, sample.pendingCount),
+                is_showing = sample.isShowing
+            };
+            record.counters = CollectRunCounters();
+            EnqueueRecord(record);
+        }
+
+        private void HandleRunExitRequested(GameplayTelemetryHub.RunExitSample sample)
+        {
+            if (!runActive)
+                return;
+
+            string reason = string.IsNullOrWhiteSpace(sample.reason) ? "unknown_exit" : sample.reason;
+            pendingExitReason = reason;
+
+            TelemetryRecord record = CreateRecord("run_exit_requested");
+            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.reason = reason;
+            EnqueueRecord(record);
         }
 
         private void HandleLifeStealApplied(GameplayTelemetryHub.LifeStealAppliedSample sample)
@@ -836,7 +1171,8 @@ namespace GrassSim.Telemetry
 
             lifeStealEvents++;
             totalLifeStealRaw += Mathf.Max(0f, sample.rawHeal);
-            totalLifeStealCapped += Mathf.Max(0f, sample.cappedHeal);
+            totalLifeStealPerHitCapped += Mathf.Max(0f, sample.perHitCappedHeal);
+            totalLifeStealPerSecondCapped += Mathf.Max(0f, sample.perSecondCappedHeal);
             totalLifeStealApplied += Mathf.Max(0f, sample.appliedHeal);
             totalLifeStealOverheal += Mathf.Max(0f, sample.overheal);
 
@@ -845,15 +1181,19 @@ namespace GrassSim.Telemetry
             record.lifesteal = new LifeStealData
             {
                 damage_dealt = sample.damageDealt,
-                life_steal_percent = sample.lifeStealPercent,
+                life_steal_percent_requested = sample.lifeStealPercentRequested,
+                life_steal_percent_effective = sample.lifeStealPercentEffective,
                 raw_heal = sample.rawHeal,
-                capped_heal = sample.cappedHeal,
+                per_hit_capped_heal = sample.perHitCappedHeal,
+                per_second_capped_heal = sample.perSecondCappedHeal,
                 applied_heal = sample.appliedHeal,
                 overheal = sample.overheal,
+                life_steal_per_second_cap = sample.lifeStealPerSecondCap,
                 health_before = sample.healthBefore,
                 health_after = sample.healthAfter,
                 max_health = sample.maxHealth
             };
+            record.combat_context = CollectCombatContext();
             EnqueueRecord(record);
         }
 
@@ -868,6 +1208,7 @@ namespace GrassSim.Telemetry
             record.enemy_pressure = CollectEnemyPressureSnapshot();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
         }
 
@@ -875,10 +1216,14 @@ namespace GrassSim.Telemetry
         {
             return new TelemetryRecord
             {
+                schema_version = TelemetrySchemaVersion,
                 event_type = eventType,
                 run_id = runId,
                 utc_timestamp = DateTime.UtcNow.ToString("O"),
                 scene_name = SceneManager.GetActiveScene().name,
+                app_version = Application.version,
+                unity_version = Application.unityVersion,
+                platform = Application.platform.ToString(),
                 frame = Time.frameCount,
                 run_time_s = GetRunTimeSeconds(),
                 realtime_since_startup_s = Time.realtimeSinceStartup
@@ -931,12 +1276,14 @@ namespace GrassSim.Telemetry
                 exp_to_next = player.xp != null ? player.xp.expToNext : 0,
                 current_health = player.CurrentHealth,
                 max_health = player.MaxHealth,
+                health_ratio = player.MaxHealth > 0f ? Mathf.Clamp01(player.CurrentHealth / player.MaxHealth) : 0f,
                 current_stamina = player.CurrentStamina,
                 max_stamina = player.MaxStamina,
                 barrier = player.CurrentBarrier,
                 base_stats = BuildStatBlockFromBase(baseStats),
                 runtime_stats = BuildStatBlockFromRuntime(runtime),
                 effective_stats = BuildEffectiveStatBlock(runtime),
+                upgrade_contributions = CollectUpgradeContributionArray(),
                 relics = CollectRelicStacks(),
                 enhancers = CollectEnhancerSnapshots()
             };
@@ -978,9 +1325,10 @@ namespace GrassSim.Telemetry
             }
 
             float effectiveDamage = runtimeDamage * relicDamageMultiplier;
-            float effectiveCritChance = Mathf.Clamp01(runtimeCritChance + relicCritChanceBonus);
+            float effectiveCritChance = CombatBalanceCaps.ClampCritChance(runtimeCritChance + relicCritChanceBonus);
             float effectiveCritMultiplier = Mathf.Max(1f, runtimeCritMultiplier + relicCritMultiplierBonus);
-            float effectiveLifeSteal = Mathf.Clamp01(runtimeLifeSteal + relicLifeStealBonus);
+            float effectiveLifeSteal = runtimeLifeSteal + relicLifeStealBonus;
+            bool lifeStealAlreadyEffective = false;
             float effectiveSwingSpeed = Mathf.Max(0.05f, runtimeSwingSpeed + relicSwingSpeedBonus);
             float effectiveSpeed = runtimeSpeed + relicSpeedBonus;
             float effectiveMaxHealth = player.MaxHealth;
@@ -994,6 +1342,7 @@ namespace GrassSim.Telemetry
                 effectiveCritChance = weapon.GetCritChance();
                 effectiveCritMultiplier = weapon.GetCritMultiplier();
                 effectiveLifeSteal = weapon.GetLifeSteal();
+                lifeStealAlreadyEffective = true;
                 effectiveSwingSpeed = weapon.GetSwingSpeedMultiplier();
             }
             else if (enhancerSystem != null)
@@ -1012,6 +1361,9 @@ namespace GrassSim.Telemetry
                 effectiveStaminaRegen = enhancerSystem.GetEffectiveValue(StatType.StaminaRegen, effectiveStaminaRegen);
             }
 
+            if (!lifeStealAlreadyEffective)
+                effectiveLifeSteal = CombatBalanceCaps.ApplyLifeStealDiminishing(effectiveLifeSteal);
+
             return new StatBlock
             {
                 max_health = effectiveMaxHealth,
@@ -1020,7 +1372,7 @@ namespace GrassSim.Telemetry
                 stamina_regen = effectiveStaminaRegen,
                 speed = Mathf.Max(0f, effectiveSpeed),
                 damage = Mathf.Max(0f, effectiveDamage),
-                crit_chance = Mathf.Clamp01(effectiveCritChance),
+                crit_chance = CombatBalanceCaps.ClampCritChance(effectiveCritChance),
                 crit_multiplier = Mathf.Max(1f, effectiveCritMultiplier),
                 life_steal = Mathf.Clamp01(Mathf.Max(0f, effectiveLifeSteal)),
                 swing_speed = Mathf.Max(0.05f, effectiveSwingSpeed),
@@ -1087,14 +1439,82 @@ namespace GrassSim.Telemetry
                 if (def == null)
                     continue;
 
+                int stackCount = relics.GetStacks(id);
+                RelicEffect effect = def.effect;
+
+                float damageMultiplier = 1f;
+                if (effect is IDamageModifier damageModifier)
+                    damageMultiplier = damageModifier.GetDamageMultiplier(relics, stackCount);
+
+                float critChanceBonus = effect is ICritChanceModifier critChanceModifier
+                    ? critChanceModifier.GetCritChanceBonus(relics, stackCount)
+                    : 0f;
+
+                float critMultiplierBonus = effect is ICritMultiplierModifier critMultiplierModifier
+                    ? critMultiplierModifier.GetCritMultiplierBonus(relics, stackCount)
+                    : 0f;
+
+                float lifeStealBonus = effect is ILifeStealModifier lifeStealModifier
+                    ? lifeStealModifier.GetLifeStealBonus(relics, stackCount)
+                    : 0f;
+
+                float swingSpeedBonus = effect is ISwingSpeedModifier swingSpeedModifier
+                    ? swingSpeedModifier.GetSwingSpeedBonus(relics, stackCount)
+                    : 0f;
+
+                float speedBonus = effect is ISpeedModifier speedModifier
+                    ? speedModifier.GetSpeedBonus(relics, stackCount)
+                    : 0f;
+
+                float maxHealthBonus = effect is IMaxHealthModifier maxHealthModifier
+                    ? maxHealthModifier.GetMaxHealthBonus(relics, stackCount)
+                    : 0f;
+
+                float staminaRegenBonus = effect is IStaminaRegenModifier staminaRegenModifier
+                    ? staminaRegenModifier.GetStaminaRegenBonus(relics, stackCount)
+                    : 0f;
+
+                float damageReductionBonus = effect is IDamageReductionModifier damageReductionModifier
+                    ? damageReductionModifier.GetDamageReductionBonus(relics, stackCount)
+                    : 0f;
+
+                float dodgeChanceBonus = effect is IDodgeChanceModifier dodgeChanceModifier
+                    ? dodgeChanceModifier.GetDodgeChanceBonus(relics, stackCount)
+                    : 0f;
+
+                float swordLengthBonus = effect is ISwordLengthModifier swordLengthModifier
+                    ? swordLengthModifier.GetSwordLengthBonus(relics, stackCount)
+                    : 0f;
+
+                float staminaSwingOverride = effect is IStaminaSwingOverrideModifier staminaSwingModifier
+                    ? staminaSwingModifier.GetStaminaSwingMultiplierOverride(relics, stackCount)
+                    : 0f;
+
+                float expMultiplier = effect is IExpRewardModifier expModifier
+                    ? expModifier.GetExpGainMultiplier(relics, stackCount)
+                    : 1f;
+
                 relicBuffer.Add(new RelicStackData
                 {
                     id = id,
                     display_name = string.IsNullOrWhiteSpace(def.displayName) ? def.name : def.displayName,
                     rarity = def.rarity.ToString(),
-                    stacks = relics.GetStacks(id),
-                    max_stacks = Mathf.Max(1, def.maxStacks),
-                    stackable = def.stackable
+                    stacks = stackCount,
+                    max_stacks = relics.GetEffectiveMaxStacks(def),
+                    stackable = def.stackable,
+                    damage_multiplier = damageMultiplier,
+                    crit_chance_bonus = critChanceBonus,
+                    crit_multiplier_bonus = critMultiplierBonus,
+                    life_steal_bonus = lifeStealBonus,
+                    swing_speed_bonus = swingSpeedBonus,
+                    speed_bonus = speedBonus,
+                    max_health_bonus = maxHealthBonus,
+                    stamina_regen_bonus = staminaRegenBonus,
+                    damage_reduction_bonus = damageReductionBonus,
+                    dodge_chance_bonus = dodgeChanceBonus,
+                    sword_length_bonus = swordLengthBonus,
+                    stamina_swing_override = staminaSwingOverride,
+                    exp_gain_multiplier = expMultiplier
                 });
             }
 
@@ -1123,7 +1543,8 @@ namespace GrassSim.Telemetry
                     max_stacks = def != null ? Mathf.Max(1, def.maxStacks) : activeEnhancer.Stacks,
                     remaining_duration_s = Mathf.Max(0f, activeEnhancer.RemainingDuration),
                     total_duration_s = Mathf.Max(0f, activeEnhancer.TotalDuration),
-                    strength_01 = Mathf.Clamp01(activeEnhancer.GetStrength01())
+                    strength_01 = Mathf.Clamp01(activeEnhancer.GetStrength01()),
+                    contributions = BuildEnhancerContributions(activeEnhancer)
                 });
             }
 
@@ -1263,6 +1684,14 @@ namespace GrassSim.Telemetry
                 ? totalHitsToKill / meleeKills
                 : 0f;
 
+            float warningLowHpSeconds = lowHpWarningTotalSeconds;
+            if (lowHpWarningActive && lowHpWarningEnteredAt >= 0f)
+                warningLowHpSeconds += Mathf.Max(0f, GetRunTimeSeconds() - lowHpWarningEnteredAt);
+
+            float criticalLowHpSeconds = lowHpCriticalTotalSeconds;
+            if (lowHpCriticalActive && lowHpCriticalEnteredAt >= 0f)
+                criticalLowHpSeconds += Mathf.Max(0f, GetRunTimeSeconds() - lowHpCriticalEnteredAt);
+
             return new RunCounters
             {
                 upgrade_rolls = upgradeRolls,
@@ -1275,11 +1704,25 @@ namespace GrassSim.Telemetry
                 total_melee_damage = totalMeleeDamage,
                 total_hits_to_kill = totalHitsToKill,
                 average_hits_to_kill = averageHitsToKill,
+                incoming_damage_events = incomingDamageEvents,
+                incoming_damage_dodged = incomingDamageDodged,
+                incoming_damage_blocked = incomingDamageBlocked,
+                total_incoming_raw_damage = totalIncomingRawDamage,
+                total_incoming_final_damage = totalIncomingFinalDamage,
+                total_incoming_barrier_absorbed = totalIncomingBarrierAbsorbed,
+                relic_rolls = relicRolls,
+                relic_roll_rejections = relicRollRejections,
+                choice_queue_events = choiceQueueEvents,
                 lifesteal_events = lifeStealEvents,
                 lifesteal_raw_heal = totalLifeStealRaw,
-                lifesteal_capped_heal = totalLifeStealCapped,
+                lifesteal_per_hit_capped_heal = totalLifeStealPerHitCapped,
+                lifesteal_per_second_capped_heal = totalLifeStealPerSecondCapped,
                 lifesteal_applied_heal = totalLifeStealApplied,
-                lifesteal_overheal = totalLifeStealOverheal
+                lifesteal_overheal = totalLifeStealOverheal,
+                low_hp_warning_entries = lowHpWarningEntries,
+                low_hp_critical_entries = lowHpCriticalEntries,
+                time_below_warning_s = warningLowHpSeconds,
+                time_below_critical_s = criticalLowHpSeconds
             };
         }
 
@@ -1305,6 +1748,8 @@ namespace GrassSim.Telemetry
                     average_damage_per_kill = aggregate.kills > 0
                         ? aggregate.totalDamageToKill / aggregate.kills
                         : 0f,
+                    p50_hits_per_kill = ComputePercentileHits(aggregate.hitsToKillSamples, 0.5f),
+                    p90_hits_per_kill = ComputePercentileHits(aggregate.hitsToKillSamples, 0.9f),
                     max_threat_seen = aggregate.maxThreatSeen
                 });
             }
@@ -1318,6 +1763,292 @@ namespace GrassSim.Telemetry
             });
 
             return enemyHitSummaryBuffer.ToArray();
+        }
+
+        private UpgradeContributionData[] CollectUpgradeContributionArray()
+        {
+            if (upgradeContributions.Count == 0)
+                return Array.Empty<UpgradeContributionData>();
+
+            upgradeContributionBuffer.Clear();
+            foreach (KeyValuePair<StatType, float> kv in upgradeContributions)
+            {
+                upgradeContributionBuffer.Add(new UpgradeContributionData
+                {
+                    stat = kv.Key.ToString(),
+                    total_value = kv.Value
+                });
+            }
+
+            upgradeContributionBuffer.Sort((a, b) => string.CompareOrdinal(a.stat, b.stat));
+            return upgradeContributionBuffer.ToArray();
+        }
+
+        private CombatContext CollectCombatContext()
+        {
+            if (player == null)
+                return null;
+
+            WorldSnapshot worldSnapshot = CollectWorldSnapshot();
+            int level = player.xp != null ? player.xp.level : 0;
+            float maxHealth = Mathf.Max(1f, player.MaxHealth);
+            RuntimeStats runtime = player.stats;
+
+            return new CombatContext
+            {
+                player_level = level,
+                player_current_health = player.CurrentHealth,
+                player_max_health = maxHealth,
+                player_health_ratio = Mathf.Clamp01(player.CurrentHealth / maxHealth),
+                player_barrier = player.CurrentBarrier,
+                player_damage = runtime != null ? runtime.damage : 0f,
+                player_crit_chance = weapon != null ? weapon.GetCritChance() : 0f,
+                player_life_steal = weapon != null ? weapon.GetLifeSteal() : 0f,
+                difficulty = worldSnapshot != null ? worldSnapshot.difficulty : 1,
+                active_enemy_count = worldSnapshot != null ? worldSnapshot.active_enemy_count : 0,
+                simulated_enemy_count = worldSnapshot != null ? worldSnapshot.simulated_enemy_count : 0
+            };
+        }
+
+        private EnhancerStatContribution[] BuildEnhancerContributions(ActiveEnhancer activeEnhancer)
+        {
+            if (activeEnhancer == null || activeEnhancer.Definition == null || activeEnhancer.Definition.statEffects == null)
+                return Array.Empty<EnhancerStatContribution>();
+
+            List<EnhancerStatContribution> contributions = new(activeEnhancer.Definition.statEffects.Count);
+            float strength = Mathf.Clamp01(activeEnhancer.GetStrength01());
+            float timePower = GetEnhancerTimePowerMultiplier();
+
+            for (int i = 0; i < activeEnhancer.Definition.statEffects.Count; i++)
+            {
+                EnhancerStatEffect effect = activeEnhancer.Definition.statEffects[i];
+                float scaledBonus = effect.maxBonus * strength * timePower;
+
+                float additive = 0f;
+                float multiplicative = 1f;
+                switch (effect.mathMode)
+                {
+                    case EnhancerMathMode.Additive:
+                        additive = scaledBonus;
+                        break;
+                    case EnhancerMathMode.Multiplicative:
+                        if (UsesZeroBaseAdditiveFallback(effect.stat))
+                            additive = scaledBonus;
+                        else
+                            multiplicative = 1f + scaledBonus;
+                        break;
+                    case EnhancerMathMode.AdditiveThenMultiplicative:
+                        additive = scaledBonus;
+                        multiplicative = 1f + scaledBonus;
+                        break;
+                }
+
+                contributions.Add(new EnhancerStatContribution
+                {
+                    stat = effect.stat.ToString(),
+                    math_mode = effect.mathMode.ToString(),
+                    max_bonus = effect.maxBonus,
+                    scaled_bonus = scaledBonus,
+                    additive_component = additive,
+                    multiplicative_component = multiplicative
+                });
+            }
+
+            return contributions.ToArray();
+        }
+
+        private float GetEnhancerTimePowerMultiplier()
+        {
+            if (enhancerSystem == null)
+                return 1f;
+
+            float start = Mathf.Max(0f, enhancerSystem.latePowerStartSeconds);
+            float full = Mathf.Max(start + 0.01f, enhancerSystem.latePowerFullSeconds);
+            float now = GetRunTimeSeconds();
+            float t = Mathf.Clamp01((now - start) / (full - start));
+            return Mathf.Lerp(enhancerSystem.earlyPowerMultiplier, enhancerSystem.latePowerMultiplier, t);
+        }
+
+        private static bool UsesZeroBaseAdditiveFallback(StatType stat)
+        {
+            return stat == StatType.CritChance
+                || stat == StatType.LifeSteal
+                || stat == StatType.DodgeChance
+                || stat == StatType.DamageReduction;
+        }
+
+        private static RelicRollOptionData[] ConvertRelicRollOffered(GameplayTelemetryHub.RelicOptionSample[] offered)
+        {
+            if (offered == null || offered.Length == 0)
+                return Array.Empty<RelicRollOptionData>();
+
+            RelicRollOptionData[] converted = new RelicRollOptionData[offered.Length];
+            for (int i = 0; i < offered.Length; i++)
+            {
+                GameplayTelemetryHub.RelicOptionSample option = offered[i];
+                converted[i] = new RelicRollOptionData
+                {
+                    id = option.id,
+                    display_name = option.displayName,
+                    rarity = option.rarity,
+                    current_stacks = option.currentStacks,
+                    max_stacks = option.maxStacks
+                };
+            }
+
+            return converted;
+        }
+
+        private static RejectedRelicRollOptionData[] ConvertRelicRollRejected(GameplayTelemetryHub.RejectedRelicOptionSample[] rejected)
+        {
+            if (rejected == null || rejected.Length == 0)
+                return Array.Empty<RejectedRelicRollOptionData>();
+
+            RejectedRelicRollOptionData[] converted = new RejectedRelicRollOptionData[rejected.Length];
+            for (int i = 0; i < rejected.Length; i++)
+            {
+                GameplayTelemetryHub.RejectedRelicOptionSample option = rejected[i];
+                converted[i] = new RejectedRelicRollOptionData
+                {
+                    id = option.id,
+                    display_name = option.displayName,
+                    rarity = option.rarity,
+                    reason = option.reason,
+                    current_stacks = option.currentStacks,
+                    max_stacks = option.maxStacks
+                };
+            }
+
+            return converted;
+        }
+
+        private static float ComputePercentileHits(List<int> samples, float percentile)
+        {
+            if (samples == null || samples.Count == 0)
+                return 0f;
+
+            samples.Sort();
+            float clamped = Mathf.Clamp01(percentile);
+            float index = (samples.Count - 1) * clamped;
+            int lowerIndex = Mathf.FloorToInt(index);
+            int upperIndex = Mathf.CeilToInt(index);
+            if (lowerIndex == upperIndex)
+                return samples[lowerIndex];
+
+            float t = index - lowerIndex;
+            return Mathf.Lerp(samples[lowerIndex], samples[upperIndex], t);
+        }
+
+        private void UpdateLowHealthState(float runTime, bool flushOnly)
+        {
+            if (player == null)
+                return;
+
+            float maxHealth = Mathf.Max(1f, player.MaxHealth);
+            float health = Mathf.Clamp(player.CurrentHealth, 0f, maxHealth);
+            float healthRatio = Mathf.Clamp01(health / maxHealth);
+
+            ProcessLowHealthThreshold(
+                WarningLowHealthThreshold,
+                ref lowHpWarningActive,
+                ref lowHpWarningEnteredAt,
+                ref lowHpWarningTotalSeconds,
+                ref lowHpWarningEntries,
+                health,
+                maxHealth,
+                healthRatio,
+                runTime,
+                flushOnly
+            );
+
+            ProcessLowHealthThreshold(
+                CriticalLowHealthThreshold,
+                ref lowHpCriticalActive,
+                ref lowHpCriticalEnteredAt,
+                ref lowHpCriticalTotalSeconds,
+                ref lowHpCriticalEntries,
+                health,
+                maxHealth,
+                healthRatio,
+                runTime,
+                flushOnly
+            );
+        }
+
+        private void ProcessLowHealthThreshold(
+            float threshold,
+            ref bool active,
+            ref float enteredAt,
+            ref float totalSeconds,
+            ref int entries,
+            float currentHealth,
+            float maxHealth,
+            float healthRatio,
+            float runTime,
+            bool flushOnly
+        )
+        {
+            bool underThreshold = healthRatio <= threshold;
+
+            if (!flushOnly && underThreshold && !active)
+            {
+                active = true;
+                enteredAt = runTime;
+                entries++;
+                EmitLowHealthTransition(threshold, entered: true, currentHealth, maxHealth, healthRatio, 0f, totalSeconds, runTime);
+                return;
+            }
+
+            if (!active)
+                return;
+
+            if (flushOnly || !underThreshold)
+            {
+                float elapsed = enteredAt >= 0f ? Mathf.Max(0f, runTime - enteredAt) : 0f;
+                totalSeconds += elapsed;
+                EmitLowHealthTransition(
+                    threshold,
+                    entered: false,
+                    currentHealth,
+                    maxHealth,
+                    healthRatio,
+                    elapsed,
+                    totalSeconds,
+                    runTime
+                );
+                active = false;
+                enteredAt = -1f;
+            }
+        }
+
+        private void EmitLowHealthTransition(
+            float threshold,
+            bool entered,
+            float currentHealth,
+            float maxHealth,
+            float healthRatio,
+            float secondsSinceEnter,
+            float totalSecondsUnder,
+            float runTime
+        )
+        {
+            if (!runActive)
+                return;
+
+            TelemetryRecord record = CreateRecord("low_health_state");
+            record.run_time_s = runTime;
+            record.low_health = new LowHealthData
+            {
+                threshold_ratio = threshold,
+                entered = entered,
+                current_health = currentHealth,
+                max_health = maxHealth,
+                health_ratio = healthRatio,
+                seconds_since_enter = secondsSinceEnter,
+                total_seconds_under_threshold = totalSecondsUnder
+            };
+            record.counters = CollectRunCounters();
+            EnqueueRecord(record);
         }
 
         private void CleanupTargetHitTrackers(float runTime)
@@ -1526,16 +2257,37 @@ namespace GrassSim.Telemetry
             meleeKills = 0;
             totalMeleeDamage = 0f;
             totalHitsToKill = 0f;
+            incomingDamageEvents = 0;
+            incomingDamageDodged = 0;
+            incomingDamageBlocked = 0;
+            totalIncomingRawDamage = 0f;
+            totalIncomingFinalDamage = 0f;
+            totalIncomingBarrierAbsorbed = 0f;
+            relicRolls = 0;
+            relicRollRejections = 0;
+            choiceQueueEvents = 0;
             lifeStealEvents = 0;
             totalLifeStealRaw = 0f;
-            totalLifeStealCapped = 0f;
+            totalLifeStealPerHitCapped = 0f;
+            totalLifeStealPerSecondCapped = 0f;
             totalLifeStealApplied = 0f;
             totalLifeStealOverheal = 0f;
+            lowHpWarningEntries = 0;
+            lowHpCriticalEntries = 0;
+            lowHpWarningTotalSeconds = 0f;
+            lowHpCriticalTotalSeconds = 0f;
+            lowHpWarningActive = false;
+            lowHpCriticalActive = false;
+            lowHpWarningEnteredAt = -1f;
+            lowHpCriticalEnteredAt = -1f;
+            pendingExitReason = null;
 
             targetHitTrackers.Clear();
             enemyHitAggregates.Clear();
+            upgradeContributions.Clear();
             targetTrackerIdsToRemove.Clear();
             enemyHitSummaryBuffer.Clear();
+            upgradeContributionBuffer.Clear();
             writeBuffer.Clear();
             bufferedLineCount = 0;
         }

@@ -5,6 +5,20 @@ using GrassSim.Stats;
 [CreateAssetMenu(menuName = "GrassSim/Relics/RelicLibrary")]
 public class RelicLibrary : ScriptableObject
 {
+    [System.Serializable]
+    public sealed class RejectedRelicOption
+    {
+        public RelicDefinition relic;
+        public string reason;
+    }
+
+    [System.Serializable]
+    public sealed class RollResult
+    {
+        public readonly List<RelicDefinition> offered = new();
+        public readonly List<RejectedRelicOption> rejected = new();
+    }
+
     [Header("Pool")]
     public List<RelicDefinition> relics;
 
@@ -14,8 +28,14 @@ public class RelicLibrary : ScriptableObject
 
     public List<RelicDefinition> Roll(int count, PlayerRelicController player = null)
     {
-        List<RelicDefinition> pool = BuildEligiblePool(player);
-        List<RelicDefinition> result = new();
+        RollResult result = RollWithDiagnostics(count, player);
+        return result.offered;
+    }
+
+    public RollResult RollWithDiagnostics(int count, PlayerRelicController player = null)
+    {
+        RollResult result = new();
+        List<RelicDefinition> pool = BuildEligiblePool(player, result.rejected);
 
         for (int i = 0; i < count && pool.Count > 0; i++)
         {
@@ -23,14 +43,17 @@ public class RelicLibrary : ScriptableObject
                 ? WeightedPickIndex(pool)
                 : Random.Range(0, pool.Count);
 
-            result.Add(pool[idx]);
+            result.offered.Add(pool[idx]);
             pool.RemoveAt(idx);
         }
 
         return result;
     }
 
-    private List<RelicDefinition> BuildEligiblePool(PlayerRelicController player)
+    private List<RelicDefinition> BuildEligiblePool(
+        PlayerRelicController player,
+        List<RejectedRelicOption> rejected
+    )
     {
         List<RelicDefinition> pool = new();
         if (relics == null || relics.Count == 0)
@@ -42,8 +65,29 @@ public class RelicLibrary : ScriptableObject
             if (relic == null)
                 continue;
 
-            if (player != null && !player.CanAcceptRelic(relic))
+            if (player != null)
+            {
+                string rejectReason = player.GetRelicRejectionReason(relic);
+                if (rejectReason != PlayerRelicController.RejectReasonNone)
+                {
+                    rejected?.Add(new RejectedRelicOption
+                    {
+                        relic = relic,
+                        reason = rejectReason
+                    });
+                    continue;
+                }
+            }
+
+            if (relic.effect == null || string.IsNullOrWhiteSpace(relic.id))
+            {
+                rejected?.Add(new RejectedRelicOption
+                {
+                    relic = relic,
+                    reason = "invalid_relic_definition"
+                });
                 continue;
+            }
 
             pool.Add(relic);
         }

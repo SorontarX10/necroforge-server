@@ -44,6 +44,21 @@ public class BossHealthBarUI : MonoBehaviour
         UpdateFill();
     }
 
+    public static void ResetSharedCanvas()
+    {
+        if (sharedCanvas != null)
+        {
+            if (Application.isPlaying)
+                Object.Destroy(sharedCanvas.gameObject);
+            else
+                Object.DestroyImmediate(sharedCanvas.gameObject);
+        }
+
+        sharedCanvas = null;
+        cachedHudHealthBarTemplate = null;
+        cachedNecroforgeFont = null;
+    }
+
     public void SetChargingState(bool charging)
     {
         chargingActive = charging;

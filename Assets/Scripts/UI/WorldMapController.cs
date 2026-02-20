@@ -143,6 +143,8 @@ public class WorldMapController : MonoBehaviour
 
     private IEnumerator InitializeRoutine()
     {
+        showMinimap = true;
+
         yield return new WaitUntil(() => ChunkedProceduralLevelGenerator.WorldReady);
 
         while (worldGenerator == null)

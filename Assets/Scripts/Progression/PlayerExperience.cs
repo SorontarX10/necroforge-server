@@ -8,9 +8,9 @@ namespace GrassSim.Progression
     {
         public int level = 1;
         public int exp = 0;
-        public int expToNext = 68;
+        public int expToNext = 76;
 
-        public float expGrowth = 1.12f;
+        public float expGrowth = 1.17f;
 
         public bool AddExp(int amount)
         {

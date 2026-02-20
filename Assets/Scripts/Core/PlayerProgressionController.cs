@@ -4,6 +4,7 @@ using UnityEngine;
 using GrassSim.Stats;
 using GrassSim.Upgrades;
 using GrassSim.Progression;
+using GrassSim.Telemetry;
 
 namespace GrassSim.Core
 {
@@ -93,6 +94,10 @@ namespace GrassSim.Core
             if (relics == null)
                 relics = GetComponent<PlayerRelicController>();
 
+            float runTime = GetRunTimeSeconds();
+            float maxHealth = MaxHealth;
+            float healthBefore = currentHealth;
+
             float dodgeChance = stats.dodgeChance;
             if (relics != null)
                 dodgeChance += relics.GetDodgeChanceBonus();
@@ -102,12 +107,42 @@ namespace GrassSim.Core
             {
                 SpawnCombatText("Dodge", Color.white);
                 relics?.NotifyDodged();
+                ReportIncomingDamageTelemetry(
+                    runTime,
+                    rawDamage: amount,
+                    reduction: 0f,
+                    damageAfterReduction: amount,
+                    dodged: true,
+                    blocked: false,
+                    barrierBefore: temporaryBarrier,
+                    barrierAbsorbed: 0f,
+                    barrierAfter: temporaryBarrier,
+                    finalDamage: 0f,
+                    healthBefore: healthBefore,
+                    healthAfter: healthBefore,
+                    maxHealth: maxHealth
+                );
                 return;
             }
 
             if (relics != null && relics.TryBlockIncomingHit())
             {
                 SpawnCombatText("Ward", new Color(0.6f, 0.9f, 1f));
+                ReportIncomingDamageTelemetry(
+                    runTime,
+                    rawDamage: amount,
+                    reduction: 0f,
+                    damageAfterReduction: amount,
+                    dodged: false,
+                    blocked: true,
+                    barrierBefore: temporaryBarrier,
+                    barrierAbsorbed: 0f,
+                    barrierAfter: temporaryBarrier,
+                    finalDamage: 0f,
+                    healthBefore: healthBefore,
+                    healthAfter: healthBefore,
+                    maxHealth: maxHealth
+                );
                 return;
             }
 
@@ -123,18 +158,55 @@ namespace GrassSim.Core
                 finalAmount = amount * (1f - reduction);
             }
 
+            float damageAfterReduction = finalAmount;
+            float barrierBefore = temporaryBarrier;
+            float barrierAbsorbed = 0f;
+
             if (temporaryBarrier > 0f && finalAmount > 0f)
             {
-                float absorbed = Mathf.Min(temporaryBarrier, finalAmount);
-                temporaryBarrier -= absorbed;
-                finalAmount -= absorbed;
+                barrierAbsorbed = Mathf.Min(temporaryBarrier, finalAmount);
+                temporaryBarrier -= barrierAbsorbed;
+                finalAmount -= barrierAbsorbed;
             }
 
             if (finalAmount <= 0f)
+            {
+                ReportIncomingDamageTelemetry(
+                    runTime,
+                    rawDamage: amount,
+                    reduction: reduction,
+                    damageAfterReduction: damageAfterReduction,
+                    dodged: false,
+                    blocked: false,
+                    barrierBefore: barrierBefore,
+                    barrierAbsorbed: barrierAbsorbed,
+                    barrierAfter: temporaryBarrier,
+                    finalDamage: 0f,
+                    healthBefore: healthBefore,
+                    healthAfter: healthBefore,
+                    maxHealth: maxHealth
+                );
                 return;
+            }
 
             currentHealth = Mathf.Max(0f, currentHealth - finalAmount);
             relics?.NotifyDamageTaken(finalAmount);
+
+            ReportIncomingDamageTelemetry(
+                runTime,
+                rawDamage: amount,
+                reduction: reduction,
+                damageAfterReduction: damageAfterReduction,
+                dodged: false,
+                blocked: false,
+                barrierBefore: barrierBefore,
+                barrierAbsorbed: barrierAbsorbed,
+                barrierAfter: temporaryBarrier,
+                finalDamage: finalAmount,
+                healthBefore: healthBefore,
+                healthAfter: currentHealth,
+                maxHealth: maxHealth
+            );
 
             if (IsDead)
                 SendMessage("OnCombatantDied", SendMessageOptions.DontRequireReceiver);
@@ -294,6 +366,49 @@ namespace GrassSim.Core
                 return;
 
             temporaryBarrier = Mathf.Clamp(temporaryBarrier + amount, 0f, maxCap);
+        }
+
+        private static float GetRunTimeSeconds()
+        {
+            if (GameTimerController.Instance != null)
+                return Mathf.Max(0f, GameTimerController.Instance.elapsedTime);
+
+            return 0f;
+        }
+
+        private static void ReportIncomingDamageTelemetry(
+            float runTime,
+            float rawDamage,
+            float reduction,
+            float damageAfterReduction,
+            bool dodged,
+            bool blocked,
+            float barrierBefore,
+            float barrierAbsorbed,
+            float barrierAfter,
+            float finalDamage,
+            float healthBefore,
+            float healthAfter,
+            float maxHealth
+        )
+        {
+            GameplayTelemetryHub.ReportIncomingDamage(
+                new GameplayTelemetryHub.IncomingDamageSample(
+                    runTime,
+                    rawDamage,
+                    reduction,
+                    damageAfterReduction,
+                    dodged,
+                    blocked,
+                    barrierBefore,
+                    barrierAbsorbed,
+                    barrierAfter,
+                    finalDamage,
+                    healthBefore,
+                    healthAfter,
+                    maxHealth
+                )
+            );
         }
     }
 

@@ -62,11 +62,11 @@ public partial class BossEnemyController : MonoBehaviour
     [SerializeField] private float zombieDamageScale = 1f;
     [SerializeField] private float zombieMoveSpeedScale = 1f;
     [SerializeField] private float zombieAttackCooldownScale = 1f;
-    [SerializeField] private float quickHealthScale = 0.8f;
+    [SerializeField] private float quickHealthScale = 0.95f;
     [SerializeField] private float quickDamageScale = 1f;
     [SerializeField] private float quickMoveSpeedScale = 1.38f;
     [SerializeField] private float quickAttackCooldownScale = 0.75f;
-    [SerializeField] private float tankHealthScale = 1.75f;
+    [SerializeField] private float tankHealthScale = 2.1f;
     [SerializeField] private float tankDamageScale = 1.2f;
     [SerializeField] private float tankMoveSpeedScale = 0.75f;
     [SerializeField] private float tankAttackCooldownScale = 1.25f;

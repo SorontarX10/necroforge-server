@@ -51,3 +51,21 @@ Get-Content -Path "results/perf/hitch_events.jsonl" -Tail 20
 ```powershell
 Get-Content -Path "results/perf/hitch_events.jsonl" -Tail 1 | ConvertFrom-Json | Format-List
 ```
+
+## Gameplay telemetry analyzer
+
+Gameplay telemetry (`results/telemetry/gameplay_*.jsonl`) can be aggregated into:
+- run-level CSV for balancing
+- markdown summary with medians and end reasons
+
+Run:
+
+```bash
+python Tools/perf/analyze_gameplay_telemetry.py \
+  --input "results/telemetry/gameplay_*.jsonl" \
+  --out-dir results/telemetry
+```
+
+Outputs:
+- `results/telemetry/gameplay_telemetry_runs.csv`
+- `results/telemetry/gameplay_telemetry_report.md`

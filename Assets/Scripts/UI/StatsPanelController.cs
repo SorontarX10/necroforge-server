@@ -531,8 +531,8 @@ public class StatsPanelController : MonoBehaviour
             speed += relics.GetSpeedBonus();
         }
 
-        critChance = Mathf.Clamp01(critChance);
-        lifeSteal = Mathf.Clamp01(lifeSteal);
+        critChance = CombatBalanceCaps.ClampCritChance(critChance);
+        lifeSteal = CombatBalanceCaps.ApplyLifeStealDiminishing(lifeSteal);
         critMult = Mathf.Max(1f, critMult);
 
         damageRow?.SetFloat(dmg);

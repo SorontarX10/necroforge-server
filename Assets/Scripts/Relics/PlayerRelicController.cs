@@ -6,6 +6,13 @@ using GrassSim.Combat;
 
 public class PlayerRelicController : MonoBehaviour
 {
+    public const string RejectReasonNone = "none";
+    public const string RejectReasonNull = "null_relic";
+    public const string RejectReasonInvalidId = "invalid_id";
+    public const string RejectReasonMissingEffect = "missing_effect";
+    public const string RejectReasonNonStackableOwned = "non_stackable_owned";
+    public const string RejectReasonMaxStacksReached = "max_stacks_reached";
+
     private readonly Dictionary<string, int> stacks = new();
     private readonly Dictionary<string, RelicDefinition> relics = new();
     private readonly Dictionary<RelicEffect, RelicDefinition> relicsByEffect = new();
@@ -67,7 +74,7 @@ public class PlayerRelicController : MonoBehaviour
             relic.effect.OnAcquire(this, 1);
             changed = true;
         }
-        else if (relic.stackable && stacks[relic.id] < relic.maxStacks)
+        else if (relic.stackable && stacks[relic.id] < GetEffectiveMaxStacks(relic))
         {
             stacks[relic.id]++;
             relic.effect.OnStack(this, stacks[relic.id]);
@@ -86,18 +93,36 @@ public class PlayerRelicController : MonoBehaviour
 
     public bool CanAcceptRelic(RelicDefinition relic)
     {
-        if (relic == null || string.IsNullOrWhiteSpace(relic.id))
-            return false;
+        return GetRelicRejectionReason(relic) == RejectReasonNone;
+    }
+
+    public int GetEffectiveMaxStacks(RelicDefinition relic)
+    {
+        return CombatBalanceCaps.GetRuntimeRelicMaxStacks(relic);
+    }
+
+    public string GetRelicRejectionReason(RelicDefinition relic)
+    {
+        if (relic == null)
+            return RejectReasonNull;
+
+        if (string.IsNullOrWhiteSpace(relic.id))
+            return RejectReasonInvalidId;
+
+        if (relic.effect == null)
+            return RejectReasonMissingEffect;
 
         if (!relics.ContainsKey(relic.id))
-            return true;
+            return RejectReasonNone;
 
         if (!relic.stackable)
-            return false;
+            return RejectReasonNonStackableOwned;
 
         int stackCount = GetStacks(relic.id);
-        int maxStacks = Mathf.Max(1, relic.maxStacks);
-        return stackCount < maxStacks;
+        int maxStacks = GetEffectiveMaxStacks(relic);
+        return stackCount < maxStacks
+            ? RejectReasonNone
+            : RejectReasonMaxStacksReached;
     }
 
     public int GetStacks(string relicId)

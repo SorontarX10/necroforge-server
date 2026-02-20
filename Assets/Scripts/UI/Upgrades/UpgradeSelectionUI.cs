@@ -39,7 +39,7 @@ public class UpgradeSelectionUI : MonoBehaviour
             ? new List<UpgradeOption>(options)
             : new List<UpgradeOption>();
 
-        ChoiceUiQueue.Enqueue(() => ShowNow(snapshot));
+        ChoiceUiQueue.Enqueue(() => ShowNow(snapshot), "upgrade_selection");
     }
 
     private void ShowNow(List<UpgradeOption> options)
@@ -47,21 +47,21 @@ public class UpgradeSelectionUI : MonoBehaviour
         if (ResolvePlayer() == null)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("upgrade_selection_no_player");
             return;
         }
 
         if (cards == null || cards.Length == 0)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("upgrade_selection_no_cards");
             return;
         }
 
         if (options == null || options.Count == 0)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("upgrade_selection_empty");
             return;
         }
 
@@ -108,7 +108,7 @@ public class UpgradeSelectionUI : MonoBehaviour
         if (option == null || resolvedPlayer == null)
         {
             Hide();
-            ChoiceUiQueue.CompleteCurrent();
+            ChoiceUiQueue.CompleteCurrent("upgrade_selection_invalid_pick");
             return;
         }
 
@@ -128,7 +128,7 @@ public class UpgradeSelectionUI : MonoBehaviour
             cursor?.HideCursor();
         }
 
-        ChoiceUiQueue.CompleteCurrent();
+        ChoiceUiQueue.CompleteCurrent("upgrade_selection_pick");
     }
 
     private PlayerProgressionController ResolvePlayer()

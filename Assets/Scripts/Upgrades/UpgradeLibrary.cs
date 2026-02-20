@@ -140,10 +140,35 @@ namespace GrassSim.Upgrades
 
         private float GetRuntimeWeight(Entry e)
         {
+            float runtimeWeight;
             if (UpgradeWeightRuntime.Instance != null)
-                return UpgradeWeightRuntime.Instance.GetWeight(e.stat, e.weight);
+                runtimeWeight = UpgradeWeightRuntime.Instance.GetWeight(e.stat, e.weight);
+            else
+                runtimeWeight = e.weight;
 
-            return e.weight;
+            return ApplyBalanceWeightBias(e.stat, runtimeWeight);
+        }
+
+        // Reduces overrepresented offensive snowball picks and boosts defensive/utility options.
+        private static float ApplyBalanceWeightBias(StatType stat, float weight)
+        {
+            float multiplier = stat switch
+            {
+                StatType.Damage => 0.72f,
+                StatType.CritChance => 0.66f,
+                StatType.LifeSteal => 0.70f,
+
+                StatType.MaxHealth => 1.26f,
+                StatType.HealthRegen => 1.22f,
+                StatType.DamageReduction => 1.24f,
+                StatType.DodgeChance => 1.2f,
+                StatType.MaxStamina => 1.12f,
+                StatType.StaminaRegen => 1.15f,
+                StatType.Speed => 1.12f,
+                _ => 1f
+            };
+
+            return Mathf.Max(0.0001f, weight * multiplier);
         }
 
         private static int GetDifficulty()

@@ -57,6 +57,7 @@ public static class DifficultyContext
     public static float EnemyHealthMultiplier =>
         (1f + 0.07f * (Difficulty - 1)) *
         (1f + 0.10f * OpeningPressure01) *
+        (1f + 0.32f * LateSnowball01) *
         (1f + 5.2f * FinalBossOverdrive01);
 
     public static float EnemyDamageMultiplier =>
