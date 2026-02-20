@@ -12,7 +12,7 @@ namespace GrassSim.Enhancers
             MapCollectibleRegistry.RegisterEnhancer(this);
         }
 
-        private void OnDisable()
+        private void OnDestroy()
         {
             MapCollectibleRegistry.UnregisterEnhancer(this);
         }

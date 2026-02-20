@@ -75,7 +75,7 @@ namespace GrassSim.UI
                     continue;
 
                 GameObject go = item.gameObject;
-                if (!go.scene.IsValid() || !go.activeInHierarchy)
+                if (!go.scene.IsValid())
                     continue;
 
                 result.Add(item);

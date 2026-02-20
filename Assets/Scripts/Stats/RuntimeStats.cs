@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using GrassSim.Combat;
 
 namespace GrassSim.Stats
 {
@@ -44,7 +45,7 @@ namespace GrassSim.Stats
 
             damage = baseData.damage;
             critChance = baseData.critChance;
-            critMultiplier = baseData.critMultiplier;
+            critMultiplier = CombatBalanceCaps.ClampCritMultiplier(baseData.critMultiplier);
             lifeSteal = baseData.lifeSteal;
             swingSpeed = baseData.swingSpeed;
             speed = baseData.speed;
@@ -72,7 +73,7 @@ namespace GrassSim.Stats
                     break;
 
                 case StatType.CritMultiplier:
-                    critMultiplier = Mathf.Max(1f, critMultiplier + value);
+                    critMultiplier = CombatBalanceCaps.ClampCritMultiplier(critMultiplier + value);
                     break;
 
                 case StatType.LifeSteal:

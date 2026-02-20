@@ -57,7 +57,7 @@ public class ChestRelicTrigger : MonoBehaviour
         MapCollectibleRegistry.RegisterChest(this);
     }
 
-    private void OnDisable()
+    private void OnDestroy()
     {
         MapCollectibleRegistry.UnregisterChest(this);
     }
@@ -70,7 +70,8 @@ public class ChestRelicTrigger : MonoBehaviour
         ReportRelicRollTelemetry(roll);
         relicUI.Show(roll.offered);
 
-        gameObject.SetActive(false);
+        MapCollectibleRegistry.UnregisterChest(this);
+        Destroy(gameObject);
     }
 
     private void ReportRelicRollTelemetry(RelicLibrary.RollResult roll)

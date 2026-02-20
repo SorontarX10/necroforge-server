@@ -1326,7 +1326,7 @@ namespace GrassSim.Telemetry
 
             float effectiveDamage = runtimeDamage * relicDamageMultiplier;
             float effectiveCritChance = CombatBalanceCaps.ClampCritChance(runtimeCritChance + relicCritChanceBonus);
-            float effectiveCritMultiplier = Mathf.Max(1f, runtimeCritMultiplier + relicCritMultiplierBonus);
+            float effectiveCritMultiplier = CombatBalanceCaps.ClampCritMultiplier(runtimeCritMultiplier + relicCritMultiplierBonus);
             float effectiveLifeSteal = runtimeLifeSteal + relicLifeStealBonus;
             bool lifeStealAlreadyEffective = false;
             float effectiveSwingSpeed = Mathf.Max(0.05f, runtimeSwingSpeed + relicSwingSpeedBonus);
@@ -1364,6 +1364,8 @@ namespace GrassSim.Telemetry
             if (!lifeStealAlreadyEffective)
                 effectiveLifeSteal = CombatBalanceCaps.ApplyLifeStealDiminishing(effectiveLifeSteal);
 
+            effectiveCritMultiplier = CombatBalanceCaps.ClampCritMultiplier(effectiveCritMultiplier);
+
             return new StatBlock
             {
                 max_health = effectiveMaxHealth,
@@ -1373,7 +1375,7 @@ namespace GrassSim.Telemetry
                 speed = Mathf.Max(0f, effectiveSpeed),
                 damage = Mathf.Max(0f, effectiveDamage),
                 crit_chance = CombatBalanceCaps.ClampCritChance(effectiveCritChance),
-                crit_multiplier = Mathf.Max(1f, effectiveCritMultiplier),
+                crit_multiplier = effectiveCritMultiplier,
                 life_steal = Mathf.Clamp01(Mathf.Max(0f, effectiveLifeSteal)),
                 swing_speed = Mathf.Max(0.05f, effectiveSwingSpeed),
                 damage_reduction = Mathf.Clamp01(Mathf.Max(0f, effectiveDamageReduction)),

@@ -36,7 +36,7 @@ namespace GrassSim.Combat
             }
 
             critChance = CombatBalanceCaps.ClampCritChance(critChance);
-            critMultiplier = Mathf.Max(1f, critMultiplier);
+            critMultiplier = CombatBalanceCaps.ClampCritMultiplier(critMultiplier);
 
             bool isCrit = Random.value < critChance;
             if (isCrit)

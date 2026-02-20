@@ -6,6 +6,9 @@ using GrassSim.UI;
 
 public class SwordDamage : MonoBehaviour
 {
+    private static readonly Color NormalHitColor = new Color(1f, 0.22f, 0.22f, 1f);
+    private static readonly Color CritHitColor = new Color(1f, 0.9f, 0.2f, 1f);
+
     [Header("Base Damage")]
     public float baseDamage = 10f;
 
@@ -83,7 +86,7 @@ public class SwordDamage : MonoBehaviour
             damage *= incomingDamageDebuff.GetIncomingDamageMultiplier();
 
         bool wasAlive = !target.IsDead;
-        Color dmgColor = isCrit ? Color.yellow : Color.red;
+        Color dmgColor = isCrit ? CritHitColor : NormalHitColor;
         float fontSize = isCrit ? 48f : 36f;
         target.TakeDamageWithText(damage, transform, dmgColor, fontSize);
         relics?.NotifyMeleeHitDealt(target, damage, isCrit);

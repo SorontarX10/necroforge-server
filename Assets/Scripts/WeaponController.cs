@@ -574,7 +574,7 @@ public class WeaponController : MonoBehaviour
         EnsureRelicFrameCache();
         baseCrit += cachedRelicCritMultiplierBonus;
 
-        return Mathf.Max(1f, baseCrit);
+        return CombatBalanceCaps.ClampCritMultiplier(baseCrit);
     }
 
     public float GetLifeSteal()

@@ -7,6 +7,7 @@ using GrassSim.Core;
 using GrassSim.Combat;
 using GrassSim.Stats;
 using GrassSim.Enhancers;
+using GrassSim.AI;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -80,6 +81,7 @@ public class StatsPanelController : MonoBehaviour
     private Coroutine sizeRoutine;
     private bool subscribed;
     [SerializeField] private WeaponEnhancerSystem enhancers; // optional override
+    private EnemyActivationController enemyActivationController;
 
     // ================= UNITY =================
 
@@ -477,13 +479,27 @@ public class StatsPanelController : MonoBehaviour
         EnsureWorld();
         EnsureRowRefs();
         if (world == null) return;
+        int currentEnemies = ResolveCurrentEnemyCount();
 
         difficultyRow?.SetInt(world.difficulty);
         difficultyRow?.SetBoosted(false);
-        enemiesSpawnedRow?.SetInt(world.enemiesSpawned);
+        enemiesSpawnedRow?.SetInt(currentEnemies);
         enemiesSpawnedRow?.SetBoosted(false);
         enemiesKilledRow?.SetInt(world.enemiesKilled);
         enemiesKilledRow?.SetBoosted(false);
+    }
+
+    private int ResolveCurrentEnemyCount()
+    {
+        if (enemyActivationController == null)
+            enemyActivationController = EnemyActivationController.Instance != null
+                ? EnemyActivationController.Instance
+                : FindFirstObjectByType<EnemyActivationController>();
+
+        if (enemyActivationController != null)
+            return Mathf.Max(0, enemyActivationController.ActiveCount);
+
+        return Mathf.Max(0, world != null ? world.enemiesSpawned : 0);
     }
 
     private void RefreshCombatAndSurvivalStats()
@@ -533,7 +549,7 @@ public class StatsPanelController : MonoBehaviour
 
         critChance = CombatBalanceCaps.ClampCritChance(critChance);
         lifeSteal = CombatBalanceCaps.ApplyLifeStealDiminishing(lifeSteal);
-        critMult = Mathf.Max(1f, critMult);
+        critMult = CombatBalanceCaps.ClampCritMultiplier(critMult);
 
         damageRow?.SetFloat(dmg);
         critChanceRow?.SetPercent(critChance);

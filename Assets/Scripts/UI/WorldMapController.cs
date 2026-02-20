@@ -54,6 +54,7 @@ public class WorldMapController : MonoBehaviour
     [SerializeField, Min(96f)] private float minimapSize = 240f;
     [SerializeField, Min(0f)] private float minimapPadding = 24f;
     [SerializeField, Min(0f)] private float minimapInnerPadding = 8f;
+    [SerializeField, Range(0.1f, 1f)] private float minimapMarkerScaleFallback = 0.32f;
     [SerializeField] private Color minimapBackdropColor = new Color(0.04f, 0.05f, 0.07f, 0.9f);
 
     private ChunkedProceduralLevelGenerator worldGenerator;
@@ -84,6 +85,7 @@ public class WorldMapController : MonoBehaviour
     private float nextRevealTime;
     private byte unexploredAlphaByte;
     private bool collectibleMarkersDirty = true;
+    private float lastMinimapMarkerScale = -1f;
     private bool legacyFallbackChecked;
     private bool legacyFallbackAvailable = true;
 
@@ -306,17 +308,37 @@ public class WorldMapController : MonoBehaviour
 
     private void RefreshCollectibleMarkersFromRegistry(bool forceRefresh)
     {
-        if (!forceRefresh && !collectibleMarkersDirty)
+        float minimapMarkerScale = GetMinimapMarkerScale();
+        bool minimapScaleChanged = !Mathf.Approximately(minimapMarkerScale, lastMinimapMarkerScale);
+        if (!forceRefresh && !collectibleMarkersDirty && !minimapScaleChanged)
             return;
 
+        lastMinimapMarkerScale = minimapMarkerScale;
         MapCollectibleRegistry.GetActiveChests(chestSceneBuffer);
         SyncMarkers(chestSceneBuffer, chestMarkers, markerLayer, chestMarkerColor, chestMarkerSize);
-        SyncMarkers(chestSceneBuffer, minimapChestMarkers, minimapMarkerLayer, chestMarkerColor, chestMarkerSize);
+        SyncMarkers(chestSceneBuffer, minimapChestMarkers, minimapMarkerLayer, chestMarkerColor, chestMarkerSize * minimapMarkerScale);
 
         MapCollectibleRegistry.GetActiveEnhancers(enhancerSceneBuffer);
         SyncMarkers(enhancerSceneBuffer, enhancerMarkers, markerLayer, enhancerMarkerColor, enhancerMarkerSize);
-        SyncMarkers(enhancerSceneBuffer, minimapEnhancerMarkers, minimapMarkerLayer, enhancerMarkerColor, enhancerMarkerSize);
+        SyncMarkers(enhancerSceneBuffer, minimapEnhancerMarkers, minimapMarkerLayer, enhancerMarkerColor, enhancerMarkerSize * minimapMarkerScale);
         collectibleMarkersDirty = false;
+    }
+
+    private float GetMinimapMarkerScale()
+    {
+        float fallback = Mathf.Clamp(minimapMarkerScaleFallback, 0.1f, 1f);
+        if (mapImage == null || minimapImage == null)
+            return fallback;
+
+        Rect mapRect = mapImage.rectTransform.rect;
+        Rect minimapRect = minimapImage.rectTransform.rect;
+        float mapSize = Mathf.Min(Mathf.Abs(mapRect.width), Mathf.Abs(mapRect.height));
+        float minimapSizeValue = Mathf.Min(Mathf.Abs(minimapRect.width), Mathf.Abs(minimapRect.height));
+
+        if (mapSize <= 0.01f || minimapSizeValue <= 0.01f)
+            return fallback;
+
+        return Mathf.Clamp(minimapSizeValue / mapSize, 0.1f, 1f);
     }
 
     private void SyncMarkers<T>(
@@ -342,9 +364,6 @@ public class WorldMapController : MonoBehaviour
         {
             var target = sceneTargets[i];
             if (target == null)
-                continue;
-
-            if (!target.gameObject.activeSelf)
                 continue;
 
             int id = target.GetInstanceID();
@@ -449,8 +468,7 @@ public class WorldMapController : MonoBehaviour
                 continue;
 
             bool visible = marker.target != null
-                && marker.target.gameObject.scene.IsValid()
-                && marker.target.gameObject.activeSelf;
+                && marker.target.gameObject.scene.IsValid();
 
             if (visible)
                 visible = IsWorldPositionRevealed(marker.target.position);
