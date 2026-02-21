@@ -49,7 +49,28 @@ public class RelicCardUI : MonoBehaviour
 
         if (def == null)
         {
-            gameObject.SetActive(false);
+            if (icon != null)
+            {
+                icon.sprite = null;
+                icon.enabled = false;
+            }
+
+            if (title != null)
+                title.text = string.Empty;
+
+            if (description != null)
+                description.text = string.Empty;
+
+            if (valueTextToHide != null)
+                valueTextToHide.gameObject.SetActive(false);
+
+            if (rarityBorder != null)
+                rarityBorder.color = Color.gray;
+
+            Button button = GetComponent<Button>();
+            if (button != null)
+                button.interactable = false;
+
             return;
         }
 
@@ -80,6 +101,10 @@ public class RelicCardUI : MonoBehaviour
 
         if (rarityBorder != null)
             rarityBorder.color = RelicRarityColors.Get(def.rarity);
+
+        Button activeButton = GetComponent<Button>();
+        if (activeButton != null)
+            activeButton.interactable = true;
     }
 
     public void OnClick()

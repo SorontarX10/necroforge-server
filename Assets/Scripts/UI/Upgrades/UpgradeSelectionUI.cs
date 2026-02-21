@@ -130,7 +130,10 @@ public class UpgradeSelectionUI : MonoBehaviour
             return;
         }
 
-        if (option == null || resolvedPlayer == null)
+        if (option == null)
+            return;
+
+        if (resolvedPlayer == null)
         {
             AbortSelection("upgrade_selection_invalid_pick", resolvedPlayer);
             return;

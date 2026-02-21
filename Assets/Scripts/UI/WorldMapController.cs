@@ -54,6 +54,8 @@ public class WorldMapController : MonoBehaviour
     [SerializeField, Min(96f)] private float minimapSize = 480f;
     [SerializeField, Min(0f)] private float minimapPadding = 24f;
     [SerializeField, Min(0f)] private float minimapInnerPadding = 8f;
+    [SerializeField, Range(0.02f, 1f)] private float minimapAreaCoverage = 0.2f;
+    [SerializeField, Range(0.3f, 1f)] private float minimapOpacity = 0.86f;
     [SerializeField, Range(0.1f, 1f)] private float minimapMarkerScaleFallback = 0.32f;
     [SerializeField] private Color minimapBackdropColor = new Color(0.04f, 0.05f, 0.07f, 0.9f);
 
@@ -86,6 +88,7 @@ public class WorldMapController : MonoBehaviour
     private byte unexploredAlphaByte;
     private bool collectibleMarkersDirty = true;
     private float lastMinimapMarkerScale = -1f;
+    private Rect minimapUvWindow = new Rect(0f, 0f, 1f, 1f);
     private bool legacyFallbackChecked;
     private bool legacyFallbackAvailable = true;
 
@@ -190,6 +193,7 @@ public class WorldMapController : MonoBehaviour
 
         if (player != null)
         {
+            UpdateMinimapViewport();
             RevealAround(player.position);
             hasRevealSeed = true;
             lastRevealPosition = player.position;
@@ -227,6 +231,7 @@ public class WorldMapController : MonoBehaviour
         if (anyMapVisible)
         {
             RefreshCollectibleMarkersFromRegistry(forceRefresh: false);
+            UpdateMinimapViewport();
             UpdatePlayerMarker();
             UpdateCollectibleMarkerPositions();
         }
@@ -294,6 +299,7 @@ public class WorldMapController : MonoBehaviour
         {
             collectibleMarkersDirty = true;
             RefreshCollectibleMarkersFromRegistry(forceRefresh: true);
+            UpdateMinimapViewport();
             UpdatePlayerMarker();
             UpdateCollectibleMarkerPositions();
         }
@@ -332,9 +338,10 @@ public class WorldMapController : MonoBehaviour
 
     private float GetMinimapMarkerScale()
     {
-        float fallback = Mathf.Clamp(minimapMarkerScaleFallback, 0.1f, 1f);
+        float coverageSide = GetMinimapCoverageSide();
+        float fallback = Mathf.Clamp(minimapMarkerScaleFallback, 0.1f, 1f) / coverageSide;
         if (mapImage == null || minimapImage == null)
-            return fallback;
+            return Mathf.Clamp(fallback, 0.1f, 1f);
 
         Rect mapRect = mapImage.rectTransform.rect;
         Rect minimapRect = minimapImage.rectTransform.rect;
@@ -342,9 +349,42 @@ public class WorldMapController : MonoBehaviour
         float minimapSizeValue = Mathf.Min(Mathf.Abs(minimapRect.width), Mathf.Abs(minimapRect.height));
 
         if (mapSize <= 0.01f || minimapSizeValue <= 0.01f)
-            return fallback;
+            return Mathf.Clamp(fallback, 0.1f, 1f);
 
-        return Mathf.Clamp(minimapSizeValue / mapSize, 0.1f, 1f);
+        float baseScale = minimapSizeValue / mapSize;
+        return Mathf.Clamp(baseScale / coverageSide, 0.1f, 1f);
+    }
+
+    private float GetMinimapCoverageSide()
+    {
+        float areaCoverage = Mathf.Clamp(minimapAreaCoverage, 0.02f, 1f);
+        return Mathf.Clamp(Mathf.Sqrt(areaCoverage), 0.1f, 1f);
+    }
+
+    private void UpdateMinimapViewport()
+    {
+        if (minimapImage == null || minimapFogImage == null)
+            return;
+
+        if (player == null)
+        {
+            minimapUvWindow = new Rect(0f, 0f, 1f, 1f);
+        }
+        else
+        {
+            float coverageSide = GetMinimapCoverageSide();
+            Vector2 playerUv = WorldToMapUv(player.position);
+            float halfSide = coverageSide * 0.5f;
+            minimapUvWindow = new Rect(
+                playerUv.x - halfSide,
+                playerUv.y - halfSide,
+                coverageSide,
+                coverageSide
+            );
+        }
+
+        minimapImage.uvRect = minimapUvWindow;
+        minimapFogImage.uvRect = minimapUvWindow;
     }
 
     private void SyncMarkers<T>(
@@ -451,15 +491,16 @@ public class WorldMapController : MonoBehaviour
 
     private void UpdateCollectibleMarkerPositions()
     {
-        UpdateMarkerDictionaryPositions(chestMarkers, mapImage);
-        UpdateMarkerDictionaryPositions(enhancerMarkers, mapImage);
-        UpdateMarkerDictionaryPositions(minimapChestMarkers, minimapImage);
-        UpdateMarkerDictionaryPositions(minimapEnhancerMarkers, minimapImage);
+        UpdateMarkerDictionaryPositions(chestMarkers, mapImage, useMinimapWindow: false);
+        UpdateMarkerDictionaryPositions(enhancerMarkers, mapImage, useMinimapWindow: false);
+        UpdateMarkerDictionaryPositions(minimapChestMarkers, minimapImage, useMinimapWindow: true);
+        UpdateMarkerDictionaryPositions(minimapEnhancerMarkers, minimapImage, useMinimapWindow: true);
     }
 
     private void UpdateMarkerDictionaryPositions(
         Dictionary<int, MapTargetMarker> markerSet,
-        RawImage targetMapImage
+        RawImage targetMapImage,
+        bool useMinimapWindow
     )
     {
         if (markerSet == null || markerSet.Count == 0 || targetMapImage == null)
@@ -484,10 +525,37 @@ public class WorldMapController : MonoBehaviour
                 continue;
 
             Vector2 uv = WorldToMapUv(marker.target.position);
-            marker.rect.anchoredPosition = new Vector2(
-                uv.x * mapRect.width,
-                uv.y * mapRect.height
-            );
+            if (useMinimapWindow)
+            {
+                if (minimapUvWindow.width <= 0.0001f || minimapUvWindow.height <= 0.0001f)
+                {
+                    marker.rect.gameObject.SetActive(false);
+                    continue;
+                }
+
+                float localU = (uv.x - minimapUvWindow.xMin) / minimapUvWindow.width;
+                float localV = (uv.y - minimapUvWindow.yMin) / minimapUvWindow.height;
+
+                bool insideWindow =
+                    localU >= 0f && localU <= 1f
+                    && localV >= 0f && localV <= 1f;
+
+                marker.rect.gameObject.SetActive(insideWindow);
+                if (!insideWindow)
+                    continue;
+
+                marker.rect.anchoredPosition = new Vector2(
+                    localU * mapRect.width,
+                    localV * mapRect.height
+                );
+            }
+            else
+            {
+                marker.rect.anchoredPosition = new Vector2(
+                    uv.x * mapRect.width,
+                    uv.y * mapRect.height
+                );
+            }
         }
     }
 
@@ -896,6 +964,7 @@ public class WorldMapController : MonoBehaviour
         minimapBackdrop.raycastTarget = false;
 
         CanvasGroup group = minimapRoot.GetComponent<CanvasGroup>();
+        group.alpha = Mathf.Clamp(minimapOpacity, 0.3f, 1f);
         group.interactable = false;
         group.blocksRaycasts = false;
 
@@ -1064,6 +1133,8 @@ public class WorldMapController : MonoBehaviour
             false
         );
         texture.ReadPixels(new Rect(0f, 0f, mapTextureSize, mapTextureSize), 0, 0);
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.filterMode = FilterMode.Bilinear;
         texture.Apply(false, true);
 
         RenderTexture.active = oldActive;
@@ -1171,22 +1242,32 @@ public class WorldMapController : MonoBehaviour
         if (player == null)
             return;
 
-        UpdatePlayerMarker(playerMarker, mapImage);
-        UpdatePlayerMarker(minimapPlayerMarker, minimapImage);
+        UpdatePlayerMarker(playerMarker, mapImage, keepCentered: false);
+        UpdatePlayerMarker(minimapPlayerMarker, minimapImage, keepCentered: true);
     }
 
-    private void UpdatePlayerMarker(RectTransform marker, RawImage targetMapImage)
+    private void UpdatePlayerMarker(RectTransform marker, RawImage targetMapImage, bool keepCentered)
     {
         if (marker == null || targetMapImage == null)
             return;
 
-        Vector2 uv = WorldToMapUv(player.position);
         Rect rect = targetMapImage.rectTransform.rect;
+        if (keepCentered)
+        {
+            marker.anchoredPosition = new Vector2(
+                rect.width * 0.5f,
+                rect.height * 0.5f
+            );
+        }
+        else
+        {
+            Vector2 uv = WorldToMapUv(player.position);
+            marker.anchoredPosition = new Vector2(
+                uv.x * rect.width,
+                uv.y * rect.height
+            );
+        }
 
-        marker.anchoredPosition = new Vector2(
-            uv.x * rect.width,
-            uv.y * rect.height
-        );
         marker.localRotation = Quaternion.Euler(0f, 0f, -player.eulerAngles.y);
     }
 

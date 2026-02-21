@@ -111,7 +111,9 @@ public class RelicSelectionUI : MonoBehaviour
                 continue;
 
             RelicDefinition relic = i < eligibleRelics.Count ? eligibleRelics[i] : null;
+            cards[i].gameObject.SetActive(true);
             cards[i].Bind(relic, OnPick);
+            SetCardSlotVisible(cards[i], relic != null);
         }
     }
 
@@ -125,7 +127,10 @@ public class RelicSelectionUI : MonoBehaviour
             return;
         }
 
-        if (relic == null || resolvedPlayer == null)
+        if (relic == null)
+            return;
+
+        if (resolvedPlayer == null)
         {
             Hide();
             ChoiceUiQueue.CompleteCurrent("relic_selection_invalid_pick");
@@ -160,11 +165,22 @@ public class RelicSelectionUI : MonoBehaviour
             return;
         }
 
-        for (int i = 0; i < eligibleRelics.Count; i++)
+        int relicIndex = eligibleRelics.IndexOf(relic);
+        if (relicIndex >= 0)
         {
-            RelicDefinition entry = eligibleRelics[i];
-            if (entry != null && string.Equals(entry.id, relic.id, System.StringComparison.Ordinal))
-                eligibleRelics[i] = null;
+            eligibleRelics[relicIndex] = null;
+        }
+        else
+        {
+            for (int i = 0; i < eligibleRelics.Count; i++)
+            {
+                RelicDefinition entry = eligibleRelics[i];
+                if (entry != null && string.Equals(entry.id, relic.id, System.StringComparison.Ordinal))
+                {
+                    eligibleRelics[i] = null;
+                    break;
+                }
+            }
         }
 
         awaitingBanishPick = false;
@@ -510,6 +526,20 @@ public class RelicSelectionUI : MonoBehaviour
             return null;
 
         return button.GetComponentInChildren<TMP_Text>(true);
+    }
+
+    private static void SetCardSlotVisible(RelicCardUI card, bool isVisible)
+    {
+        if (card == null)
+            return;
+
+        CanvasGroup group = card.GetComponent<CanvasGroup>();
+        if (group == null)
+            group = card.gameObject.AddComponent<CanvasGroup>();
+
+        group.alpha = isVisible ? 1f : 0f;
+        group.interactable = isVisible;
+        group.blocksRaycasts = isVisible;
     }
 
     private void RefreshActionButtons()

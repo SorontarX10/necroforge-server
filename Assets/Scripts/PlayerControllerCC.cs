@@ -20,7 +20,7 @@ public class PlayerControllerCC : MonoBehaviour
     [SerializeField, Min(0.05f)] private float headKnockbackCooldown = 0.18f;
     [SerializeField, Min(0.1f)] private float headKnockbackHorizontalForce = 8f;
     [SerializeField, Min(0.1f)] private float headKnockbackVerticalSpeed = 6f;
-    [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 2f;
+    [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 1f;
     [SerializeField, Min(0f)] private float minFallSpeedForHeadKnockback = 0.2f;
     [SerializeField, Range(0.01f, 0.5f)] private float headTopTolerance = 0.16f;
     [SerializeField, Range(0.05f, 0.95f)] private float dogTopSurfaceNormalMin = 0.12f;

@@ -214,6 +214,8 @@ public class PlayerHUDController : MonoBehaviour
         if (!enableLowHealthScreenFx)
             return;
 
+        EnsureGameplayCameraPostProcessing();
+
         Volume[] volumes = FindObjectsByType<Volume>(FindObjectsSortMode.None);
         for (int i = 0; i < volumes.Length; i++)
         {
@@ -245,6 +247,33 @@ public class PlayerHUDController : MonoBehaviour
         lowHealthVignette.intensity.overrideState = true;
         lowHealthVignette.smoothness.overrideState = true;
         lowHealthVignetteReady = true;
+    }
+
+    private static void EnsureGameplayCameraPostProcessing()
+    {
+        Camera targetCamera = Camera.main;
+        if (targetCamera == null)
+        {
+            Camera[] cameras = FindObjectsByType<Camera>(FindObjectsSortMode.None);
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                Camera candidate = cameras[i];
+                if (candidate == null || candidate.cameraType != CameraType.Game)
+                    continue;
+
+                targetCamera = candidate;
+                break;
+            }
+        }
+
+        if (targetCamera == null)
+            return;
+
+        if (!targetCamera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
+            return;
+
+        if (!cameraData.renderPostProcessing)
+            cameraData.renderPostProcessing = true;
     }
 
     private void UpdateLowHealthScreenFx()
