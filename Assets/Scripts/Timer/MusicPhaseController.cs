@@ -8,9 +8,13 @@ public class MusicPhaseController : MonoBehaviour
     public AudioSource musicA;
     public AudioSource musicB;
     public AudioSource musicC;
+    public AudioSource musicEnd;
 
     [Header("Fade Settings")]
     public float fadeDuration = 2.5f;
+
+    [Header("Final Track")]
+    [SerializeField, Min(1f)] private float finalTrackSwitchTimeSeconds = 900f;
 
     [Header("Low Health Music Pitch")]
     [SerializeField] private bool enableLowHealthPitch = true;
@@ -24,9 +28,12 @@ public class MusicPhaseController : MonoBehaviour
     private float basePitchA = 1f;
     private float basePitchB = 1f;
     private float basePitchC = 1f;
+    private float basePitchEnd = 1f;
     private float currentPitchMultiplier = 1f;
     private PlayerProgressionController player;
     private float nextPlayerResolveAt;
+    private bool finalTrackTriggered;
+    private float lastTimerElapsed = -1f;
 
     void Start()
     {
@@ -34,10 +41,12 @@ public class MusicPhaseController : MonoBehaviour
         basePitchA = ResolveBasePitch(musicA);
         basePitchB = ResolveBasePitch(musicB);
         basePitchC = ResolveBasePitch(musicC);
+        basePitchEnd = ResolveBasePitch(musicEnd);
 
         InitSource(musicA, 1f);
         InitSource(musicB, 0f);
         InitSource(musicC, 0f);
+        InitSource(musicEnd, 0f);
 
         current = musicA;
 
@@ -54,6 +63,7 @@ public class MusicPhaseController : MonoBehaviour
     void Update()
     {
         UpdateLowHealthPitch();
+        TrySwitchToFinalTrack();
     }
 
     void InitSource(AudioSource src, float phaseWeight)
@@ -76,11 +86,18 @@ public class MusicPhaseController : MonoBehaviour
             case GameTimerController.TimerPhase.PhaseC:
                 StartCrossfade(musicC);
                 break;
+
+            case GameTimerController.TimerPhase.End:
+                TriggerFinalTrack(forceSwitch: true);
+                break;
         }
     }
 
     void StartCrossfade(AudioSource next)
     {
+        if (next == null)
+            return;
+
         if (current == next)
             return;
 
@@ -138,6 +155,7 @@ public class MusicPhaseController : MonoBehaviour
         SetPhaseVolume(musicA, musicA == current ? 1f : 0f);
         SetPhaseVolume(musicB, musicB == current ? 1f : 0f);
         SetPhaseVolume(musicC, musicC == current ? 1f : 0f);
+        SetPhaseVolume(musicEnd, musicEnd == current ? 1f : 0f);
     }
 
     public void StopAllMusic()
@@ -148,11 +166,13 @@ public class MusicPhaseController : MonoBehaviour
         if (musicA) musicA.Stop();
         if (musicB) musicB.Stop();
         if (musicC) musicC.Stop();
+        if (musicEnd) musicEnd.Stop();
 
         currentPitchMultiplier = 1f;
         ApplyPitchToSource(musicA, basePitchA, currentPitchMultiplier);
         ApplyPitchToSource(musicB, basePitchB, currentPitchMultiplier);
         ApplyPitchToSource(musicC, basePitchC, currentPitchMultiplier);
+        ApplyPitchToSource(musicEnd, basePitchEnd, currentPitchMultiplier);
     }
 
     private void UpdateLowHealthPitch()
@@ -172,6 +192,34 @@ public class MusicPhaseController : MonoBehaviour
         ApplyPitchToSource(musicA, basePitchA, currentPitchMultiplier);
         ApplyPitchToSource(musicB, basePitchB, currentPitchMultiplier);
         ApplyPitchToSource(musicC, basePitchC, currentPitchMultiplier);
+        ApplyPitchToSource(musicEnd, basePitchEnd, currentPitchMultiplier);
+    }
+
+    private void TrySwitchToFinalTrack()
+    {
+        GameTimerController timer = GameTimerController.Instance;
+        if (timer == null)
+            return;
+
+        float elapsed = timer.elapsedTime;
+        if (lastTimerElapsed >= 0f && elapsed + 0.01f < lastTimerElapsed)
+            finalTrackTriggered = false;
+
+        lastTimerElapsed = elapsed;
+        if (elapsed < Mathf.Max(1f, finalTrackSwitchTimeSeconds))
+            return;
+
+        TriggerFinalTrack(forceSwitch: false);
+    }
+
+    private void TriggerFinalTrack(bool forceSwitch)
+    {
+        if (finalTrackTriggered && !forceSwitch)
+            return;
+
+        finalTrackTriggered = true;
+        AudioSource finalTrack = musicEnd != null ? musicEnd : musicC;
+        StartCrossfade(finalTrack);
     }
 
     private float GetLowHealthPitchMultiplier()
