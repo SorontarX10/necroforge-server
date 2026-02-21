@@ -35,6 +35,11 @@ public class PlayerHUDController : MonoBehaviour
     [SerializeField, Min(0.1f)] private float lowHealthFxBlendSpeed = 5f;
     [SerializeField, Min(0.1f)] private float lowHealthFxResolveInterval = 0.75f;
 
+    [Header("Low Health Edge Overlay")]
+    [SerializeField] private bool enableLowHealthEdgeOverlay = true;
+    [SerializeField, Range(0f, 1f)] private float lowHealthMaxEdgeOverlayAlpha = 0.42f;
+    [SerializeField, Min(64)] private int lowHealthOverlayTextureSize = 256;
+
     private PlayerProgressionController player;
     private BossEncounterController bossEncounter;
     private float nextBossReadabilityRefreshAt;
@@ -46,6 +51,9 @@ public class PlayerHUDController : MonoBehaviour
     private bool lowHealthVignetteReady;
     private float currentLowHealthFxWeight;
     private float nextLowHealthFxResolveAt;
+    private Image lowHealthEdgeOverlayImage;
+    private Texture2D lowHealthEdgeOverlayTexture;
+    private Sprite lowHealthEdgeOverlaySprite;
 
     void Start()
     {
@@ -62,7 +70,9 @@ public class PlayerHUDController : MonoBehaviour
 
         EnsureOverhealFillReference();
         ConfigureOverhealFill(healthOverhealFill);
+        EnsureOverhealFillRenderOrder();
         InitializeLowHealthVignette();
+        EnsureLowHealthEdgeOverlay();
 
         Debug.Log("[HUD] Player hooked");
     }
@@ -80,6 +90,8 @@ public class PlayerHUDController : MonoBehaviour
 
     void UpdateBars()
     {
+        EnsureOverhealFillRenderOrder();
+
         float maxHealth = Mathf.Max(1f, player.MaxHealth);
         float currentHealth = Mathf.Clamp(player.CurrentHealth, 0f, maxHealth);
         float barrier = Mathf.Max(0f, player.CurrentBarrier);
@@ -209,6 +221,21 @@ public class PlayerHUDController : MonoBehaviour
         fill.fillAmount = 0f;
     }
 
+    private void EnsureOverhealFillRenderOrder()
+    {
+        if (healthFill == null || healthOverhealFill == null)
+            return;
+
+        RectTransform baseFill = healthFill.rectTransform;
+        RectTransform overhealFill = healthOverhealFill.rectTransform;
+        if (baseFill == null || overhealFill == null || baseFill.parent != overhealFill.parent)
+            return;
+
+        int desiredIndex = Mathf.Min(baseFill.GetSiblingIndex() + 1, baseFill.parent.childCount - 1);
+        if (overhealFill.GetSiblingIndex() != desiredIndex)
+            overhealFill.SetSiblingIndex(desiredIndex);
+    }
+
     private void InitializeLowHealthVignette()
     {
         if (!enableLowHealthScreenFx)
@@ -276,6 +303,84 @@ public class PlayerHUDController : MonoBehaviour
             cameraData.renderPostProcessing = true;
     }
 
+    private void EnsureLowHealthEdgeOverlay()
+    {
+        if (!enableLowHealthEdgeOverlay || lowHealthEdgeOverlayImage != null)
+            return;
+
+        Canvas targetCanvas = GetComponentInParent<Canvas>();
+        if (targetCanvas == null)
+            return;
+
+        RectTransform parent = targetCanvas.transform as RectTransform;
+        if (parent == null)
+            return;
+
+        GameObject overlayGo = new GameObject(
+            "LowHealthEdgeOverlay",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image)
+        );
+        RectTransform rt = overlayGo.GetComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Image overlay = overlayGo.GetComponent<Image>();
+        overlay.sprite = GetLowHealthEdgeOverlaySprite();
+        overlay.color = new Color(lowHealthVignetteColor.r, lowHealthVignetteColor.g, lowHealthVignetteColor.b, 0f);
+        overlay.raycastTarget = false;
+        overlay.enabled = false;
+        overlay.preserveAspect = false;
+
+        rt.SetAsLastSibling();
+        lowHealthEdgeOverlayImage = overlay;
+    }
+
+    private Sprite GetLowHealthEdgeOverlaySprite()
+    {
+        if (lowHealthEdgeOverlaySprite != null)
+            return lowHealthEdgeOverlaySprite;
+
+        int size = Mathf.Max(64, lowHealthOverlayTextureSize);
+        lowHealthEdgeOverlayTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "LowHealthEdgeOverlayTexture",
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+
+        Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float radius = size * 0.5f;
+        Color32[] pixels = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float nx = (x - center.x) / Mathf.Max(1f, radius);
+                float ny = (y - center.y) / Mathf.Max(1f, radius);
+                float distance01 = Mathf.Clamp01(Mathf.Sqrt(nx * nx + ny * ny));
+                float edge = Mathf.InverseLerp(0.58f, 0.98f, distance01);
+                edge = edge * edge;
+                byte a = (byte)Mathf.RoundToInt(Mathf.Clamp01(edge) * 255f);
+                pixels[y * size + x] = new Color32(255, 255, 255, a);
+            }
+        }
+
+        lowHealthEdgeOverlayTexture.SetPixels32(pixels);
+        lowHealthEdgeOverlayTexture.Apply(false, false);
+        lowHealthEdgeOverlaySprite = Sprite.Create(
+            lowHealthEdgeOverlayTexture,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            size
+        );
+        return lowHealthEdgeOverlaySprite;
+    }
+
     private void UpdateLowHealthScreenFx()
     {
         if (!enableLowHealthScreenFx || player == null)
@@ -289,9 +394,6 @@ public class PlayerHUDController : MonoBehaviour
                 InitializeLowHealthVignette();
             }
         }
-
-        if (!lowHealthVignetteReady || lowHealthVignette == null)
-            return;
 
         float maxHealth = Mathf.Max(1f, player.MaxHealth);
         float health01 = Mathf.Clamp01(player.CurrentHealth / maxHealth);
@@ -308,12 +410,34 @@ public class PlayerHUDController : MonoBehaviour
         );
 
         float w = Mathf.Clamp01(currentLowHealthFxWeight);
-        Color color = Color.Lerp(baseVignetteColor, lowHealthVignetteColor, w);
-        float intensity = Mathf.Lerp(baseVignetteIntensity, Mathf.Max(baseVignetteIntensity, lowHealthMaxVignetteIntensity), w);
-        float smoothness = Mathf.Lerp(baseVignetteSmoothness, Mathf.Max(baseVignetteSmoothness, lowHealthMaxVignetteSmoothness), w);
+        if (lowHealthVignetteReady && lowHealthVignette != null)
+        {
+            Color color = Color.Lerp(baseVignetteColor, lowHealthVignetteColor, w);
+            float intensity = Mathf.Lerp(baseVignetteIntensity, Mathf.Max(baseVignetteIntensity, lowHealthMaxVignetteIntensity), w);
+            float smoothness = Mathf.Lerp(baseVignetteSmoothness, Mathf.Max(baseVignetteSmoothness, lowHealthMaxVignetteSmoothness), w);
 
-        lowHealthVignette.color.value = color;
-        lowHealthVignette.intensity.value = intensity;
-        lowHealthVignette.smoothness.value = smoothness;
+            lowHealthVignette.color.value = color;
+            lowHealthVignette.intensity.value = intensity;
+            lowHealthVignette.smoothness.value = smoothness;
+        }
+
+        EnsureLowHealthEdgeOverlay();
+        if (lowHealthEdgeOverlayImage != null)
+        {
+            float overlayAlpha = Mathf.Clamp01(w) * Mathf.Clamp01(lowHealthMaxEdgeOverlayAlpha);
+            Color overlayColor = lowHealthVignetteColor;
+            overlayColor.a = overlayAlpha;
+            lowHealthEdgeOverlayImage.color = overlayColor;
+            lowHealthEdgeOverlayImage.enabled = overlayAlpha > 0.001f;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (lowHealthEdgeOverlaySprite != null)
+            Destroy(lowHealthEdgeOverlaySprite);
+
+        if (lowHealthEdgeOverlayTexture != null)
+            Destroy(lowHealthEdgeOverlayTexture);
     }
 }

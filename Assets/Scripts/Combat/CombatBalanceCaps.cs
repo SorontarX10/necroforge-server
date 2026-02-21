@@ -9,7 +9,7 @@ namespace GrassSim.Combat
         public const float CritSoftCapStart = 0.85f;
         public const float CritSoftCapStrength = 0.35f;
         public const float CritHardCap = 0.90f;
-        public const float MaxCritMultiplier = 3f;
+        public const float MaxCritMultiplier = 4f;
 
         public const float LifeStealDiminishingThreshold = 0.08f;
         public const float LifeStealDiminishingSlope = 0.35f;

@@ -553,7 +553,7 @@ public class StatsPanelController : MonoBehaviour
 
         damageRow?.SetFloat(dmg);
         critChanceRow?.SetPercent(critChance);
-        critDamageRow?.SetPercent(Mathf.Max(0f, critMult - 1f));
+        critDamageRow?.SetPercentUnclamped(Mathf.Max(0f, critMult - 1f));
         lifeStealRow?.SetPercent(lifeSteal);
         speedRow?.SetFloat(speed);
 

@@ -145,17 +145,8 @@ public class UpgradeSelectionUI : MonoBehaviour
         resolvedPlayer.ApplyUpgrade(option);
 
         Hide();
-
-        if (ChoiceUiQueue.PendingCount > 0)
-        {
-            Time.timeScale = 0f;
-        }
-        else
-        {
-            cursor?.HideCursor();
-        }
-
         ChoiceUiQueue.CompleteCurrent("upgrade_selection_pick");
+        ApplyChoiceUiPauseState();
     }
 
     private void TryBanishOption(UpgradeOption option, PlayerProgressionController resolvedPlayer)
@@ -260,13 +251,9 @@ public class UpgradeSelectionUI : MonoBehaviour
         {
             activePlayer.CancelCurrentUpgradeChoice();
         }
-        else if (ChoiceUiQueue.PendingCount == 0)
-        {
-            Time.timeScale = 1f;
-            cursor?.HideCursor();
-        }
 
         ChoiceUiQueue.CompleteCurrent(reason);
+        ApplyChoiceUiPauseState();
     }
 
     private void SetCurrentOptions(List<UpgradeOption> options, PlayerProgressionController resolvedPlayer)
@@ -350,6 +337,32 @@ public class UpgradeSelectionUI : MonoBehaviour
         bool rootVisible = root != null && root.activeInHierarchy;
         bool canvasVisible = upgradeCanvas != null && upgradeCanvas.enabled;
         return rootVisible || canvasVisible;
+    }
+
+    private void ApplyChoiceUiPauseState()
+    {
+        if (ShouldKeepChoiceUiPaused())
+        {
+            Time.timeScale = 0f;
+            cursor?.ShowCursor();
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            return;
+        }
+
+        Time.timeScale = 1f;
+        cursor?.HideCursor();
+    }
+
+    private bool ShouldKeepChoiceUiPaused()
+    {
+        if (ChoiceUiQueue.IsShowing || ChoiceUiQueue.PendingCount > 0)
+            return true;
+
+        RelicSelectionUI relicUi = FindFirstObjectByType<RelicSelectionUI>();
+        return relicUi != null
+            && relicUi.root != null
+            && relicUi.root.activeInHierarchy;
     }
 
     private void EnsureActionButtons()

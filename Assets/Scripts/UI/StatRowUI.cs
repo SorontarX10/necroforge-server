@@ -151,6 +151,15 @@ public class StatRowUI : MonoBehaviour
             valueText.text = (v01 * 100f).ToString("F1") + "%";
     }
 
+    public void SetPercentUnclamped(float v01)
+    {
+        if (!TryAutoBind()) return;
+        EnsureVisible();
+        v01 = Mathf.Max(0f, v01);
+        if (valueText != null)
+            valueText.text = (v01 * 100f).ToString("F1") + "%";
+    }
+
     public void SetMultiplier(float mul)
     {
         if (!TryAutoBind()) return;

@@ -12,6 +12,10 @@ public class MainMenuController : MonoBehaviour
     public GameObject leaderboardRoot;
     public GameObject optionsRoot;
 
+    [Header("Version")]
+    [SerializeField] private TMP_Text versionText;
+    [SerializeField] private string versionPrefix = "v";
+
     [Header("Main Buttons")]
     public Button newGameButton;
 
@@ -28,6 +32,7 @@ public class MainMenuController : MonoBehaviour
         if (optionsRoot) optionsRoot.SetActive(false);
 
         ResetMainMenuCameraStack();
+        ApplyVersionLabel();
     }
 
     // ======================
@@ -119,5 +124,80 @@ public class MainMenuController : MonoBehaviour
     {
         optionsRoot.SetActive(false);
         mainMenuRoot.SetActive(true);
+    }
+
+    private void ApplyVersionLabel()
+    {
+        versionText = ResolveVersionText();
+        if (versionText == null)
+            return;
+
+        string prefix = string.IsNullOrWhiteSpace(versionPrefix) ? "v" : versionPrefix;
+        versionText.text = $"{prefix}{Application.version}";
+    }
+
+    private TMP_Text ResolveVersionText()
+    {
+        if (versionText != null)
+            return versionText;
+
+        if (mainMenuRoot != null)
+        {
+            TMP_Text[] texts = mainMenuRoot.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TMP_Text candidate = texts[i];
+                if (candidate == null)
+                    continue;
+
+                if (string.Equals(candidate.gameObject.name, "VersionText", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    versionText = candidate;
+                    return versionText;
+                }
+            }
+        }
+
+        return CreateVersionLabel();
+    }
+
+    private TMP_Text CreateVersionLabel()
+    {
+        Canvas parentCanvas = null;
+        if (mainMenuRoot != null)
+            parentCanvas = mainMenuRoot.GetComponentInParent<Canvas>();
+
+        if (parentCanvas == null)
+            parentCanvas = FindFirstObjectByType<Canvas>();
+
+        if (parentCanvas == null)
+            return null;
+
+        GameObject go = new GameObject(
+            "VersionText",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI)
+        );
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.SetParent(parentCanvas.transform, false);
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-24f, 16f);
+        rt.sizeDelta = new Vector2(260f, 40f);
+
+        TMP_Text label = go.GetComponent<TextMeshProUGUI>();
+        label.alignment = TextAlignmentOptions.BottomRight;
+        label.fontSize = 18f;
+        label.color = new Color(0.76f, 0.82f, 0.86f, 0.88f);
+        label.raycastTarget = false;
+        label.enableWordWrapping = false;
+        label.overflowMode = TextOverflowModes.Overflow;
+
+        if (TMP_Settings.defaultFontAsset != null)
+            label.font = TMP_Settings.defaultFontAsset;
+
+        return label;
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using GrassSim.Combat;
+using GrassSim.Core;
 using GrassSim.Enemies;
 using UnityEngine;
 
@@ -62,6 +63,9 @@ namespace GrassSim.AI
         [Header("Spawn Safety")]
         [Min(1f)] public float minSpawnDistanceFromPlayer = 12f;
         [Min(0f)] public float spawnSafetyRandomExtraDistance = 4f;
+        [Min(0f)] public float minSpawnDistanceFromOtherEnemies = 3f;
+        [Min(1)] public int spawnPositionMaxAttempts = 6;
+        [Min(0.1f)] public float playerResolveInterval = 0.3f;
 
         [HideInInspector] public Vector3 playerPosition;
 
@@ -75,7 +79,9 @@ namespace GrassSim.AI
         private float nextCleanupAt;
         private float nextPopulationSyncAt;
         private float nextRecycleSyncAt;
+        private float nextPlayerResolveAt;
         private ActivationRuntimeSnapshot lastRuntimeSnapshot;
+        private Transform playerTransform;
 
         public int ActiveCount => active.Count;
 
@@ -113,6 +119,8 @@ namespace GrassSim.AI
             EnemySimulationManager sim = EnemySimulationManager.Instance;
             if (sim == null)
                 return;
+
+            RefreshPlayerPosition();
 
             int currentMaxEnemies = DifficultyContext.ScaleSpawnCap(maxActiveEnemies);
             float refreshInterval = GetAdaptiveActivationInterval(currentMaxEnemies);
@@ -281,37 +289,96 @@ namespace GrassSim.AI
             LayerMask mask = groundMask.value != 0 ? groundMask : LayerMask.GetMask("Ground");
             float rayHeight = Mathf.Max(12f, spawnRayHeight);
             float rayDistance = rayHeight * 4f;
+            float minDistance = GetSpawnSafetyDistance(sim);
+            float minDistanceSqr = minDistance * minDistance;
+            float minEnemySpacing = Mathf.Max(0f, minSpawnDistanceFromOtherEnemies);
+            float minEnemySpacingSqr = minEnemySpacing * minEnemySpacing;
+            int attempts = Mathf.Max(1, spawnPositionMaxAttempts);
 
             Vector3 spawnPos = state.position + Vector3.up * spawnYOffset;
             if (TrySnapToGround(state.position, mask, rayHeight, rayDistance, out Vector3 snapped))
                 spawnPos = snapped;
 
-            float minDistance = GetSpawnSafetyDistance(sim);
-            float minDistanceSqr = minDistance * minDistance;
-            if (minDistance > 0.01f && SqrDistanceXZ(spawnPos, playerPosition) < minDistanceSqr)
+            if (IsSpawnPositionSafe(spawnPos, state.id, minDistanceSqr, minEnemySpacingSqr, sim))
+                return spawnPos;
+
+            float extraDistance = Mathf.Max(0f, spawnSafetyRandomExtraDistance);
+            for (int i = 0; i < attempts; i++)
             {
-                Vector3 away = spawnPos - playerPosition;
-                away.y = 0f;
-                if (away.sqrMagnitude < 0.0001f)
-                {
-                    Vector2 random = Random.insideUnitCircle;
-                    if (random.sqrMagnitude < 0.0001f)
-                        random = Vector2.right;
+                Vector2 random = Random.insideUnitCircle;
+                if (random.sqrMagnitude < 0.0001f)
+                    random = Vector2.right;
 
-                    away = new Vector3(random.x, 0f, random.y);
-                }
-
-                float extraDistance = Mathf.Max(0f, spawnSafetyRandomExtraDistance);
+                Vector3 away = new Vector3(random.x, 0f, random.y).normalized;
                 float distance = minDistance + (extraDistance > 0f ? Random.Range(0f, extraDistance) : 0f);
-                Vector3 candidate = playerPosition + away.normalized * distance;
+                Vector3 candidate = playerPosition + away * distance;
 
                 if (TrySnapToGround(candidate, mask, rayHeight, rayDistance, out snapped))
                     spawnPos = snapped;
                 else
                     spawnPos = candidate + Vector3.up * spawnYOffset;
+
+                if (IsSpawnPositionSafe(spawnPos, state.id, minDistanceSqr, minEnemySpacingSqr, sim))
+                    return spawnPos;
             }
 
+            Vector3 fallbackAway = spawnPos - playerPosition;
+            fallbackAway.y = 0f;
+            if (fallbackAway.sqrMagnitude < 0.0001f)
+                fallbackAway = Vector3.right;
+
+            Vector3 fallback = playerPosition + fallbackAway.normalized * minDistance;
+            if (TrySnapToGround(fallback, mask, rayHeight, rayDistance, out snapped))
+                return snapped;
+
+            spawnPos = fallback + Vector3.up * spawnYOffset;
             return spawnPos;
+        }
+
+        private bool IsSpawnPositionSafe(
+            Vector3 candidate,
+            int simId,
+            float minDistanceFromPlayerSqr,
+            float minDistanceFromEnemiesSqr,
+            EnemySimulationManager sim
+        )
+        {
+            if (minDistanceFromPlayerSqr > 0.0001f && SqrDistanceXZ(candidate, playerPosition) < minDistanceFromPlayerSqr)
+                return false;
+
+            if (minDistanceFromEnemiesSqr <= 0.0001f)
+                return true;
+
+            foreach (KeyValuePair<int, GameObject> kv in active)
+            {
+                if (kv.Key == simId)
+                    continue;
+
+                GameObject go = kv.Value;
+                if (go == null)
+                    continue;
+
+                if (SqrDistanceXZ(go.transform.position, candidate) < minDistanceFromEnemiesSqr)
+                    return false;
+            }
+
+            if (sim == null)
+                return true;
+
+            foreach (EnemySimState state in sim.GetAll())
+            {
+                if (state == null || state.id == simId)
+                    continue;
+
+                Vector3 position = state.position;
+                if (active.TryGetValue(state.id, out GameObject go) && go != null)
+                    position = go.transform.position;
+
+                if (SqrDistanceXZ(position, candidate) < minDistanceFromEnemiesSqr)
+                    return false;
+            }
+
+            return true;
         }
 
         private float GetSpawnSafetyDistance(EnemySimulationManager sim)
@@ -447,6 +514,25 @@ namespace GrassSim.AI
             float overload = (scaledActiveCap - maxActiveEnemies) / (float)maxActiveEnemies;
             float t = Mathf.Clamp01(overload);
             return baseInterval * Mathf.Lerp(1f, 1.35f, t);
+        }
+
+        private void RefreshPlayerPosition()
+        {
+            if (playerTransform == null || Time.unscaledTime >= nextPlayerResolveAt)
+            {
+                playerTransform = PlayerLocator.GetTransform();
+                if (playerTransform == null)
+                {
+                    GameObject playerGo = GameObject.FindWithTag("Player");
+                    if (playerGo != null)
+                        playerTransform = playerGo.transform;
+                }
+
+                nextPlayerResolveAt = Time.unscaledTime + Mathf.Max(0.1f, playerResolveInterval);
+            }
+
+            if (playerTransform != null)
+                playerPosition = playerTransform.position;
         }
 
         private System.Collections.IEnumerator PrewarmEnemyPoolsAsync()

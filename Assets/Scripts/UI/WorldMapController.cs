@@ -51,7 +51,7 @@ public class WorldMapController : MonoBehaviour
 
     [Header("Minimap")]
     [SerializeField] private bool showMinimap = true;
-    [SerializeField, Min(96f)] private float minimapSize = 480f;
+    [SerializeField, Min(96f)] private float minimapSize = 320f;
     [SerializeField, Min(0f)] private float minimapPadding = 24f;
     [SerializeField, Min(0f)] private float minimapInnerPadding = 8f;
     [SerializeField, Range(0.02f, 1f)] private float minimapAreaCoverage = 0.2f;
@@ -78,6 +78,8 @@ public class WorldMapController : MonoBehaviour
 
     private Texture2D mapTexture;
     private Texture2D fogTexture;
+    private Texture2D markerCircleTexture;
+    private Sprite markerCircleSprite;
     private Color32[] fogPixels;
 
     private bool initialized;
@@ -483,10 +485,54 @@ public class WorldMapController : MonoBehaviour
         rect.sizeDelta = new Vector2(size, size);
 
         var image = go.GetComponent<Image>();
+        image.sprite = GetMarkerCircleSprite();
+        image.preserveAspect = true;
         image.color = tint;
         image.raycastTarget = false;
 
         return rect;
+    }
+
+    private Sprite GetMarkerCircleSprite()
+    {
+        if (markerCircleSprite != null)
+            return markerCircleSprite;
+
+        const int textureSize = 64;
+        markerCircleTexture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false)
+        {
+            name = "MapMarkerCircleTexture",
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+
+        float radius = textureSize * 0.5f - 1f;
+        float feather = 1.5f;
+        Vector2 center = new Vector2((textureSize - 1) * 0.5f, (textureSize - 1) * 0.5f);
+        Color32[] pixels = new Color32[textureSize * textureSize];
+
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                float dist = Vector2.Distance(new Vector2(x, y), center);
+                float alpha = Mathf.Clamp01((radius - dist) / Mathf.Max(0.01f, feather));
+                byte a = (byte)Mathf.RoundToInt(alpha * 255f);
+                pixels[y * textureSize + x] = new Color32(255, 255, 255, a);
+            }
+        }
+
+        markerCircleTexture.SetPixels32(pixels);
+        markerCircleTexture.Apply(false, false);
+
+        markerCircleSprite = Sprite.Create(
+            markerCircleTexture,
+            new Rect(0f, 0f, textureSize, textureSize),
+            new Vector2(0.5f, 0.5f),
+            textureSize
+        );
+        markerCircleSprite.name = "MapMarkerCircleSprite";
+        return markerCircleSprite;
     }
 
     private void UpdateCollectibleMarkerPositions()
@@ -924,6 +970,8 @@ public class WorldMapController : MonoBehaviour
         playerMarker.anchoredPosition = Vector2.zero;
 
         var markerImage = markerGo.GetComponent<Image>();
+        markerImage.sprite = GetMarkerCircleSprite();
+        markerImage.preserveAspect = true;
         markerImage.color = markerColor;
         markerImage.raycastTarget = false;
 
@@ -1029,6 +1077,8 @@ public class WorldMapController : MonoBehaviour
         minimapPlayerMarker.anchoredPosition = Vector2.zero;
 
         Image markerImage = markerGo.GetComponent<Image>();
+        markerImage.sprite = GetMarkerCircleSprite();
+        markerImage.preserveAspect = true;
         markerImage.color = markerColor;
         markerImage.raycastTarget = false;
 
@@ -1284,5 +1334,9 @@ public class WorldMapController : MonoBehaviour
             Destroy(mapTexture);
         if (fogTexture != null)
             Destroy(fogTexture);
+        if (markerCircleSprite != null)
+            Destroy(markerCircleSprite);
+        if (markerCircleTexture != null)
+            Destroy(markerCircleTexture);
     }
 }
