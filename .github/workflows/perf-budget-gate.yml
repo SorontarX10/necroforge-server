@@ -8,7 +8,17 @@ on:
       - master
 
 jobs:
+  perf-budget-gate-missing-config:
+    if: ${{ secrets.UNITY_EDITOR_PATH == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Missing UNITY_EDITOR_PATH configuration
+        run: |
+          echo "::notice::Skipping Unity profiler export because UNITY_EDITOR_PATH secret is not configured."
+          echo "::notice::Set UNITY_EDITOR_PATH to a full Unity.exe path on the runner to enable Perf Budget Gate."
+
   build-and-export-profiler-metrics:
+    if: ${{ secrets.UNITY_EDITOR_PATH != '' }}
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -51,6 +61,7 @@ jobs:
             results/perf/unity-profiler-export.log
 
   perf-budget-gate:
+    if: ${{ needs.build-and-export-profiler-metrics.result == 'success' }}
     needs: build-and-export-profiler-metrics
     runs-on: ubuntu-latest
     steps:

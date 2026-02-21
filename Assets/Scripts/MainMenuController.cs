@@ -192,7 +192,7 @@ public class MainMenuController : MonoBehaviour
         label.fontSize = 18f;
         label.color = new Color(0.76f, 0.82f, 0.86f, 0.88f);
         label.raycastTarget = false;
-        label.enableWordWrapping = false;
+        label.textWrappingMode = TextWrappingModes.NoWrap;
         label.overflowMode = TextOverflowModes.Overflow;
 
         if (TMP_Settings.defaultFontAsset != null)
