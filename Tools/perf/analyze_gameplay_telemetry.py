@@ -53,6 +53,20 @@ def as_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def as_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return default
+
+
 def load_events(pattern: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for path in sorted(glob.glob(pattern)):
@@ -104,16 +118,163 @@ def find_first_event(run_events: list[dict[str, Any]], event_type: str) -> dict[
     return None
 
 
+def has_non_empty_mapping(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return len(payload) > 0
+
+
+def has_meaningful_counters(payload: Any) -> bool:
+    if not isinstance(payload, dict) or len(payload) == 0:
+        return False
+
+    for value in payload.values():
+        if isinstance(value, (int, float)) and float(value) != 0.0:
+            return True
+
+    return False
+
+
+def has_non_empty_list(payload: Any) -> bool:
+    return isinstance(payload, list) and len(payload) > 0
+
+
+def is_valid_player(player: Any) -> bool:
+    if not isinstance(player, dict):
+        return False
+    max_health = as_float(player.get("max_health"), 0.0)
+    level = as_int(player.get("level"), -1)
+    return max_health > 0.0 and level >= 0
+
+
+def is_valid_world(world: Any) -> bool:
+    if not isinstance(world, dict):
+        return False
+    return as_int(world.get("difficulty"), 0) > 0
+
+
+def is_valid_difficulty(difficulty: Any) -> bool:
+    return isinstance(difficulty, dict) and len(difficulty) > 0
+
+
+def is_valid_enemy_pressure(enemy_pressure: Any) -> bool:
+    return isinstance(enemy_pressure, dict) and len(enemy_pressure) > 0
+
+
+def is_valid_combat_context(context: Any) -> bool:
+    if not isinstance(context, dict):
+        return False
+    return as_float(context.get("player_max_health"), 0.0) > 0.0
+
+
+def get_integrity_flag(
+    event: dict[str, Any], flag_suffix: str, payload_key: str, fallback_validator
+) -> bool:
+    flag_name = f"has_{flag_suffix}"
+    if flag_name in event:
+        return as_bool(event.get(flag_name), False)
+    return bool(fallback_validator(event.get(payload_key)))
+
+
+def is_event_reliable(event: dict[str, Any]) -> bool:
+    if not event:
+        return False
+
+    integrity_state = str(event.get("integrity_state") or "").strip().lower()
+    if integrity_state == "missing":
+        return False
+
+    has_player = get_integrity_flag(event, "player_snapshot", "player", is_valid_player)
+    has_world = get_integrity_flag(event, "world_snapshot", "world", is_valid_world)
+    has_difficulty = get_integrity_flag(event, "difficulty_snapshot", "difficulty", is_valid_difficulty)
+    has_enemy_pressure = get_integrity_flag(
+        event, "enemy_pressure_snapshot", "enemy_pressure", is_valid_enemy_pressure
+    )
+    has_combat = get_integrity_flag(event, "combat_context", "combat_context", is_valid_combat_context)
+
+    valid_run_time = as_float(event.get("run_time_s"), 0.0) > 0.0
+    has_context = has_player or has_world or has_difficulty or has_enemy_pressure or has_combat
+    if valid_run_time and has_context:
+        return True
+
+    if has_context and event.get("event_type") == "periodic_snapshot":
+        return True
+
+    counters = event.get("counters")
+    if has_meaningful_counters(counters) and valid_run_time:
+        return True
+
+    return False
+
+
+def pick_latest_valid_payload(
+    run_events: list[dict[str, Any]], key: str, validator, fallback: Any
+) -> Any:
+    if validator(fallback):
+        return fallback
+
+    for event in reversed(run_events):
+        payload = event.get(key)
+        if validator(payload):
+            return payload
+    return {}
+
+
+def pick_latest_non_empty_list(
+    run_events: list[dict[str, Any]], key: str, fallback: Any
+) -> list[dict[str, Any]]:
+    if has_non_empty_list(fallback):
+        return fallback
+
+    for event in reversed(run_events):
+        payload = event.get(key)
+        if has_non_empty_list(payload):
+            return payload
+    return []
+
+
+def select_terminal_event(run_events: list[dict[str, Any]]) -> tuple[dict[str, Any], str]:
+    if not run_events:
+        return {}, "none"
+
+    run_ended_events = [e for e in run_events if e.get("event_type") == "run_ended"]
+    for event in reversed(run_ended_events):
+        if is_event_reliable(event):
+            return event, "run_ended"
+
+    periodic_events = [e for e in run_events if e.get("event_type") == "periodic_snapshot"]
+    for event in reversed(periodic_events):
+        if is_event_reliable(event):
+            return event, "periodic_snapshot_fallback"
+
+    for event in reversed(run_events):
+        if is_event_reliable(event):
+            return event, "reliable_fallback"
+
+    if run_ended_events:
+        return run_ended_events[-1], "run_ended_unreliable"
+    if periodic_events:
+        return periodic_events[-1], "periodic_snapshot_unreliable"
+    return run_events[-1], "last_event_unreliable"
+
+
 def summarize_run(run_id: str, run_events: list[dict[str, Any]]) -> dict[str, Any]:
     run_started = find_first_event(run_events, "run_started")
     run_ended = find_last_event(run_events, "run_ended")
-    latest_snapshot = find_last_event(run_events, "periodic_snapshot")
+    terminal_event, terminal_source = select_terminal_event(run_events)
 
-    terminal_event = run_ended or latest_snapshot or (run_events[-1] if run_events else {})
-    counters = terminal_event.get("counters") or {}
-    player = terminal_event.get("player") or {}
-    world = terminal_event.get("world") or {}
-    enemy_summary = terminal_event.get("enemy_hit_summary") or []
+    counters = pick_latest_valid_payload(
+        run_events, "counters", has_meaningful_counters, terminal_event.get("counters") or {}
+    )
+    player = pick_latest_valid_payload(
+        run_events, "player", is_valid_player, terminal_event.get("player") or {}
+    )
+    world = pick_latest_valid_payload(
+        run_events, "world", is_valid_world, terminal_event.get("world") or {}
+    )
+    enemy_summary = pick_latest_non_empty_list(
+        run_events, "enemy_hit_summary", terminal_event.get("enemy_hit_summary") or []
+    )
 
     lifesteal_events = [e for e in run_events if e.get("event_type") == "lifesteal_applied"]
     incoming_events = [e for e in run_events if e.get("event_type") == "incoming_damage"]
@@ -154,11 +315,18 @@ def summarize_run(run_id: str, run_events: list[dict[str, Any]]) -> dict[str, An
             top_enemy_type = str(item.get("enemy_type") or "")
             top_enemy_p90 = as_float(item.get("p90_hits_per_kill"), 0.0)
 
-    run_duration = as_float(terminal_event.get("run_time_s"), 0.0)
+    run_duration = max((as_float(e.get("run_time_s"), 0.0) for e in run_events), default=0.0)
+    terminal_integrity = str(terminal_event.get("integrity_state") or "")
+    terminal_event_type = str(terminal_event.get("event_type") or "")
+    terminal_run_time = as_float(terminal_event.get("run_time_s"), 0.0)
     summary = {
         "run_id": run_id,
         "source_file": terminal_event.get("_source_file", ""),
         "schema_version": as_int(terminal_event.get("schema_version"), 0),
+        "terminal_event_type": terminal_event_type,
+        "terminal_source": terminal_source,
+        "terminal_integrity": terminal_integrity,
+        "terminal_run_time_s": round(terminal_run_time, 3),
         "utc_started": (run_started or {}).get("utc_timestamp", ""),
         "utc_ended": (run_ended or {}).get("utc_timestamp", ""),
         "end_reason": (run_ended or {}).get("reason", "incomplete"),

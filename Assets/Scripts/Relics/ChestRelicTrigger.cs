@@ -66,12 +66,57 @@ public class ChestRelicTrigger : MonoBehaviour
     {
         ResolvePlayer();
 
-        RelicLibrary.RollResult roll = relicLibrary.RollWithDiagnostics(relicChoices, currentPlayer);
+        PlayerProgressionController progression = currentPlayer != null
+            ? currentPlayer.Progression
+            : PlayerLocator.GetProgression();
+
+        System.Func<RelicDefinition, bool> banishFilter = relic =>
+            progression != null
+            && relic != null
+            && progression.IsRelicBanished(relic.id);
+
+        RelicLibrary.RollResult roll = relicLibrary.RollWithDiagnostics(relicChoices, currentPlayer, banishFilter);
         ReportRelicRollTelemetry(roll);
-        relicUI.Show(roll.offered);
+
+        RelicLibrary rerollLibrary = relicLibrary;
+        PlayerRelicController rerollPlayer = currentPlayer;
+        int rerollChoices = relicChoices;
+        relicUI.Show(
+            roll.offered,
+            () =>
+            {
+                PlayerProgressionController rerollProgression = rerollPlayer != null
+                    ? rerollPlayer.Progression
+                    : PlayerLocator.GetProgression();
+
+                System.Func<RelicDefinition, bool> rerollFilter = relic =>
+                    rerollProgression != null
+                    && relic != null
+                    && rerollProgression.IsRelicBanished(relic.id);
+
+                if (rerollLibrary == null)
+                    return new System.Collections.Generic.List<RelicDefinition>();
+
+                RelicLibrary.RollResult rerollResult = rerollLibrary.RollWithDiagnostics(
+                    rerollChoices,
+                    rerollPlayer,
+                    rerollFilter
+                );
+                return rerollResult != null ? rerollResult.offered : new System.Collections.Generic.List<RelicDefinition>();
+            }
+        );
 
         MapCollectibleRegistry.UnregisterChest(this);
-        Destroy(gameObject);
+        Destroy(GetChestRoot());
+    }
+
+    private GameObject GetChestRoot()
+    {
+        Transform root = transform.root;
+        if (root == null)
+            return gameObject;
+
+        return root.gameObject;
     }
 
     private void ReportRelicRollTelemetry(RelicLibrary.RollResult roll)

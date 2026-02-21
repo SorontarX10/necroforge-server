@@ -82,6 +82,8 @@ namespace GrassSim.Telemetry
             public readonly float rawDamage;
             public readonly float reduction;
             public readonly float damageAfterReduction;
+            public readonly float chainedHitReduction;
+            public readonly int chainedHitCount;
             public readonly bool dodged;
             public readonly bool blocked;
             public readonly float barrierBefore;
@@ -97,6 +99,8 @@ namespace GrassSim.Telemetry
                 float rawDamage,
                 float reduction,
                 float damageAfterReduction,
+                float chainedHitReduction,
+                int chainedHitCount,
                 bool dodged,
                 bool blocked,
                 float barrierBefore,
@@ -112,6 +116,8 @@ namespace GrassSim.Telemetry
                 this.rawDamage = rawDamage;
                 this.reduction = reduction;
                 this.damageAfterReduction = damageAfterReduction;
+                this.chainedHitReduction = chainedHitReduction;
+                this.chainedHitCount = chainedHitCount;
                 this.dodged = dodged;
                 this.blocked = blocked;
                 this.barrierBefore = barrierBefore;
@@ -121,6 +127,39 @@ namespace GrassSim.Telemetry
                 this.healthBefore = healthBefore;
                 this.healthAfter = healthAfter;
                 this.maxHealth = maxHealth;
+            }
+        }
+
+        public readonly struct RelicProcSample
+        {
+            public readonly float runTimeSeconds;
+            public readonly string relicId;
+            public readonly string displayName;
+            public readonly string rarity;
+            public readonly float damage;
+            public readonly bool causedKill;
+            public readonly int targetInstanceId;
+            public readonly string targetName;
+
+            public RelicProcSample(
+                float runTimeSeconds,
+                string relicId,
+                string displayName,
+                string rarity,
+                float damage,
+                bool causedKill,
+                int targetInstanceId,
+                string targetName
+            )
+            {
+                this.runTimeSeconds = runTimeSeconds;
+                this.relicId = relicId;
+                this.displayName = displayName;
+                this.rarity = rarity;
+                this.damage = damage;
+                this.causedKill = causedKill;
+                this.targetInstanceId = targetInstanceId;
+                this.targetName = targetName;
             }
         }
 
@@ -241,6 +280,7 @@ namespace GrassSim.Telemetry
         public static event Action<LifeStealAppliedSample> OnLifeStealApplied;
         public static event Action<ChoiceQueueSample> OnChoiceQueueChanged;
         public static event Action<RunExitSample> OnRunExitRequested;
+        public static event Action<RelicProcSample> OnRelicProc;
 
         public static void ReportIncomingDamage(IncomingDamageSample sample)
         {
@@ -270,6 +310,11 @@ namespace GrassSim.Telemetry
         public static void ReportRunExitRequested(RunExitSample sample)
         {
             OnRunExitRequested?.Invoke(sample);
+        }
+
+        public static void ReportRelicProc(RelicProcSample sample)
+        {
+            OnRelicProc?.Invoke(sample);
         }
     }
 }

@@ -51,7 +51,7 @@ public class WorldMapController : MonoBehaviour
 
     [Header("Minimap")]
     [SerializeField] private bool showMinimap = true;
-    [SerializeField, Min(96f)] private float minimapSize = 240f;
+    [SerializeField, Min(96f)] private float minimapSize = 480f;
     [SerializeField, Min(0f)] private float minimapPadding = 24f;
     [SerializeField, Min(0f)] private float minimapInnerPadding = 8f;
     [SerializeField, Range(0.1f, 1f)] private float minimapMarkerScaleFallback = 0.32f;

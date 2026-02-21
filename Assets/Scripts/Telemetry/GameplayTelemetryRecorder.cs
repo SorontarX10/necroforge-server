@@ -23,7 +23,7 @@ namespace GrassSim.Telemetry
         private const float FlushIntervalSeconds = 1f;
         private const int FlushLineThreshold = 24;
         private const float TargetTrackerMaxIdleSeconds = 45f;
-        private const int TelemetrySchemaVersion = 2;
+        private const int TelemetrySchemaVersion = 3;
         private const float WarningLowHealthThreshold = 0.35f;
         private const float CriticalLowHealthThreshold = 0.2f;
         private const bool MirrorToProjectResultsInEditor = true;
@@ -46,6 +46,12 @@ namespace GrassSim.Telemetry
             public float run_time_s;
             public float realtime_since_startup_s;
             public string reason;
+            public bool has_player_snapshot;
+            public bool has_world_snapshot;
+            public bool has_difficulty_snapshot;
+            public bool has_enemy_pressure_snapshot;
+            public bool has_combat_context;
+            public string integrity_state;
             public PlayerSnapshot player;
             public WorldSnapshot world;
             public DifficultySnapshot difficulty;
@@ -59,6 +65,7 @@ namespace GrassSim.Telemetry
             public MeleeHitData melee_hit;
             public MeleeKillData melee_kill;
             public IncomingDamageData incoming_damage;
+            public RelicProcData relic_proc;
             public LifeStealData lifesteal;
             public RelicRollData relic_roll;
             public EnemyLifecycleData enemy_lifecycle;
@@ -165,9 +172,13 @@ namespace GrassSim.Telemetry
             public float total_incoming_raw_damage;
             public float total_incoming_final_damage;
             public float total_incoming_barrier_absorbed;
+            public float total_incoming_chained_hit_reduction;
             public int relic_rolls;
             public int relic_roll_rejections;
             public int choice_queue_events;
+            public int relic_proc_events;
+            public int relic_proc_kills;
+            public float relic_proc_total_damage;
             public int lifesteal_events;
             public float lifesteal_raw_heal;
             public float lifesteal_per_hit_capped_heal;
@@ -223,6 +234,12 @@ namespace GrassSim.Telemetry
             public float sword_length_bonus;
             public float stamina_swing_override;
             public float exp_gain_multiplier;
+            public int proc_count;
+            public int proc_kills;
+            public float proc_total_damage;
+            public float proc_avg_damage;
+            public float proc_peak_damage;
+            public float proc_last_time_s;
         }
 
         [Serializable]
@@ -317,6 +334,8 @@ namespace GrassSim.Telemetry
             public float raw_damage;
             public float reduction;
             public float damage_after_reduction;
+            public float chained_hit_reduction;
+            public int chained_hit_count;
             public bool dodged;
             public bool blocked;
             public float barrier_before;
@@ -326,6 +345,18 @@ namespace GrassSim.Telemetry
             public float health_before;
             public float health_after;
             public float max_health;
+        }
+
+        [Serializable]
+        private sealed class RelicProcData
+        {
+            public string relic_id;
+            public string display_name;
+            public string rarity;
+            public float damage;
+            public bool caused_kill;
+            public int target_instance_id;
+            public string target_name;
         }
 
         [Serializable]
@@ -447,6 +478,15 @@ namespace GrassSim.Telemetry
             public readonly List<int> hitsToKillSamples = new(16);
         }
 
+        private sealed class RelicProcAggregate
+        {
+            public int procCount;
+            public int kills;
+            public float totalDamage;
+            public float peakDamage;
+            public float lastProcRunTime;
+        }
+
         private readonly struct EnemyRuntimeInfo
         {
             public readonly int instanceId;
@@ -502,6 +542,8 @@ namespace GrassSim.Telemetry
         private float nextResolveAt;
         private float nextSnapshotAt;
         private float nextFlushAt;
+        private float runStartedRealtime = -1f;
+        private float lastReliableRunTime;
         private float missingPlayerSince = -1f;
 
         private int upgradeRolls;
@@ -519,9 +561,13 @@ namespace GrassSim.Telemetry
         private float totalIncomingRawDamage;
         private float totalIncomingFinalDamage;
         private float totalIncomingBarrierAbsorbed;
+        private float totalIncomingChainedHitReduction;
         private int relicRolls;
         private int relicRollRejections;
         private int choiceQueueEvents;
+        private int relicProcEvents;
+        private int relicProcKills;
+        private float totalRelicProcDamage;
         private int lifeStealEvents;
         private float totalLifeStealRaw;
         private float totalLifeStealPerHitCapped;
@@ -537,9 +583,15 @@ namespace GrassSim.Telemetry
         private float lowHpWarningEnteredAt = -1f;
         private float lowHpCriticalEnteredAt = -1f;
         private string pendingExitReason;
+        private PlayerSnapshot lastValidPlayerSnapshot;
+        private WorldSnapshot lastValidWorldSnapshot;
+        private DifficultySnapshot lastValidDifficultySnapshot;
+        private EnemyPressureSnapshot lastValidEnemyPressureSnapshot;
+        private CombatContext lastValidCombatContext;
 
         private readonly Dictionary<int, TargetHitTracker> targetHitTrackers = new(256);
         private readonly Dictionary<string, EnemyHitAggregate> enemyHitAggregates = new(64);
+        private readonly Dictionary<string, RelicProcAggregate> relicProcAggregates = new(32);
         private readonly Dictionary<StatType, float> upgradeContributions = new(16);
         private readonly List<int> targetTrackerIdsToRemove = new(128);
         private readonly List<EnemyHitSummary> enemyHitSummaryBuffer = new(64);
@@ -749,16 +801,19 @@ namespace GrassSim.Telemetry
             ResetRunAccumulators();
             runActive = true;
             missingPlayerSince = -1f;
+            runStartedRealtime = Time.realtimeSinceStartup;
+            lastReliableRunTime = 0f;
             nextSnapshotAt = GetRunTimeSeconds() + SnapshotIntervalSeconds;
             nextFlushAt = Time.unscaledTime + FlushIntervalSeconds;
 
             UpdateSubscriptions();
 
             TelemetryRecord record = CreateRecord("run_started");
-            record.player = CollectPlayerSnapshot();
-            record.world = CollectWorldSnapshot();
-            record.difficulty = CollectDifficultySnapshot();
-            record.enemy_pressure = CollectEnemyPressureSnapshot();
+            record.player = CapturePlayerSnapshot(allowFallback: false);
+            record.world = CaptureWorldSnapshot(allowFallback: false);
+            record.difficulty = CaptureDifficultySnapshot(allowFallback: false);
+            record.enemy_pressure = CaptureEnemyPressureSnapshot(allowFallback: false);
+            record.combat_context = CollectCombatContext();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
@@ -774,14 +829,17 @@ namespace GrassSim.Telemetry
                 return;
             }
 
-            UpdateLowHealthState(GetRunTimeSeconds(), flushOnly: true);
+            float runTime = GetRunTimeSeconds();
+            UpdateLowHealthState(runTime, flushOnly: true);
 
             TelemetryRecord record = CreateRecord("run_ended");
+            record.run_time_s = runTime;
             record.reason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
-            record.player = CollectPlayerSnapshot();
-            record.world = CollectWorldSnapshot();
-            record.difficulty = CollectDifficultySnapshot();
-            record.enemy_pressure = CollectEnemyPressureSnapshot();
+            record.player = CapturePlayerSnapshot(allowFallback: true);
+            record.world = CaptureWorldSnapshot(allowFallback: true);
+            record.difficulty = CaptureDifficultySnapshot(allowFallback: true);
+            record.enemy_pressure = CaptureEnemyPressureSnapshot(allowFallback: true);
+            record.combat_context = CollectCombatContext();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
@@ -791,6 +849,7 @@ namespace GrassSim.Telemetry
             UnsubscribeAll();
             runActive = false;
             missingPlayerSince = -1f;
+            runStartedRealtime = -1f;
         }
 
         private void UpdateSubscriptions()
@@ -847,6 +906,7 @@ namespace GrassSim.Telemetry
                 GameplayTelemetryHub.OnLifeStealApplied += HandleLifeStealApplied;
                 GameplayTelemetryHub.OnChoiceQueueChanged += HandleChoiceQueueChanged;
                 GameplayTelemetryHub.OnRunExitRequested += HandleRunExitRequested;
+                GameplayTelemetryHub.OnRelicProc += HandleRelicProc;
                 subscribedToHub = true;
             }
         }
@@ -882,6 +942,7 @@ namespace GrassSim.Telemetry
                 GameplayTelemetryHub.OnLifeStealApplied -= HandleLifeStealApplied;
                 GameplayTelemetryHub.OnChoiceQueueChanged -= HandleChoiceQueueChanged;
                 GameplayTelemetryHub.OnRunExitRequested -= HandleRunExitRequested;
+                GameplayTelemetryHub.OnRelicProc -= HandleRelicProc;
                 subscribedToHub = false;
             }
         }
@@ -895,7 +956,7 @@ namespace GrassSim.Telemetry
 
             TelemetryRecord record = CreateRecord("upgrade_options_rolled");
             record.upgrade_options = ConvertUpgradeOptions(options);
-            record.player = CollectPlayerSnapshot();
+            record.player = CapturePlayerSnapshot();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
@@ -914,7 +975,7 @@ namespace GrassSim.Telemetry
 
             TelemetryRecord record = CreateRecord("upgrade_applied");
             record.upgrade_selected = ConvertUpgradeOption(option);
-            record.player = CollectPlayerSnapshot();
+            record.player = CapturePlayerSnapshot();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
@@ -937,7 +998,7 @@ namespace GrassSim.Telemetry
                 max_stacks = relics != null ? relics.GetEffectiveMaxStacks(relic) : Mathf.Max(1, relic.maxStacks),
                 stackable = relic.stackable
             };
-            record.player = CollectPlayerSnapshot();
+            record.player = CapturePlayerSnapshot();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
@@ -962,7 +1023,7 @@ namespace GrassSim.Telemetry
                 total_duration_s = Mathf.Max(0f, enhancer.TotalDuration),
                 strength_01 = Mathf.Clamp01(enhancer.GetStrength01())
             };
-            record.player = CollectPlayerSnapshot();
+            record.player = CapturePlayerSnapshot();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
@@ -1064,18 +1125,21 @@ namespace GrassSim.Telemetry
             totalIncomingRawDamage += Mathf.Max(0f, sample.rawDamage);
             totalIncomingFinalDamage += Mathf.Max(0f, sample.finalDamage);
             totalIncomingBarrierAbsorbed += Mathf.Max(0f, sample.barrierAbsorbed);
+            totalIncomingChainedHitReduction += Mathf.Max(0f, sample.chainedHitReduction);
             if (sample.dodged)
                 incomingDamageDodged++;
             if (sample.blocked)
                 incomingDamageBlocked++;
 
             TelemetryRecord record = CreateRecord("incoming_damage");
-            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
             record.incoming_damage = new IncomingDamageData
             {
                 raw_damage = sample.rawDamage,
                 reduction = sample.reduction,
                 damage_after_reduction = sample.damageAfterReduction,
+                chained_hit_reduction = sample.chainedHitReduction,
+                chained_hit_count = sample.chainedHitCount,
                 dodged = sample.dodged,
                 blocked = sample.blocked,
                 barrier_before = sample.barrierBefore,
@@ -1100,7 +1164,7 @@ namespace GrassSim.Telemetry
             relicRollRejections += Mathf.Max(0, rejectedCount);
 
             TelemetryRecord record = CreateRecord("relic_options_rolled");
-            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
             record.relic_roll = new RelicRollData
             {
                 source = string.IsNullOrWhiteSpace(sample.source) ? "unknown" : sample.source,
@@ -1117,7 +1181,7 @@ namespace GrassSim.Telemetry
                 return;
 
             TelemetryRecord record = CreateRecord("enemy_lifecycle");
-            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
             record.enemy_lifecycle = new EnemyLifecycleData
             {
                 lifecycle = string.IsNullOrWhiteSpace(sample.lifecycle) ? "unknown" : sample.lifecycle,
@@ -1138,7 +1202,7 @@ namespace GrassSim.Telemetry
             choiceQueueEvents++;
 
             TelemetryRecord record = CreateRecord("choice_queue_changed");
-            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
             record.choice_queue = new ChoiceQueueData
             {
                 source = string.IsNullOrWhiteSpace(sample.source) ? "unknown" : sample.source,
@@ -1159,7 +1223,7 @@ namespace GrassSim.Telemetry
             pendingExitReason = reason;
 
             TelemetryRecord record = CreateRecord("run_exit_requested");
-            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
             record.reason = reason;
             EnqueueRecord(record);
         }
@@ -1177,7 +1241,7 @@ namespace GrassSim.Telemetry
             totalLifeStealOverheal += Mathf.Max(0f, sample.overheal);
 
             TelemetryRecord record = CreateRecord("lifesteal_applied");
-            record.run_time_s = Mathf.Max(0f, sample.runTimeSeconds);
+            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
             record.lifesteal = new LifeStealData
             {
                 damage_dealt = sample.damageDealt,
@@ -1197,15 +1261,56 @@ namespace GrassSim.Telemetry
             EnqueueRecord(record);
         }
 
+        private void HandleRelicProc(GameplayTelemetryHub.RelicProcSample sample)
+        {
+            if (!runActive)
+                return;
+
+            string resolvedRelicId = ResolveRelicProcId(sample.relicId, sample.displayName);
+            float damage = Mathf.Max(0f, sample.damage);
+            bool causedKill = sample.causedKill;
+
+            relicProcEvents++;
+            totalRelicProcDamage += damage;
+            if (causedKill)
+                relicProcKills++;
+
+            float runTime = ResolveSampleRunTime(sample.runTimeSeconds);
+            RelicProcAggregate aggregate = GetOrCreateRelicProcAggregate(resolvedRelicId);
+            aggregate.procCount++;
+            aggregate.totalDamage += damage;
+            aggregate.peakDamage = Mathf.Max(aggregate.peakDamage, damage);
+            aggregate.lastProcRunTime = Mathf.Max(aggregate.lastProcRunTime, runTime);
+            if (causedKill)
+                aggregate.kills++;
+
+            TelemetryRecord record = CreateRecord("relic_proc");
+            record.run_time_s = runTime;
+            record.relic_proc = new RelicProcData
+            {
+                relic_id = resolvedRelicId,
+                display_name = string.IsNullOrWhiteSpace(sample.displayName) ? "Relic" : sample.displayName,
+                rarity = string.IsNullOrWhiteSpace(sample.rarity) ? "Common" : sample.rarity,
+                damage = damage,
+                caused_kill = causedKill,
+                target_instance_id = sample.targetInstanceId,
+                target_name = string.IsNullOrWhiteSpace(sample.targetName) ? "Unknown" : sample.targetName
+            };
+            record.combat_context = CollectCombatContext();
+            record.counters = CollectRunCounters();
+            EnqueueRecord(record);
+        }
+
         private void WritePeriodicSnapshot()
         {
             CleanupTargetHitTrackers(GetRunTimeSeconds());
 
             TelemetryRecord record = CreateRecord("periodic_snapshot");
-            record.player = CollectPlayerSnapshot();
-            record.world = CollectWorldSnapshot();
-            record.difficulty = CollectDifficultySnapshot();
-            record.enemy_pressure = CollectEnemyPressureSnapshot();
+            record.player = CapturePlayerSnapshot(allowFallback: false);
+            record.world = CaptureWorldSnapshot(allowFallback: false);
+            record.difficulty = CaptureDifficultySnapshot(allowFallback: false);
+            record.enemy_pressure = CaptureEnemyPressureSnapshot(allowFallback: false);
+            record.combat_context = CollectCombatContext();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
@@ -1235,6 +1340,9 @@ namespace GrassSim.Telemetry
             if (record == null || string.IsNullOrWhiteSpace(persistentLogPath))
                 return;
 
+            record.run_time_s = NormalizeRunTime(record.run_time_s);
+            PopulateIntegrityFlags(record);
+
             string json = JsonUtility.ToJson(record);
             if (string.IsNullOrWhiteSpace(json))
                 return;
@@ -1259,6 +1367,113 @@ namespace GrassSim.Telemetry
             AppendTextSafe(persistentLogPath, payload);
             if (!string.IsNullOrWhiteSpace(projectLogPath))
                 AppendTextSafe(projectLogPath, payload);
+        }
+
+        private float NormalizeRunTime(float candidate)
+        {
+            float clamped = Mathf.Max(0f, candidate);
+            if (clamped > 0f)
+                lastReliableRunTime = Mathf.Max(lastReliableRunTime, clamped);
+
+            if (clamped <= 0f && lastReliableRunTime > 0f)
+                clamped = lastReliableRunTime;
+
+            return clamped;
+        }
+
+        private float ResolveSampleRunTime(float sampleRunTime)
+        {
+            if (sampleRunTime > 0f)
+                return NormalizeRunTime(sampleRunTime);
+
+            return GetRunTimeSeconds();
+        }
+
+        private void PopulateIntegrityFlags(TelemetryRecord record)
+        {
+            record.has_player_snapshot = IsPlayerSnapshotValid(record.player);
+            record.has_world_snapshot = IsWorldSnapshotValid(record.world);
+            record.has_difficulty_snapshot = IsDifficultySnapshotValid(record.difficulty);
+            record.has_enemy_pressure_snapshot = IsEnemyPressureSnapshotValid(record.enemy_pressure);
+            record.has_combat_context = IsCombatContextValid(record.combat_context);
+
+            int validCount = 0;
+            if (record.has_player_snapshot)
+                validCount++;
+            if (record.has_world_snapshot)
+                validCount++;
+            if (record.has_difficulty_snapshot)
+                validCount++;
+            if (record.has_enemy_pressure_snapshot)
+                validCount++;
+            if (record.has_combat_context)
+                validCount++;
+
+            record.integrity_state = validCount switch
+            {
+                >= 5 => "complete",
+                >= 2 => "partial",
+                >= 1 => "minimal",
+                _ => "missing"
+            };
+        }
+
+        private PlayerSnapshot CapturePlayerSnapshot(bool allowFallback = true)
+        {
+            PlayerSnapshot snapshot = CollectPlayerSnapshot();
+            if (IsPlayerSnapshotValid(snapshot))
+            {
+                lastValidPlayerSnapshot = snapshot;
+                return snapshot;
+            }
+
+            return allowFallback ? lastValidPlayerSnapshot : snapshot;
+        }
+
+        private WorldSnapshot CaptureWorldSnapshot(bool allowFallback = true)
+        {
+            WorldSnapshot snapshot = CollectWorldSnapshot();
+            if (IsWorldSnapshotValid(snapshot))
+            {
+                bool useFallback = allowFallback
+                    && IsWorldSnapshotLowSignal(snapshot)
+                    && IsWorldSnapshotValid(lastValidWorldSnapshot)
+                    && lastReliableRunTime > 0f;
+                if (!useFallback)
+                    lastValidWorldSnapshot = snapshot;
+                return useFallback ? lastValidWorldSnapshot : snapshot;
+            }
+
+            return allowFallback ? lastValidWorldSnapshot : snapshot;
+        }
+
+        private DifficultySnapshot CaptureDifficultySnapshot(bool allowFallback = true)
+        {
+            DifficultySnapshot snapshot = CollectDifficultySnapshot();
+            if (IsDifficultySnapshotValid(snapshot))
+            {
+                lastValidDifficultySnapshot = snapshot;
+                return snapshot;
+            }
+
+            return allowFallback ? lastValidDifficultySnapshot : snapshot;
+        }
+
+        private EnemyPressureSnapshot CaptureEnemyPressureSnapshot(bool allowFallback = true)
+        {
+            EnemyPressureSnapshot snapshot = CollectEnemyPressureSnapshot();
+            if (IsEnemyPressureSnapshotValid(snapshot))
+            {
+                bool useFallback = allowFallback
+                    && IsEnemyPressureLowSignal(snapshot)
+                    && IsEnemyPressureSnapshotValid(lastValidEnemyPressureSnapshot)
+                    && lastReliableRunTime > 0f;
+                if (!useFallback)
+                    lastValidEnemyPressureSnapshot = snapshot;
+                return useFallback ? lastValidEnemyPressureSnapshot : snapshot;
+            }
+
+            return allowFallback ? lastValidEnemyPressureSnapshot : snapshot;
         }
 
         private PlayerSnapshot CollectPlayerSnapshot()
@@ -1496,6 +1711,10 @@ namespace GrassSim.Telemetry
                     ? expModifier.GetExpGainMultiplier(relics, stackCount)
                     : 1f;
 
+                RelicProcAggregate procAggregate = GetRelicProcAggregate(id);
+                int procCount = procAggregate != null ? procAggregate.procCount : 0;
+                float procTotalDamage = procAggregate != null ? procAggregate.totalDamage : 0f;
+
                 relicBuffer.Add(new RelicStackData
                 {
                     id = id,
@@ -1516,7 +1735,13 @@ namespace GrassSim.Telemetry
                     dodge_chance_bonus = dodgeChanceBonus,
                     sword_length_bonus = swordLengthBonus,
                     stamina_swing_override = staminaSwingOverride,
-                    exp_gain_multiplier = expMultiplier
+                    exp_gain_multiplier = expMultiplier,
+                    proc_count = procCount,
+                    proc_kills = procAggregate != null ? procAggregate.kills : 0,
+                    proc_total_damage = procTotalDamage,
+                    proc_avg_damage = procCount > 0 ? procTotalDamage / procCount : 0f,
+                    proc_peak_damage = procAggregate != null ? procAggregate.peakDamage : 0f,
+                    proc_last_time_s = procAggregate != null ? procAggregate.lastProcRunTime : 0f
                 });
             }
 
@@ -1712,9 +1937,13 @@ namespace GrassSim.Telemetry
                 total_incoming_raw_damage = totalIncomingRawDamage,
                 total_incoming_final_damage = totalIncomingFinalDamage,
                 total_incoming_barrier_absorbed = totalIncomingBarrierAbsorbed,
+                total_incoming_chained_hit_reduction = totalIncomingChainedHitReduction,
                 relic_rolls = relicRolls,
                 relic_roll_rejections = relicRollRejections,
                 choice_queue_events = choiceQueueEvents,
+                relic_proc_events = relicProcEvents,
+                relic_proc_kills = relicProcKills,
+                relic_proc_total_damage = totalRelicProcDamage,
                 lifesteal_events = lifeStealEvents,
                 lifesteal_raw_heal = totalLifeStealRaw,
                 lifesteal_per_hit_capped_heal = totalLifeStealPerHitCapped,
@@ -1789,14 +2018,14 @@ namespace GrassSim.Telemetry
         private CombatContext CollectCombatContext()
         {
             if (player == null)
-                return null;
+                return lastValidCombatContext;
 
-            WorldSnapshot worldSnapshot = CollectWorldSnapshot();
+            WorldSnapshot worldSnapshot = CaptureWorldSnapshot();
             int level = player.xp != null ? player.xp.level : 0;
             float maxHealth = Mathf.Max(1f, player.MaxHealth);
             RuntimeStats runtime = player.stats;
 
-            return new CombatContext
+            CombatContext context = new CombatContext
             {
                 player_level = level,
                 player_current_health = player.CurrentHealth,
@@ -1810,6 +2039,11 @@ namespace GrassSim.Telemetry
                 active_enemy_count = worldSnapshot != null ? worldSnapshot.active_enemy_count : 0,
                 simulated_enemy_count = worldSnapshot != null ? worldSnapshot.simulated_enemy_count : 0
             };
+
+            if (IsCombatContextValid(context))
+                lastValidCombatContext = context;
+
+            return context;
         }
 
         private EnhancerStatContribution[] BuildEnhancerContributions(ActiveEnhancer activeEnhancer)
@@ -2113,6 +2347,49 @@ namespace GrassSim.Telemetry
             return aggregate;
         }
 
+        private RelicProcAggregate GetOrCreateRelicProcAggregate(string relicId)
+        {
+            string key = NormalizeRelicTelemetryId(relicId);
+            if (!relicProcAggregates.TryGetValue(key, out RelicProcAggregate aggregate) || aggregate == null)
+            {
+                aggregate = new RelicProcAggregate();
+                relicProcAggregates[key] = aggregate;
+            }
+
+            return aggregate;
+        }
+
+        private RelicProcAggregate GetRelicProcAggregate(string relicId)
+        {
+            string key = NormalizeRelicTelemetryId(relicId);
+            if (!relicProcAggregates.TryGetValue(key, out RelicProcAggregate aggregate))
+                return null;
+
+            return aggregate;
+        }
+
+        private string ResolveRelicProcId(string relicId, string displayName)
+        {
+            if (!string.IsNullOrWhiteSpace(relicId))
+                return NormalizeRelicTelemetryId(relicId);
+
+            if (relics != null && !string.IsNullOrWhiteSpace(displayName) && relics.Relics != null)
+            {
+                foreach (KeyValuePair<string, RelicDefinition> kv in relics.Relics)
+                {
+                    RelicDefinition def = kv.Value;
+                    if (def == null)
+                        continue;
+
+                    string candidateName = string.IsNullOrWhiteSpace(def.displayName) ? def.name : def.displayName;
+                    if (string.Equals(candidateName, displayName, StringComparison.OrdinalIgnoreCase))
+                        return NormalizeRelicTelemetryId(kv.Key);
+                }
+            }
+
+            return NormalizeRelicTelemetryId(displayName);
+        }
+
         private static UpgradeOptionData[] ConvertUpgradeOptions(List<UpgradeOption> options)
         {
             if (options == null || options.Count == 0)
@@ -2234,6 +2511,67 @@ namespace GrassSim.Telemetry
             return string.IsNullOrWhiteSpace(normalized) ? "Unknown" : normalized;
         }
 
+        private static string NormalizeRelicTelemetryId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "unknown";
+
+            return value.Trim();
+        }
+
+        private static bool IsPlayerSnapshotValid(PlayerSnapshot snapshot)
+        {
+            return snapshot != null
+                && snapshot.level >= 0
+                && snapshot.max_health > 0f;
+        }
+
+        private static bool IsWorldSnapshotValid(WorldSnapshot snapshot)
+        {
+            return snapshot != null && snapshot.difficulty > 0;
+        }
+
+        private static bool IsDifficultySnapshotValid(DifficultySnapshot snapshot)
+        {
+            return snapshot != null;
+        }
+
+        private static bool IsEnemyPressureSnapshotValid(EnemyPressureSnapshot snapshot)
+        {
+            return snapshot != null;
+        }
+
+        private static bool IsCombatContextValid(CombatContext context)
+        {
+            return context != null && context.player_max_health > 0f;
+        }
+
+        private static bool IsWorldSnapshotLowSignal(WorldSnapshot snapshot)
+        {
+            if (snapshot == null)
+                return true;
+
+            return snapshot.enemies_spawned <= 0
+                && snapshot.enemies_killed <= 0
+                && snapshot.active_enemy_count <= 0
+                && snapshot.simulated_enemy_count <= 0
+                && snapshot.horde_agent_count <= 0
+                && snapshot.horde_zombie_count <= 0
+                && snapshot.horde_enemy_count <= 0;
+        }
+
+        private static bool IsEnemyPressureLowSignal(EnemyPressureSnapshot snapshot)
+        {
+            if (snapshot == null)
+                return true;
+
+            return snapshot.active_enemy_count <= 0
+                && snapshot.active_boss_count <= 0
+                && snapshot.total_enemy_max_health <= 0f
+                && snapshot.total_enemy_current_health <= 0f
+                && snapshot.max_threat_score <= 0f;
+        }
+
         private void InitializeLogPaths()
         {
             string fileName = $"gameplay_{runId}.jsonl";
@@ -2265,9 +2603,13 @@ namespace GrassSim.Telemetry
             totalIncomingRawDamage = 0f;
             totalIncomingFinalDamage = 0f;
             totalIncomingBarrierAbsorbed = 0f;
+            totalIncomingChainedHitReduction = 0f;
             relicRolls = 0;
             relicRollRejections = 0;
             choiceQueueEvents = 0;
+            relicProcEvents = 0;
+            relicProcKills = 0;
+            totalRelicProcDamage = 0f;
             lifeStealEvents = 0;
             totalLifeStealRaw = 0f;
             totalLifeStealPerHitCapped = 0f;
@@ -2283,9 +2625,17 @@ namespace GrassSim.Telemetry
             lowHpWarningEnteredAt = -1f;
             lowHpCriticalEnteredAt = -1f;
             pendingExitReason = null;
+            runStartedRealtime = -1f;
+            lastReliableRunTime = 0f;
+            lastValidPlayerSnapshot = null;
+            lastValidWorldSnapshot = null;
+            lastValidDifficultySnapshot = null;
+            lastValidEnemyPressureSnapshot = null;
+            lastValidCombatContext = null;
 
             targetHitTrackers.Clear();
             enemyHitAggregates.Clear();
+            relicProcAggregates.Clear();
             upgradeContributions.Clear();
             targetTrackerIdsToRemove.Clear();
             enemyHitSummaryBuffer.Clear();
@@ -2296,10 +2646,21 @@ namespace GrassSim.Telemetry
 
         private float GetRunTimeSeconds()
         {
-            if (timer != null)
-                return Mathf.Max(0f, timer.elapsedTime);
+            float runTime = -1f;
 
-            return 0f;
+            if (timer != null)
+                runTime = Mathf.Max(0f, timer.elapsedTime);
+            else if (runActive && runStartedRealtime >= 0f)
+                runTime = Mathf.Max(0f, Time.realtimeSinceStartup - runStartedRealtime);
+
+            if (runTime >= 0f)
+            {
+                if (runTime > 0f)
+                    lastReliableRunTime = Mathf.Max(lastReliableRunTime, runTime);
+                return runTime;
+            }
+
+            return Mathf.Max(0f, lastReliableRunTime);
         }
 
         private static void AppendTextSafe(string path, string payload)

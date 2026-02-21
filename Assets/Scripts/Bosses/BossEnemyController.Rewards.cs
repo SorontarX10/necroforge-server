@@ -27,12 +27,35 @@ public partial class BossEnemyController : MonoBehaviour
         if (relicSelectionUI == null || relicLibrary == null || relicLibrary.relics == null)
             return;
 
-        List<RelicDefinition> rolled = RollLegendaryOrMythic(rewardChoices);
+        PlayerRelicController rewardRelics = ResolveRewardRelics();
+        PlayerProgressionController progression = rewardRelics != null
+            ? rewardRelics.Progression
+            : PlayerLocator.GetProgression();
+
+        List<RelicDefinition> rolled = RollLegendaryOrMythicFromContext(
+            relicLibrary,
+            rewardRelics,
+            progression,
+            rewardChoices
+        );
         if (rolled.Count == 0)
             return;
 
         ReportBossRewardRollTelemetry(rolled);
-        relicSelectionUI.Show(rolled);
+
+        RelicLibrary rerollLibrary = relicLibrary;
+        PlayerRelicController rerollRelics = rewardRelics;
+        PlayerProgressionController rerollProgression = progression;
+        int rerollChoices = rewardChoices;
+        relicSelectionUI.Show(
+            rolled,
+            () => RollLegendaryOrMythicFromContext(
+                rerollLibrary,
+                rerollRelics,
+                rerollProgression,
+                rerollChoices
+            )
+        );
     }
 
     private void ResolveRelicLibraryFallback()
@@ -55,9 +78,31 @@ public partial class BossEnemyController : MonoBehaviour
 
     private List<RelicDefinition> RollLegendaryOrMythic(int count)
     {
-        List<RelicDefinition> pool = new();
-        var all = relicLibrary.relics;
         PlayerRelicController rewardRelics = ResolveRewardRelics();
+        PlayerProgressionController progression = rewardRelics != null
+            ? rewardRelics.Progression
+            : PlayerLocator.GetProgression();
+
+        return RollLegendaryOrMythicFromContext(
+            relicLibrary,
+            rewardRelics,
+            progression,
+            count
+        );
+    }
+
+    private static List<RelicDefinition> RollLegendaryOrMythicFromContext(
+        RelicLibrary library,
+        PlayerRelicController rewardRelics,
+        PlayerProgressionController progression,
+        int count
+    )
+    {
+        if (library == null || library.relics == null || count <= 0)
+            return new List<RelicDefinition>();
+
+        List<RelicDefinition> pool = new();
+        List<RelicDefinition> all = library.relics;
 
         for (int i = 0; i < all.Count; i++)
         {
@@ -66,6 +111,9 @@ public partial class BossEnemyController : MonoBehaviour
                 continue;
 
             if (relic.rarity != RelicRarity.Legendary && relic.rarity != RelicRarity.Mythic)
+                continue;
+
+            if (progression != null && progression.IsRelicBanished(relic.id))
                 continue;
 
             if (rewardRelics != null && !rewardRelics.CanAcceptRelic(relic))

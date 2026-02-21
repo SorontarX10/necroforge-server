@@ -59,6 +59,10 @@ namespace GrassSim.AI
         public float spawnRayHeight = 10f;
         public float spawnYOffset = 0.5f;
 
+        [Header("Spawn Safety")]
+        [Min(1f)] public float minSpawnDistanceFromPlayer = 12f;
+        [Min(0f)] public float spawnSafetyRandomExtraDistance = 4f;
+
         [HideInInspector] public Vector3 playerPosition;
 
         private readonly Dictionary<int, GameObject> active = new();
@@ -242,14 +246,17 @@ namespace GrassSim.AI
             if (type == null || type.prefab == null)
                 return;
 
-            Vector3 spawnPos = state.position + Vector3.up * spawnYOffset;
-
-            Ray ray = new Ray(state.position + Vector3.up * spawnRayHeight, Vector3.down);
-            if (Physics.Raycast(ray, out RaycastHit hit, spawnRayHeight + 1f, groundMask))
-                spawnPos = hit.point + Vector3.up * spawnYOffset;
+            Vector3 spawnPos = ResolveSpawnPosition(state, sim);
 
             GameObject go = SimplePool.Get(type.prefab);
             go.transform.SetPositionAndRotation(spawnPos, Quaternion.identity);
+
+            Rigidbody rb = go.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
 
             Combatant combatant = go.GetComponent<Combatant>();
             EnemyCombatant enemyCombatant = go.GetComponent<EnemyCombatant>();
@@ -264,7 +271,72 @@ namespace GrassSim.AI
                 Debug.LogWarning("[EnemyActivation] Enemy spawned WITHOUT Combatant init!", go);
             }
 
+            state.position = spawnPos;
+            state.anchor = spawnPos;
             active[state.id] = go;
+        }
+
+        private Vector3 ResolveSpawnPosition(EnemySimState state, EnemySimulationManager sim)
+        {
+            LayerMask mask = groundMask.value != 0 ? groundMask : LayerMask.GetMask("Ground");
+            float rayHeight = Mathf.Max(12f, spawnRayHeight);
+            float rayDistance = rayHeight * 4f;
+
+            Vector3 spawnPos = state.position + Vector3.up * spawnYOffset;
+            if (TrySnapToGround(state.position, mask, rayHeight, rayDistance, out Vector3 snapped))
+                spawnPos = snapped;
+
+            float minDistance = GetSpawnSafetyDistance(sim);
+            float minDistanceSqr = minDistance * minDistance;
+            if (minDistance > 0.01f && SqrDistanceXZ(spawnPos, playerPosition) < minDistanceSqr)
+            {
+                Vector3 away = spawnPos - playerPosition;
+                away.y = 0f;
+                if (away.sqrMagnitude < 0.0001f)
+                {
+                    Vector2 random = Random.insideUnitCircle;
+                    if (random.sqrMagnitude < 0.0001f)
+                        random = Vector2.right;
+
+                    away = new Vector3(random.x, 0f, random.y);
+                }
+
+                float extraDistance = Mathf.Max(0f, spawnSafetyRandomExtraDistance);
+                float distance = minDistance + (extraDistance > 0f ? Random.Range(0f, extraDistance) : 0f);
+                Vector3 candidate = playerPosition + away.normalized * distance;
+
+                if (TrySnapToGround(candidate, mask, rayHeight, rayDistance, out snapped))
+                    spawnPos = snapped;
+                else
+                    spawnPos = candidate + Vector3.up * spawnYOffset;
+            }
+
+            return spawnPos;
+        }
+
+        private float GetSpawnSafetyDistance(EnemySimulationManager sim)
+        {
+            float configuredMin = Mathf.Max(1f, minSpawnDistanceFromPlayer);
+            float resolved = configuredMin;
+            if (sim != null)
+                resolved = Mathf.Max(configuredMin, Mathf.Max(0f, sim.minSpawnDistanceFromPlayer));
+
+            float maxAllowed = Mathf.Max(1f, activeDistance - 1f);
+            return Mathf.Min(resolved, maxAllowed);
+        }
+
+        private bool TrySnapToGround(Vector3 worldPos, LayerMask mask, float rayHeight, float rayDistance, out Vector3 snapped)
+        {
+            float baseY = Mathf.Max(worldPos.y, playerPosition.y);
+            Vector3 rayStart = new Vector3(worldPos.x, baseY + rayHeight, worldPos.z);
+            if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, rayDistance, mask, QueryTriggerInteraction.Ignore))
+            {
+                snapped = hit.point + Vector3.up * spawnYOffset;
+                return true;
+            }
+
+            snapped = worldPos + Vector3.up * spawnYOffset;
+            return false;
         }
 
         private void DespawnGO(int id)

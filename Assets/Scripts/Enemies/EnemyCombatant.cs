@@ -24,6 +24,10 @@ namespace GrassSim.Enemies
 
         private static PlayerRelicController cachedPlayerRelics;
         private static int cachedPlayerId;
+        private static int deathAudioFrame = -1;
+        private static int deathAudioPlayedThisFrame;
+        private const int MaxDeathAudioPerFrame = 4;
+        private const float MaxDeathAudioDistance = 55f;
 
         private bool handledDeath;
         [System.NonSerialized] public float sharedMeleeHitAvailableAt = -999f;
@@ -129,6 +133,9 @@ namespace GrassSim.Enemies
 
         private void EnemyDiedAudioPlay() 
         {
+            if (!CanPlayDeathAudio())
+                return;
+
             AudioClip clip = null;
             
             int variant = Random.Range(0, 4);
@@ -148,7 +155,32 @@ namespace GrassSim.Enemies
                     break;
             }
 
-            AudioUtils.PlayClipAtPoint(clip, transform.position, 1f);
+            AudioUtils.PlayClipAtPoint(clip, transform.position, 0.85f);
+        }
+
+        private bool CanPlayDeathAudio()
+        {
+            int frame = Time.frameCount;
+            if (deathAudioFrame != frame)
+            {
+                deathAudioFrame = frame;
+                deathAudioPlayedThisFrame = 0;
+            }
+
+            if (deathAudioPlayedThisFrame >= MaxDeathAudioPerFrame)
+                return false;
+
+            Transform player = PlayerLocator.GetTransform();
+            if (player != null)
+            {
+                Vector3 delta = transform.position - player.position;
+                delta.y = 0f;
+                if (delta.sqrMagnitude > MaxDeathAudioDistance * MaxDeathAudioDistance)
+                    return false;
+            }
+
+            deathAudioPlayedThisFrame++;
+            return true;
         }
 
         private void ReportLifecycle(string lifecycle)

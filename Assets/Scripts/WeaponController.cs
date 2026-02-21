@@ -86,7 +86,10 @@ public class WeaponController : MonoBehaviour
     private float nextDiagTime;
     private WeaponEnhancerSystem enhancerSystem;
     private Vector3 weaponHitboxBaseLocalScale = Vector3.one;
+    private Vector3 weaponHitboxBaseLocalPosition = Vector3.zero;
     private int weaponLengthAxis = 2;
+    private bool hasHitboxLengthAnchor;
+    private float hitboxAnchorAxisValue;
     private int relicCacheFrame = -1;
     private float cachedRelicDamageMultiplier = 1f;
     private float cachedRelicCritChanceBonus;
@@ -115,7 +118,9 @@ public class WeaponController : MonoBehaviour
         if (weaponHitbox != null)
         {
             weaponHitboxBaseLocalScale = weaponHitbox.transform.localScale;
-            weaponLengthAxis = DominantAxis(weaponHitboxBaseLocalScale);
+            weaponHitboxBaseLocalPosition = weaponHitbox.transform.localPosition;
+            weaponLengthAxis = ResolveWeaponLengthAxis();
+            CacheHitboxLengthAnchor();
         }
 
         if (swingLoopSource != null)
@@ -351,6 +356,9 @@ public class WeaponController : MonoBehaviour
     private void UpdateSwingAudio()
     {
         if (swingLoopSource == null)
+            return;
+
+        if (!swingLoopSource.isActiveAndEnabled)
             return;
 
         attacking = combatInputSource != null && combatInputSource.IsAttacking();
@@ -622,6 +630,105 @@ public class WeaponController : MonoBehaviour
 
         if ((weaponHitbox.transform.localScale - targetScale).sqrMagnitude > 0.000001f)
             weaponHitbox.transform.localScale = targetScale;
+
+        ApplyHitboxLengthAnchorCompensation(lengthMul);
+    }
+
+    private int ResolveWeaponLengthAxis()
+    {
+        if (TryGetWeaponHitboxLocalBounds(out Bounds bounds))
+            return DominantAxis(bounds.size);
+
+        return DominantAxis(weaponHitboxBaseLocalScale);
+    }
+
+    private void CacheHitboxLengthAnchor()
+    {
+        hasHitboxLengthAnchor = false;
+        hitboxAnchorAxisValue = 0f;
+
+        if (weaponHitbox == null)
+            return;
+
+        if (!TryGetWeaponHitboxLocalBounds(out Bounds bounds))
+            return;
+
+        float axisScale = Mathf.Abs(GetAxis(weaponHitboxBaseLocalScale, weaponLengthAxis));
+        if (axisScale <= 0.00001f)
+            return;
+
+        float baseAxisCenter = GetAxis(weaponHitboxBaseLocalPosition, weaponLengthAxis);
+        float minAxis = GetAxis(bounds.min, weaponLengthAxis) * axisScale;
+        float maxAxis = GetAxis(bounds.max, weaponLengthAxis) * axisScale;
+        float minEndpoint = baseAxisCenter + minAxis;
+        float maxEndpoint = baseAxisCenter + maxAxis;
+
+        hitboxAnchorAxisValue = Mathf.Abs(minEndpoint) <= Mathf.Abs(maxEndpoint)
+            ? minAxis
+            : maxAxis;
+
+        hasHitboxLengthAnchor = true;
+    }
+
+    private void ApplyHitboxLengthAnchorCompensation(float lengthMul)
+    {
+        if (weaponHitbox == null)
+            return;
+
+        Vector3 targetLocalPosition = weaponHitboxBaseLocalPosition;
+        if (hasHitboxLengthAnchor)
+        {
+            float baseAxis = GetAxis(targetLocalPosition, weaponLengthAxis);
+            float anchorDelta = hitboxAnchorAxisValue - (hitboxAnchorAxisValue * lengthMul);
+            SetAxis(ref targetLocalPosition, weaponLengthAxis, baseAxis + anchorDelta);
+        }
+
+        if ((weaponHitbox.transform.localPosition - targetLocalPosition).sqrMagnitude > 0.000001f)
+            weaponHitbox.transform.localPosition = targetLocalPosition;
+    }
+
+    private bool TryGetWeaponHitboxLocalBounds(out Bounds bounds)
+    {
+        bounds = default;
+        if (weaponHitbox == null)
+            return false;
+
+        if (weaponHitbox is BoxCollider box)
+        {
+            bounds = new Bounds(box.center, box.size);
+            return true;
+        }
+
+        if (weaponHitbox is CapsuleCollider capsule)
+        {
+            Vector3 size = Vector3.one * (capsule.radius * 2f);
+            int axis = Mathf.Clamp(capsule.direction, 0, 2);
+            SetAxis(ref size, axis, Mathf.Max(size[axis], capsule.height));
+            bounds = new Bounds(capsule.center, size);
+            return true;
+        }
+
+        if (weaponHitbox is SphereCollider sphere)
+        {
+            float diameter = sphere.radius * 2f;
+            bounds = new Bounds(sphere.center, Vector3.one * diameter);
+            return true;
+        }
+
+        if (weaponHitbox is MeshCollider meshCollider && meshCollider.sharedMesh != null)
+        {
+            bounds = meshCollider.sharedMesh.bounds;
+            return true;
+        }
+
+        MeshFilter meshFilter = weaponHitbox.GetComponent<MeshFilter>();
+        if (meshFilter != null && meshFilter.sharedMesh != null)
+        {
+            bounds = meshFilter.sharedMesh.bounds;
+            return true;
+        }
+
+        return false;
     }
 
     private static int DominantAxis(Vector3 v)

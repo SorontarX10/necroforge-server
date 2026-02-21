@@ -3,6 +3,7 @@ using UnityEngine;
 public static class AudioUtils
 {
     private const int DefaultEmitterCount = 24;
+    private const int OneShotPriority = 220;
     private const string HostName = "AudioUtils_OneShotPool";
 
     private static GameObject host;
@@ -22,10 +23,13 @@ public static class AudioUtils
         AudioSource src = RentEmitter();
         if (src == null)
             return;
+        if (!src.isActiveAndEnabled)
+            return;
 
         src.transform.position = pos;
         src.pitch = 1f;
         src.volume = 1f;
+        src.priority = OneShotPriority;
         src.spatialBlend = 1f;
         src.minDistance = 1f;
         src.maxDistance = 45f;

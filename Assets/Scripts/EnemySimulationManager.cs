@@ -174,7 +174,8 @@ namespace GrassSim.AI
             {
                 float activationLimit = Mathf.Max(2f, EnemyActivationController.Instance.activeDistance - activationSafetyMargin);
                 float preferredMin = Mathf.Max(2f, activationLimit * Mathf.Clamp(minSpawnToActivationRatio, 0.35f, 1f));
-                minR = Mathf.Min(minR, preferredMin);
+                // Keep simulation candidates outside the near-player bubble.
+                minR = Mathf.Max(minR, preferredMin);
             }
 
             minR = Mathf.Max(1f, minR);

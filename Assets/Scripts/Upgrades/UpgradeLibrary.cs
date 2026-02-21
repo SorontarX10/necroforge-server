@@ -31,11 +31,28 @@ namespace GrassSim.Upgrades
 
         public List<UpgradeOption> RollOptions(int count, int seed)
         {
+            return RollOptions(count, seed, null);
+        }
+
+        public List<UpgradeOption> RollOptions(int count, int seed, Func<StatType, bool> isStatExcluded)
+        {
             if (entries == null || entries.Count == 0)
                 return new List<UpgradeOption>();
 
             System.Random rng = new(seed);
-            List<Entry> temp = new(entries);
+            List<Entry> temp = new(entries.Count);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                Entry entry = entries[i];
+                if (entry == null)
+                    continue;
+
+                if (isStatExcluded != null && isStatExcluded(entry.stat))
+                    continue;
+
+                temp.Add(entry);
+            }
+
             List<UpgradeOption> results = new(count);
 
             int difficulty = GetDifficulty();

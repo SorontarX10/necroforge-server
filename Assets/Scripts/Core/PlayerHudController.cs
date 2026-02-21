@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using GrassSim.Core;
 using System.Collections;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 public class PlayerHUDController : MonoBehaviour
 {
@@ -24,9 +26,26 @@ public class PlayerHUDController : MonoBehaviour
     [SerializeField] private TMP_Text bossReadabilityText;
     [SerializeField, Min(0.05f)] private float bossReadabilityRefreshInterval = 0.25f;
 
+    [Header("Low Health Screen FX")]
+    [SerializeField] private bool enableLowHealthScreenFx = true;
+    [SerializeField, Range(0.05f, 1f)] private float lowHealthFxThreshold = 0.5f;
+    [SerializeField] private Color lowHealthVignetteColor = new Color(0.85f, 0.08f, 0.08f, 1f);
+    [SerializeField, Range(0f, 1f)] private float lowHealthMaxVignetteIntensity = 0.38f;
+    [SerializeField, Range(0f, 1f)] private float lowHealthMaxVignetteSmoothness = 0.56f;
+    [SerializeField, Min(0.1f)] private float lowHealthFxBlendSpeed = 5f;
+    [SerializeField, Min(0.1f)] private float lowHealthFxResolveInterval = 0.75f;
+
     private PlayerProgressionController player;
     private BossEncounterController bossEncounter;
     private float nextBossReadabilityRefreshAt;
+    private Volume lowHealthVolume;
+    private Vignette lowHealthVignette;
+    private Color baseVignetteColor = Color.black;
+    private float baseVignetteIntensity;
+    private float baseVignetteSmoothness;
+    private bool lowHealthVignetteReady;
+    private float currentLowHealthFxWeight;
+    private float nextLowHealthFxResolveAt;
 
     void Start()
     {
@@ -43,6 +62,7 @@ public class PlayerHUDController : MonoBehaviour
 
         EnsureOverhealFillReference();
         ConfigureOverhealFill(healthOverhealFill);
+        InitializeLowHealthVignette();
 
         Debug.Log("[HUD] Player hooked");
     }
@@ -55,6 +75,7 @@ public class PlayerHUDController : MonoBehaviour
         UpdateBars();
         UpdateLevel();
         UpdateBossReadabilityDebug();
+        UpdateLowHealthScreenFx();
     }
 
     void UpdateBars()
@@ -186,5 +207,84 @@ public class PlayerHUDController : MonoBehaviour
         fill.raycastTarget = false;
         fill.enabled = false;
         fill.fillAmount = 0f;
+    }
+
+    private void InitializeLowHealthVignette()
+    {
+        if (!enableLowHealthScreenFx)
+            return;
+
+        Volume[] volumes = FindObjectsByType<Volume>(FindObjectsSortMode.None);
+        for (int i = 0; i < volumes.Length; i++)
+        {
+            if (volumes[i] != null && volumes[i].isGlobal)
+            {
+                lowHealthVolume = volumes[i];
+                break;
+            }
+        }
+
+        if (lowHealthVolume == null)
+            return;
+
+        VolumeProfile runtimeProfile = lowHealthVolume.profile;
+        if (runtimeProfile == null)
+            return;
+
+        if (!runtimeProfile.TryGet(out lowHealthVignette) || lowHealthVignette == null)
+            lowHealthVignette = runtimeProfile.Add<Vignette>(true);
+
+        if (lowHealthVignette == null)
+            return;
+
+        baseVignetteColor = lowHealthVignette.color.value;
+        baseVignetteIntensity = lowHealthVignette.intensity.value;
+        baseVignetteSmoothness = lowHealthVignette.smoothness.value;
+
+        lowHealthVignette.color.overrideState = true;
+        lowHealthVignette.intensity.overrideState = true;
+        lowHealthVignette.smoothness.overrideState = true;
+        lowHealthVignetteReady = true;
+    }
+
+    private void UpdateLowHealthScreenFx()
+    {
+        if (!enableLowHealthScreenFx || player == null)
+            return;
+
+        if (!lowHealthVignetteReady)
+        {
+            if (Time.unscaledTime >= nextLowHealthFxResolveAt)
+            {
+                nextLowHealthFxResolveAt = Time.unscaledTime + Mathf.Max(0.1f, lowHealthFxResolveInterval);
+                InitializeLowHealthVignette();
+            }
+        }
+
+        if (!lowHealthVignetteReady || lowHealthVignette == null)
+            return;
+
+        float maxHealth = Mathf.Max(1f, player.MaxHealth);
+        float health01 = Mathf.Clamp01(player.CurrentHealth / maxHealth);
+        float threshold = Mathf.Clamp(lowHealthFxThreshold, 0.05f, 1f);
+
+        float targetWeight = health01 < threshold
+            ? Mathf.InverseLerp(threshold, 0f, health01)
+            : 0f;
+
+        currentLowHealthFxWeight = Mathf.MoveTowards(
+            currentLowHealthFxWeight,
+            targetWeight,
+            Time.unscaledDeltaTime * Mathf.Max(0.1f, lowHealthFxBlendSpeed)
+        );
+
+        float w = Mathf.Clamp01(currentLowHealthFxWeight);
+        Color color = Color.Lerp(baseVignetteColor, lowHealthVignetteColor, w);
+        float intensity = Mathf.Lerp(baseVignetteIntensity, Mathf.Max(baseVignetteIntensity, lowHealthMaxVignetteIntensity), w);
+        float smoothness = Mathf.Lerp(baseVignetteSmoothness, Mathf.Max(baseVignetteSmoothness, lowHealthMaxVignetteSmoothness), w);
+
+        lowHealthVignette.color.value = color;
+        lowHealthVignette.intensity.value = intensity;
+        lowHealthVignette.smoothness.value = smoothness;
     }
 }

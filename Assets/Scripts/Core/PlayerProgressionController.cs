@@ -39,6 +39,7 @@ namespace GrassSim.Core
         public event Action<bool> OnUpgradeMenuStateChanged;
         public event Action<UpgradeOption> OnUpgradeApplied;
         public event Action OnStatsChanged;
+        public event Action OnChoiceActionStateChanged;
 
         public AudioSource audioSource;
         public AudioClip upgradeClick;
@@ -46,6 +47,25 @@ namespace GrassSim.Core
         private int rollCounter = 0;
         private int pendingLevelUps;
         private PlayerRelicController relics;
+        private float lastIncomingDamageAt = -100f;
+        private int chainedIncomingHits;
+
+        [Header("Incoming Damage Smoothing")]
+        [SerializeField] private float chainedHitWindowSeconds = 0.35f;
+        [SerializeField] private float chainedHitStepReduction = 0.08f;
+        [SerializeField] private float chainedHitMaxReduction = 0.4f;
+
+        [Header("Choice Action Limits")]
+        [SerializeField, Min(0)] private int maxBanishesPerRun = 5;
+        [SerializeField, Min(0)] private int maxRerollsPerRun = 10;
+
+        private int banishesRemaining;
+        private int rerollsRemaining;
+        private readonly HashSet<StatType> banishedUpgradeStats = new();
+        private readonly HashSet<string> banishedRelicIds = new(StringComparer.Ordinal);
+
+        public int BanishesRemaining => banishesRemaining;
+        public int RerollsRemaining => rerollsRemaining;
 
         private void Awake()
         {
@@ -56,6 +76,7 @@ namespace GrassSim.Core
             relics = GetComponent<PlayerRelicController>();
             currentHealth = MaxHealth;
             currentStamina = MaxStamina;
+            ResetChoiceActionState();
         }
 
         private void Update()
@@ -112,6 +133,8 @@ namespace GrassSim.Core
                     rawDamage: amount,
                     reduction: 0f,
                     damageAfterReduction: amount,
+                    chainedHitReduction: 0f,
+                    chainedHitCount: 0,
                     dodged: true,
                     blocked: false,
                     barrierBefore: temporaryBarrier,
@@ -133,6 +156,8 @@ namespace GrassSim.Core
                     rawDamage: amount,
                     reduction: 0f,
                     damageAfterReduction: amount,
+                    chainedHitReduction: 0f,
+                    chainedHitCount: 0,
                     dodged: false,
                     blocked: true,
                     barrierBefore: temporaryBarrier,
@@ -147,6 +172,8 @@ namespace GrassSim.Core
             }
 
             float finalAmount = amount;
+            float chainedHitReduction = 0f;
+            int chainedHitCount = 0;
 
             float reduction = stats.damageReduction;
             if (relics != null)
@@ -156,6 +183,26 @@ namespace GrassSim.Core
             if (reduction > 0f)
             {
                 finalAmount = amount * (1f - reduction);
+            }
+
+            if (finalAmount > 0f)
+            {
+                float now = Time.unscaledTime;
+                float hitWindow = Mathf.Max(0.01f, chainedHitWindowSeconds);
+                if (now - lastIncomingDamageAt <= hitWindow)
+                    chainedIncomingHits = Mathf.Clamp(chainedIncomingHits + 1, 0, 16);
+                else
+                    chainedIncomingHits = 0;
+
+                lastIncomingDamageAt = now;
+                chainedHitCount = chainedIncomingHits;
+                if (chainedIncomingHits > 0)
+                {
+                    float stepReduction = Mathf.Clamp01(chainedHitStepReduction);
+                    float maxReduction = Mathf.Clamp01(chainedHitMaxReduction);
+                    chainedHitReduction = Mathf.Clamp(chainedIncomingHits * stepReduction, 0f, maxReduction);
+                    finalAmount *= (1f - chainedHitReduction);
+                }
             }
 
             float damageAfterReduction = finalAmount;
@@ -176,6 +223,8 @@ namespace GrassSim.Core
                     rawDamage: amount,
                     reduction: reduction,
                     damageAfterReduction: damageAfterReduction,
+                    chainedHitReduction: chainedHitReduction,
+                    chainedHitCount: chainedHitCount,
                     dodged: false,
                     blocked: false,
                     barrierBefore: barrierBefore,
@@ -197,6 +246,8 @@ namespace GrassSim.Core
                 rawDamage: amount,
                 reduction: reduction,
                 damageAfterReduction: damageAfterReduction,
+                chainedHitReduction: chainedHitReduction,
+                chainedHitCount: chainedHitCount,
                 dodged: false,
                 blocked: false,
                 barrierBefore: barrierBefore,
@@ -257,6 +308,80 @@ namespace GrassSim.Core
             TryStartNextUpgradeRoll();
         }
 
+        public List<UpgradeOption> RollUpgradeOptions(int count)
+        {
+            if (upgradeLibrary == null || count <= 0)
+                return new List<UpgradeOption>();
+
+            int seed = NextUpgradeRollSeed();
+            return upgradeLibrary.RollOptions(count, seed, IsUpgradeBanished);
+        }
+
+        public void CancelCurrentUpgradeChoice()
+        {
+            if (!IsChoosingUpgrade)
+                return;
+
+            IsChoosingUpgrade = false;
+            OnUpgradeMenuStateChanged?.Invoke(false);
+            Time.timeScale = 1f;
+            TryStartNextUpgradeRoll();
+        }
+
+        public bool IsUpgradeBanished(StatType stat)
+        {
+            return banishedUpgradeStats.Contains(stat);
+        }
+
+        public bool IsRelicBanished(string relicId)
+        {
+            return !string.IsNullOrWhiteSpace(relicId) && banishedRelicIds.Contains(relicId);
+        }
+
+        public bool TrySpendReroll()
+        {
+            if (rerollsRemaining <= 0)
+                return false;
+
+            rerollsRemaining--;
+            NotifyChoiceActionStateChanged();
+            return true;
+        }
+
+        public bool TryBanishUpgrade(UpgradeOption option)
+        {
+            if (option == null)
+                return false;
+
+            if (banishedUpgradeStats.Contains(option.stat))
+                return false;
+
+            if (banishesRemaining <= 0)
+                return false;
+
+            banishesRemaining--;
+            banishedUpgradeStats.Add(option.stat);
+            NotifyChoiceActionStateChanged();
+            return true;
+        }
+
+        public bool TryBanishRelic(RelicDefinition relic)
+        {
+            if (relic == null || string.IsNullOrWhiteSpace(relic.id))
+                return false;
+
+            if (banishedRelicIds.Contains(relic.id))
+                return false;
+
+            if (banishesRemaining <= 0)
+                return false;
+
+            banishesRemaining--;
+            banishedRelicIds.Add(relic.id);
+            NotifyChoiceActionStateChanged();
+            return true;
+        }
+
         private void TryStartNextUpgradeRoll()
         {
             if (IsChoosingUpgrade || pendingLevelUps <= 0)
@@ -272,8 +397,7 @@ namespace GrassSim.Core
 
             Time.timeScale = 0f;
 
-            int seed = unchecked(Environment.TickCount + (rollCounter++ * 10007));
-            var options = upgradeLibrary.RollOptions(3, seed);
+            List<UpgradeOption> options = RollUpgradeOptions(3);
 
             OnLevelUpOptionsRolled?.Invoke(options);
 
@@ -368,6 +492,25 @@ namespace GrassSim.Core
             temporaryBarrier = Mathf.Clamp(temporaryBarrier + amount, 0f, maxCap);
         }
 
+        private int NextUpgradeRollSeed()
+        {
+            return unchecked(Environment.TickCount + (rollCounter++ * 10007));
+        }
+
+        private void ResetChoiceActionState()
+        {
+            banishesRemaining = Mathf.Max(0, maxBanishesPerRun);
+            rerollsRemaining = Mathf.Max(0, maxRerollsPerRun);
+            banishedUpgradeStats.Clear();
+            banishedRelicIds.Clear();
+            NotifyChoiceActionStateChanged();
+        }
+
+        private void NotifyChoiceActionStateChanged()
+        {
+            OnChoiceActionStateChanged?.Invoke();
+        }
+
         private static float GetRunTimeSeconds()
         {
             if (GameTimerController.Instance != null)
@@ -381,6 +524,8 @@ namespace GrassSim.Core
             float rawDamage,
             float reduction,
             float damageAfterReduction,
+            float chainedHitReduction,
+            int chainedHitCount,
             bool dodged,
             bool blocked,
             float barrierBefore,
@@ -398,6 +543,8 @@ namespace GrassSim.Core
                     rawDamage,
                     reduction,
                     damageAfterReduction,
+                    chainedHitReduction,
+                    chainedHitCount,
                     dodged,
                     blocked,
                     barrierBefore,

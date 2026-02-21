@@ -4,6 +4,8 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Rendering;
 using GrassSim.Combat;
+using GrassSim.Core;
+using GrassSim.Telemetry;
 
 public static class RelicDamageText
 {
@@ -32,14 +34,17 @@ public static class RelicDamageText
             fallbackLabel,
             out Color color,
             out string label,
-            out RelicRarity rarity
+            out RelicRarity rarity,
+            out string relicId
         );
 
         string effectText = ShouldShowEffectText(target, label) ? label : null;
         float effectFontSize = Mathf.Max(20f, damageFontSize * 0.72f);
+        bool wasAlive = !target.IsDead;
+        float clampedDamage = Mathf.Max(0f, damage);
 
         target.TakeDamageWithText(
-            damage,
+            clampedDamage,
             source,
             color,
             damageFontSize,
@@ -47,6 +52,8 @@ public static class RelicDamageText
             color,
             effectFontSize
         );
+        bool causedKill = wasAlive && target.IsDead;
+        ReportRelicProcTelemetry(target, clampedDamage, relicId, label, rarity, causedKill);
 
         TrySpawnProcPresentation(target, source, color, rarity);
     }
@@ -148,12 +155,14 @@ public static class RelicDamageText
         string fallbackLabel,
         out Color color,
         out string label,
-        out RelicRarity rarity
+        out RelicRarity rarity,
+        out string relicId
     )
     {
         color = DefaultRelicColor;
         label = fallbackLabel;
         rarity = RelicRarity.Common;
+        relicId = null;
 
         PlayerRelicController relics = source != null
             ? source.GetComponentInParent<PlayerRelicController>()
@@ -163,6 +172,7 @@ public static class RelicDamageText
         {
             color = RelicRarityColors.Get(def.rarity);
             rarity = def.rarity;
+            relicId = def.id;
             if (!string.IsNullOrWhiteSpace(def.displayName))
                 label = def.displayName;
         }
@@ -180,12 +190,54 @@ public static class RelicDamageText
                 color = RelicRarityColors.Get(candidate.rarity);
                 rarity = candidate.rarity;
                 label = candidate.displayName;
+                relicId = candidate.id;
                 break;
             }
         }
 
         if (string.IsNullOrWhiteSpace(label))
             label = HumanizeEffectName(effect);
+        if (string.IsNullOrWhiteSpace(relicId) && effect != null)
+            relicId = effect.name;
+    }
+
+    private static void ReportRelicProcTelemetry(
+        Combatant target,
+        float damage,
+        string relicId,
+        string displayName,
+        RelicRarity rarity,
+        bool causedKill
+    )
+    {
+        if (target == null || damage <= 0f)
+            return;
+
+        float runTime = GameTimerController.Instance != null
+            ? Mathf.Max(0f, GameTimerController.Instance.elapsedTime)
+            : 0f;
+
+        GameplayTelemetryHub.ReportRelicProc(
+            new GameplayTelemetryHub.RelicProcSample(
+                runTime,
+                relicId,
+                displayName,
+                rarity.ToString(),
+                damage,
+                causedKill,
+                target.GetInstanceID(),
+                NormalizeTargetName(target.gameObject != null ? target.gameObject.name : "Unknown")
+            )
+        );
+    }
+
+    private static string NormalizeTargetName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Unknown";
+
+        string normalized = value.Replace("(Clone)", string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? "Unknown" : normalized;
     }
 
     private static bool ShouldShowEffectText(Combatant target, string effectLabel)

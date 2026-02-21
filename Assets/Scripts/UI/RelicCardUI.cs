@@ -29,6 +29,7 @@ public class RelicCardUI : MonoBehaviour
 
     private RelicDefinition relic;
     private Action<RelicDefinition> onPick;
+    public RelicDefinition BoundRelic => relic;
     private static readonly Dictionary<string, Sprite> FallbackIconCache = new(StringComparer.OrdinalIgnoreCase);
 
     private void Awake()

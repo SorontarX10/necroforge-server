@@ -17,6 +17,7 @@ public class UpgradeCardUI : MonoBehaviour
 
     private UpgradeOption boundOption;
     private Action<UpgradeOption> onPickCallback;
+    public UpgradeOption BoundOption => boundOption;
 
     public void Bind(
         UpgradeOption option,

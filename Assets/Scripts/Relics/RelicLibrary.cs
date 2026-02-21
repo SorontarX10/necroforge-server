@@ -28,14 +28,23 @@ public class RelicLibrary : ScriptableObject
 
     public List<RelicDefinition> Roll(int count, PlayerRelicController player = null)
     {
-        RollResult result = RollWithDiagnostics(count, player);
+        RollResult result = RollWithDiagnostics(count, player, null);
         return result.offered;
     }
 
     public RollResult RollWithDiagnostics(int count, PlayerRelicController player = null)
     {
+        return RollWithDiagnostics(count, player, null);
+    }
+
+    public RollResult RollWithDiagnostics(
+        int count,
+        PlayerRelicController player,
+        System.Func<RelicDefinition, bool> isRelicExcluded
+    )
+    {
         RollResult result = new();
-        List<RelicDefinition> pool = BuildEligiblePool(player, result.rejected);
+        List<RelicDefinition> pool = BuildEligiblePool(player, result.rejected, isRelicExcluded);
 
         for (int i = 0; i < count && pool.Count > 0; i++)
         {
@@ -52,7 +61,8 @@ public class RelicLibrary : ScriptableObject
 
     private List<RelicDefinition> BuildEligiblePool(
         PlayerRelicController player,
-        List<RejectedRelicOption> rejected
+        List<RejectedRelicOption> rejected,
+        System.Func<RelicDefinition, bool> isRelicExcluded
     )
     {
         List<RelicDefinition> pool = new();
@@ -64,6 +74,16 @@ public class RelicLibrary : ScriptableObject
             RelicDefinition relic = relics[i];
             if (relic == null)
                 continue;
+
+            if (isRelicExcluded != null && isRelicExcluded(relic))
+            {
+                rejected?.Add(new RejectedRelicOption
+                {
+                    relic = relic,
+                    reason = "banished"
+                });
+                continue;
+            }
 
             if (player != null)
             {
