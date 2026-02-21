@@ -23,6 +23,7 @@ public class PlayerControllerCC : MonoBehaviour
     [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 2f;
     [SerializeField, Min(0f)] private float minFallSpeedForHeadKnockback = 0.2f;
     [SerializeField, Range(0.01f, 0.5f)] private float headTopTolerance = 0.16f;
+    [SerializeField, Range(0.05f, 0.95f)] private float dogTopSurfaceNormalMin = 0.12f;
     [SerializeField, Min(0.1f)] private float externalVelocityDamping = 12f;
 
     [Header("Ground Check")]
@@ -232,6 +233,11 @@ public class PlayerControllerCC : MonoBehaviour
         if (!fallingOnTarget)
             return false;
 
+        if (IsDogEnemy(enemy))
+        {
+            return hit.normal.y >= Mathf.Clamp(dogTopSurfaceNormalMin, 0.05f, 0.95f);
+        }
+
         float enemyTopY = hit.collider.bounds.max.y;
         float playerFeetY = controller.bounds.min.y;
         if (playerFeetY < enemyTopY - Mathf.Clamp(headTopTolerance, 0.01f, 0.5f))
@@ -241,5 +247,22 @@ public class PlayerControllerCC : MonoBehaviour
             return false;
 
         return true;
+    }
+
+    private static bool IsDogEnemy(EnemyCombatant enemy)
+    {
+        if (enemy == null)
+            return false;
+
+        BossEnemyController boss = enemy.GetComponent<BossEnemyController>();
+        if (boss != null && boss.ArchetypeLabel != null)
+        {
+            if (boss.ArchetypeLabel.IndexOf("dog", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        string enemyName = enemy.name;
+        return !string.IsNullOrWhiteSpace(enemyName)
+            && enemyName.IndexOf("dog", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }

@@ -29,6 +29,7 @@ public class LoadingController : MonoBehaviour
     {
         PauseMenuController.PrepareForMainMenuTransition();
         ChunkedProceduralLevelGenerator.ResetWorldReady();
+        WorldMapController.EnsureExists();
 
         if (GrassSim.Stats.WorldStats.Instance != null)
             GrassSim.Stats.WorldStats.Instance.ResetStats();

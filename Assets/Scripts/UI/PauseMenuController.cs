@@ -115,6 +115,7 @@ public class PauseMenuController : MonoBehaviour
 
         ChoiceUiQueue.Clear();
         PlayerLocator.Invalidate();
+        MapCollectibleRegistry.ResetRuntimeState();
 
         var music = FindFirstObjectByType<MusicPhaseController>();
         if (music != null)

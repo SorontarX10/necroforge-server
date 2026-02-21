@@ -121,11 +121,17 @@ public class WorldMapController : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
-        if (FindFirstObjectByType<WorldMapController>() != null)
-            return;
+        EnsureExists();
+    }
+
+    public static WorldMapController EnsureExists()
+    {
+        WorldMapController existing = FindFirstObjectByType<WorldMapController>();
+        if (existing != null)
+            return existing;
 
         var go = new GameObject("WorldMapController");
-        go.AddComponent<WorldMapController>();
+        return go.AddComponent<WorldMapController>();
     }
 
     private void Start()

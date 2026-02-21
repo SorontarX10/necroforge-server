@@ -63,6 +63,16 @@ namespace GrassSim.UI
             CopyActive(enhancers, result);
         }
 
+        public static void ResetRuntimeState()
+        {
+            bool hadEntries = chests.Count > 0 || enhancers.Count > 0;
+            chests.Clear();
+            enhancers.Clear();
+
+            if (hadEntries)
+                RegistryChanged?.Invoke();
+        }
+
         private static void CopyActive<T>(HashSet<T> source, List<T> result) where T : Component
         {
             if (result == null)

@@ -72,22 +72,19 @@ public class UpgradeSelectionUI : MonoBehaviour
         PlayerProgressionController resolvedPlayer = ResolvePlayer();
         if (resolvedPlayer == null)
         {
-            Hide();
-            ChoiceUiQueue.CompleteCurrent("upgrade_selection_no_player");
+            AbortSelection("upgrade_selection_no_player");
             return;
         }
 
         if (cards == null || cards.Length == 0)
         {
-            Hide();
-            ChoiceUiQueue.CompleteCurrent("upgrade_selection_no_cards");
+            AbortSelection("upgrade_selection_no_cards", resolvedPlayer);
             return;
         }
 
         if (options == null || options.Count == 0)
         {
-            Hide();
-            ChoiceUiQueue.CompleteCurrent("upgrade_selection_empty");
+            AbortSelection("upgrade_selection_empty", resolvedPlayer);
             return;
         }
 
@@ -103,9 +100,7 @@ public class UpgradeSelectionUI : MonoBehaviour
         SetCurrentOptions(options, resolvedPlayer);
         if (!HasVisibleOptions())
         {
-            Hide();
-            resolvedPlayer.CancelCurrentUpgradeChoice();
-            ChoiceUiQueue.CompleteCurrent("upgrade_selection_empty_after_filter");
+            AbortSelection("upgrade_selection_empty_after_filter", resolvedPlayer);
             return;
         }
 
@@ -137,8 +132,7 @@ public class UpgradeSelectionUI : MonoBehaviour
 
         if (option == null || resolvedPlayer == null)
         {
-            Hide();
-            ChoiceUiQueue.CompleteCurrent("upgrade_selection_invalid_pick");
+            AbortSelection("upgrade_selection_invalid_pick", resolvedPlayer);
             return;
         }
 
@@ -177,11 +171,22 @@ public class UpgradeSelectionUI : MonoBehaviour
             return;
         }
 
-        for (int i = 0; i < currentOptions.Count; i++)
+        int optionIndex = currentOptions.IndexOf(option);
+        if (optionIndex >= 0)
         {
-            UpgradeOption entry = currentOptions[i];
-            if (entry != null && entry.stat == option.stat)
-                currentOptions[i] = null;
+            currentOptions[optionIndex] = null;
+        }
+        else
+        {
+            for (int i = 0; i < currentOptions.Count; i++)
+            {
+                UpgradeOption entry = currentOptions[i];
+                if (entry != null && entry.stat == option.stat)
+                {
+                    currentOptions[i] = null;
+                    break;
+                }
+            }
         }
 
         awaitingBanishPick = false;
@@ -194,9 +199,7 @@ public class UpgradeSelectionUI : MonoBehaviour
         if (CanUseReroll(resolvedPlayer))
             return;
 
-        Hide();
-        resolvedPlayer.CancelCurrentUpgradeChoice();
-        ChoiceUiQueue.CompleteCurrent("upgrade_selection_all_banished");
+        AbortSelection("upgrade_selection_all_banished", resolvedPlayer);
     }
 
     private void OnBanishButtonPressed()
@@ -238,9 +241,29 @@ public class UpgradeSelectionUI : MonoBehaviour
         if (CanUseReroll(resolvedPlayer))
             return;
 
+        AbortSelection("upgrade_selection_reroll_empty", resolvedPlayer);
+    }
+
+    private void AbortSelection(
+        string reason,
+        PlayerProgressionController resolvedPlayer = null
+    )
+    {
         Hide();
-        resolvedPlayer.CancelCurrentUpgradeChoice();
-        ChoiceUiQueue.CompleteCurrent("upgrade_selection_reroll_empty");
+
+        PlayerProgressionController activePlayer =
+            resolvedPlayer != null ? resolvedPlayer : ResolvePlayer();
+        if (activePlayer != null && activePlayer.IsChoosingUpgrade)
+        {
+            activePlayer.CancelCurrentUpgradeChoice();
+        }
+        else if (ChoiceUiQueue.PendingCount == 0)
+        {
+            Time.timeScale = 1f;
+            cursor?.HideCursor();
+        }
+
+        ChoiceUiQueue.CompleteCurrent(reason);
     }
 
     private void SetCurrentOptions(List<UpgradeOption> options, PlayerProgressionController resolvedPlayer)
@@ -275,14 +298,29 @@ public class UpgradeSelectionUI : MonoBehaviour
                 continue;
 
             UpgradeOption option = i < currentOptions.Count ? currentOptions[i] : null;
-            card.gameObject.SetActive(option != null);
+            card.gameObject.SetActive(true);
             card.Bind(
                 option,
                 iconLibrary,
                 option != null ? RarityColor(option.rarity) : Color.gray,
                 OnPick
             );
+            SetCardSlotVisible(card, option != null);
         }
+    }
+
+    private static void SetCardSlotVisible(UpgradeCardUI card, bool isVisible)
+    {
+        if (card == null)
+            return;
+
+        CanvasGroup group = card.GetComponent<CanvasGroup>();
+        if (group == null)
+            group = card.gameObject.AddComponent<CanvasGroup>();
+
+        group.alpha = isVisible ? 1f : 0f;
+        group.interactable = isVisible;
+        group.blocksRaycasts = isVisible;
     }
 
     private bool HasVisibleOptions()

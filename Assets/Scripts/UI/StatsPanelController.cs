@@ -390,7 +390,7 @@ public class StatsPanelController : MonoBehaviour
     private void SetExpandedVisual(bool expanded)
     {
         if (titleText != null) titleText.text = "STATS";
-        if (chevronText != null) chevronText.text = expanded ? "▼" : "▶";
+        if (chevronText != null) chevronText.text = expanded ? "v" : ">";
     }
 
     // ================= ANIMATION =================
