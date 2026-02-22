@@ -468,6 +468,7 @@ namespace GrassSim.Enemies
     public class EnemyEliteAuraVfx : MonoBehaviour
     {
         [Header("Aura")]
+        [SerializeField] private bool useParticleAura = false;
         [SerializeField] private Color auraColor = new(1f, 0.86f, 0.2f, 0.7f);
         [SerializeField, Min(0f)] private float auraYOffset = 0.9f;
         [SerializeField, Min(0.05f)] private float auraRadius = 0.7f;
@@ -475,9 +476,14 @@ namespace GrassSim.Enemies
         [SerializeField, Min(4)] private int maxParticles = 18;
         [SerializeField, Min(0.05f)] private float pulseSpeed = 2.8f;
         [SerializeField, Min(0f)] private float pulseAmplitude = 0.2f;
+        [SerializeField] private bool useLightAura = true;
+        [SerializeField, Min(0f)] private float auraLightIntensity = 1.4f;
+        [SerializeField, Min(0.2f)] private float auraLightRange = 2f;
 
         private ParticleSystem auraParticles;
         private Transform auraTransform;
+        private Light auraLight;
+        private float auraLightBaseIntensity;
         private bool eliteActive;
         private float pulseSeed;
         private static Material sharedAuraMaterial;
@@ -498,11 +504,17 @@ namespace GrassSim.Enemies
         {
             if (auraParticles != null)
                 auraParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            if (auraLight != null && auraLight.gameObject.activeSelf)
+                auraLight.gameObject.SetActive(false);
         }
 
         private void LateUpdate()
         {
-            if (!eliteActive || auraTransform == null)
+            if (!eliteActive)
+                return;
+
+            if (auraTransform == null && auraLight == null)
                 return;
 
             float speed = Mathf.Max(0.05f, pulseSpeed);
@@ -510,8 +522,18 @@ namespace GrassSim.Enemies
             float pulse = 1f + Mathf.Sin((Time.time + pulseSeed) * speed) * amplitude;
             float scale = Mathf.Max(0.2f, pulse);
 
-            auraTransform.localPosition = Vector3.up * auraYOffset;
-            auraTransform.localScale = new Vector3(scale, scale, scale);
+            if (auraTransform != null)
+            {
+                auraTransform.localPosition = Vector3.up * auraYOffset;
+                auraTransform.localScale = new Vector3(scale, scale, scale);
+            }
+
+            if (auraLight != null)
+            {
+                auraLight.transform.localPosition = Vector3.up * auraYOffset;
+                float lightPulse = 0.86f + Mathf.Sin((Time.time + pulseSeed) * speed) * 0.14f;
+                auraLight.intensity = Mathf.Max(0f, auraLightBaseIntensity * lightPulse);
+            }
         }
 
         public void SetEliteState(bool elite)
@@ -527,18 +549,37 @@ namespace GrassSim.Enemies
                         auraParticles.gameObject.SetActive(false);
                 }
 
+                if (auraLight != null && auraLight.gameObject.activeSelf)
+                    auraLight.gameObject.SetActive(false);
+
                 return;
             }
 
-            EnsureAuraParticles();
-            if (auraParticles == null)
-                return;
+            if (useParticleAura)
+            {
+                EnsureAuraParticles();
+                if (auraParticles != null)
+                {
+                    if (!auraParticles.gameObject.activeSelf)
+                        auraParticles.gameObject.SetActive(true);
 
-            if (!auraParticles.gameObject.activeSelf)
-                auraParticles.gameObject.SetActive(true);
+                    if (!auraParticles.isPlaying)
+                        auraParticles.Play(true);
+                }
+            }
+            else if (auraParticles != null)
+            {
+                auraParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                if (auraParticles.gameObject.activeSelf)
+                    auraParticles.gameObject.SetActive(false);
+            }
 
-            if (!auraParticles.isPlaying)
-                auraParticles.Play(true);
+            if (useLightAura)
+            {
+                EnsureAuraLight();
+                if (auraLight != null && !auraLight.gameObject.activeSelf)
+                    auraLight.gameObject.SetActive(true);
+            }
         }
 
         private void EnsureAuraParticles()
@@ -564,8 +605,35 @@ namespace GrassSim.Enemies
 
                 Material auraMaterial = GetAuraMaterial();
                 if (auraMaterial != null)
+                {
                     renderer.sharedMaterial = auraMaterial;
+                    renderer.enabled = true;
+                }
+                else
+                {
+                    renderer.enabled = false;
+                }
             }
+        }
+
+        private void EnsureAuraLight()
+        {
+            if (auraLight != null)
+                return;
+
+            GameObject auraLightObject = new("EliteAuraLight");
+            auraLightObject.hideFlags = HideFlags.DontSave;
+            auraLightObject.transform.SetParent(transform, false);
+            auraLightObject.transform.localPosition = Vector3.up * auraYOffset;
+
+            auraLight = auraLightObject.AddComponent<Light>();
+            auraLight.type = LightType.Point;
+            auraLight.range = Mathf.Max(0.2f, auraLightRange);
+            auraLightBaseIntensity = Mathf.Max(0f, auraLightIntensity);
+            auraLight.intensity = auraLightBaseIntensity;
+            auraLight.color = new Color(auraColor.r, auraColor.g, auraColor.b, 1f);
+            auraLight.shadows = LightShadows.None;
+            auraLight.renderMode = LightRenderMode.Auto;
         }
 
         private void ConfigureParticleSystem(ParticleSystem ps)
@@ -659,9 +727,7 @@ namespace GrassSim.Enemies
             {
                 shader = FindSupportedShader(
                     "Universal Render Pipeline/Particles/Unlit",
-                    "Universal Render Pipeline/Unlit",
-                    "Universal Render Pipeline/Particles/Lit",
-                    "Universal Render Pipeline/Lit"
+                    "Universal Render Pipeline/Particles/Lit"
                 );
 
                 if (shader == null)
@@ -669,12 +735,15 @@ namespace GrassSim.Enemies
                     Material defaultParticle = pipeline.defaultParticleMaterial;
                     if (defaultParticle != null && defaultParticle.shader != null && defaultParticle.shader.isSupported)
                     {
-                        sharedAuraMaterial = defaultParticle;
-                        return sharedAuraMaterial;
+                        string shaderName = defaultParticle.shader.name;
+                        if (!string.IsNullOrWhiteSpace(shaderName) && shaderName.StartsWith("Universal Render Pipeline/", System.StringComparison.Ordinal))
+                        {
+                            sharedAuraMaterial = defaultParticle;
+                            return sharedAuraMaterial;
+                        }
                     }
                 }
 
-                // In SRP/URP do not fallback to built-in shaders (would render magenta).
                 if (shader == null)
                 {
                     if (!missingAuraShaderWarningLogged)
@@ -690,10 +759,8 @@ namespace GrassSim.Enemies
             {
                 shader = FindSupportedShader(
                     "Particles/Standard Unlit",
-                    "Particles/Additive",
-                    "Sprites/Default"
+                    "Particles/Additive"
                 );
-                shader ??= FindSupportedShader("Hidden/Internal-Colored");
             }
 
             if (shader == null)

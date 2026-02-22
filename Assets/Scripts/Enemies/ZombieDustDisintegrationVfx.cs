@@ -343,7 +343,14 @@ namespace GrassSim.Enemies
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
             Material particleMaterial = GetParticleMaterial();
             if (particleMaterial != null)
+            {
                 renderer.sharedMaterial = particleMaterial;
+                renderer.enabled = true;
+            }
+            else
+            {
+                renderer.enabled = false;
+            }
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
         }
@@ -360,7 +367,6 @@ namespace GrassSim.Enemies
             {
                 shader = FindSupportedShader(
                     "Universal Render Pipeline/Particles/Unlit",
-                    "Universal Render Pipeline/Unlit",
                     "Universal Render Pipeline/Particles/Lit"
                 );
 
@@ -369,12 +375,15 @@ namespace GrassSim.Enemies
                     Material defaultParticle = pipeline.defaultParticleMaterial;
                     if (defaultParticle != null && defaultParticle.shader != null && defaultParticle.shader.isSupported)
                     {
-                        sharedParticleMaterial = defaultParticle;
-                        return sharedParticleMaterial;
+                        string shaderName = defaultParticle.shader.name;
+                        if (!string.IsNullOrWhiteSpace(shaderName) && shaderName.StartsWith("Universal Render Pipeline/", System.StringComparison.Ordinal))
+                        {
+                            sharedParticleMaterial = defaultParticle;
+                            return sharedParticleMaterial;
+                        }
                     }
                 }
 
-                // In SRP/URP do not fallback to built-in shaders (would render magenta).
                 if (shader == null)
                 {
                     if (!missingDustShaderWarningLogged)
@@ -390,10 +399,8 @@ namespace GrassSim.Enemies
             {
                 shader = FindSupportedShader(
                     "Particles/Standard Unlit",
-                    "Particles/Additive",
-                    "Sprites/Default"
+                    "Particles/Additive"
                 );
-                shader ??= FindSupportedShader("Hidden/Internal-Colored");
             }
             if (shader == null)
                 return null;

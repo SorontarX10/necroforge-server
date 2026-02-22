@@ -421,6 +421,8 @@ public static class RelicDamageText
 
 internal static class RelicGeneratedPresentation
 {
+    // Sphere pulses read as noisy "pink balls" in dense combat; keep disabled for cleaner readability.
+    private static readonly bool EnablePulseSpheres = false;
     private const int MaxPulsePoolSize = 64;
     private const int PulsePrewarmCount = 12;
     private static readonly Queue<GameObject> PulsePool = new();
@@ -433,22 +435,51 @@ internal static class RelicGeneratedPresentation
     private static Material areaRingMaterial;
     private static Material areaFogMaterial;
     private static RelicOneShotAudioHub audioHub;
+    private static bool missingMaterialWarningLogged;
 
     private const string AreaOverlayShaderName = "Necroforge/Relic/AreaOverlay";
     private static Transform pulsePoolRoot;
     private static bool pulsePoolPrewarmed;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        PulsePool.Clear();
+        ProcClips.Clear();
+        LastSfxAt.Clear();
+        pulsePoolPrewarmed = false;
+
+        solidMaterial = null;
+        translucentMaterial = null;
+        darkMaterial = null;
+        areaRingMaterial = null;
+        areaFogMaterial = null;
+        audioHub = null;
+        missingMaterialWarningLogged = false;
+
+        if (pulsePoolRoot != null)
+            UnityEngine.Object.Destroy(pulsePoolRoot.gameObject);
+
+        pulsePoolRoot = null;
+    }
+
     public static void SpawnProcPulse(Vector3 worldPos, Color color, RelicRarity rarity)
     {
-        SpawnPulse(worldPos, color, 0.42f, 0.15f, 0.8f);
+        if (EnablePulseSpheres)
+            SpawnPulse(worldPos, color, 0.42f, 0.15f, 0.8f);
+
         TryPlaySfx(worldPos, rarity);
     }
 
     public static void SpawnEventBurst(Vector3 worldPos, Color color, RelicRarity rarity, float burstScale)
     {
-        float scale = Mathf.Clamp(burstScale, 0.6f, 2.5f);
-        SpawnPulse(worldPos, color, 0.56f * scale, 0.2f, 1.35f * scale);
-        SpawnPulse(worldPos + Vector3.up * 0.04f, new Color(color.r, color.g, color.b, color.a * 0.75f), 0.42f * scale, 0.17f, 1.08f * scale);
+        if (EnablePulseSpheres)
+        {
+            float scale = Mathf.Clamp(burstScale, 0.6f, 2.5f);
+            SpawnPulse(worldPos, color, 0.56f * scale, 0.2f, 1.35f * scale);
+            SpawnPulse(worldPos + Vector3.up * 0.04f, new Color(color.r, color.g, color.b, color.a * 0.75f), 0.42f * scale, 0.17f, 1.08f * scale);
+        }
+
         TryPlaySfx(worldPos, rarity);
     }
 
@@ -519,23 +550,25 @@ internal static class RelicGeneratedPresentation
         GameObject root = new(name);
         root.transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
 
-        GameObject head = CreatePrimitiveNoCollider(PrimitiveType.Sphere, "Head", root.transform);
-        head.transform.localScale = new Vector3(1f, 0.86f, 1f);
-        Tint(head.GetComponent<Renderer>(), color, translucent: false, emission: 0.5f);
+        // Keep fallback visuals compact and non-spherical to avoid "floating orb" read in dense fights.
+        GameObject head = CreatePrimitiveNoCollider(PrimitiveType.Capsule, "Head", root.transform);
+        head.transform.localScale = new Vector3(0.74f, 0.46f, 0.74f);
+        head.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        Tint(head.GetComponent<Renderer>(), color, translucent: false, emission: 0.28f);
 
         GameObject jaw = CreatePrimitiveNoCollider(PrimitiveType.Cube, "Jaw", root.transform);
-        jaw.transform.localPosition = new Vector3(0f, -0.42f, 0f);
-        jaw.transform.localScale = new Vector3(0.7f, 0.32f, 0.62f);
-        Tint(jaw.GetComponent<Renderer>(), color * 0.9f, translucent: false, emission: 0.3f);
+        jaw.transform.localPosition = new Vector3(0f, -0.26f, 0f);
+        jaw.transform.localScale = new Vector3(0.56f, 0.22f, 0.5f);
+        Tint(jaw.GetComponent<Renderer>(), color * 0.86f, translucent: false, emission: 0.16f);
 
-        GameObject eyeLeft = CreatePrimitiveNoCollider(PrimitiveType.Sphere, "EyeL", root.transform);
-        eyeLeft.transform.localPosition = new Vector3(-0.18f, 0.05f, 0.43f);
-        eyeLeft.transform.localScale = Vector3.one * 0.2f;
+        GameObject eyeLeft = CreatePrimitiveNoCollider(PrimitiveType.Cube, "EyeL", root.transform);
+        eyeLeft.transform.localPosition = new Vector3(-0.16f, 0.03f, 0.28f);
+        eyeLeft.transform.localScale = new Vector3(0.12f, 0.1f, 0.08f);
         Tint(eyeLeft.GetComponent<Renderer>(), new Color(0.05f, 0.05f, 0.06f, 1f), translucent: false, emission: 0f, dark: true);
 
-        GameObject eyeRight = CreatePrimitiveNoCollider(PrimitiveType.Sphere, "EyeR", root.transform);
-        eyeRight.transform.localPosition = new Vector3(0.18f, 0.05f, 0.43f);
-        eyeRight.transform.localScale = Vector3.one * 0.2f;
+        GameObject eyeRight = CreatePrimitiveNoCollider(PrimitiveType.Cube, "EyeR", root.transform);
+        eyeRight.transform.localPosition = new Vector3(0.16f, 0.03f, 0.28f);
+        eyeRight.transform.localScale = new Vector3(0.12f, 0.1f, 0.08f);
         Tint(eyeRight.GetComponent<Renderer>(), new Color(0.05f, 0.05f, 0.06f, 1f), translucent: false, emission: 0f, dark: true);
 
         return root;
@@ -546,9 +579,10 @@ internal static class RelicGeneratedPresentation
         GameObject root = new(name);
         root.transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
 
-        GameObject core = CreatePrimitiveNoCollider(PrimitiveType.Sphere, "Core", root.transform);
-        core.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
-        Tint(core.GetComponent<Renderer>(), color, translucent: false, emission: 0.7f);
+        GameObject core = CreatePrimitiveNoCollider(PrimitiveType.Cube, "Core", root.transform);
+        core.transform.localScale = new Vector3(0.72f, 0.72f, 0.72f);
+        core.transform.localRotation = Quaternion.Euler(0f, 34f, 0f);
+        Tint(core.GetComponent<Renderer>(), color, translucent: false, emission: 0.28f);
 
         GameObject halo = CreatePrimitiveNoCollider(PrimitiveType.Cylinder, "Halo", root.transform);
         halo.transform.localPosition = new Vector3(0f, 0.22f, 0f);
@@ -573,10 +607,11 @@ internal static class RelicGeneratedPresentation
         pole.transform.localPosition = new Vector3(0f, 1.15f, 0f);
         Tint(pole.GetComponent<Renderer>(), color * 0.82f, translucent: false, emission: 0.25f);
 
-        GameObject finial = CreatePrimitiveNoCollider(PrimitiveType.Sphere, "Finial", root.transform);
-        finial.transform.localScale = Vector3.one * 0.22f;
+        GameObject finial = CreatePrimitiveNoCollider(PrimitiveType.Cube, "Finial", root.transform);
+        finial.transform.localScale = new Vector3(0.18f, 0.18f, 0.18f);
+        finial.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
         finial.transform.localPosition = new Vector3(0f, 2.3f, 0f);
-        Tint(finial.GetComponent<Renderer>(), color, translucent: false, emission: 0.8f);
+        Tint(finial.GetComponent<Renderer>(), color, translucent: false, emission: 0.22f);
 
         if (withBanner)
         {
@@ -613,10 +648,11 @@ internal static class RelicGeneratedPresentation
         body.transform.localScale = new Vector3(0.5f, 0.9f, 0.5f);
         Tint(body.GetComponent<Renderer>(), color * 0.9f, translucent: false, emission: 0.2f);
 
-        GameObject head = CreatePrimitiveNoCollider(PrimitiveType.Sphere, "Head", root.transform);
+        GameObject head = CreatePrimitiveNoCollider(PrimitiveType.Cube, "Head", root.transform);
         head.transform.localPosition = new Vector3(0f, 1.25f, 0f);
-        head.transform.localScale = new Vector3(0.46f, 0.46f, 0.46f);
-        Tint(head.GetComponent<Renderer>(), color, translucent: false, emission: 0.35f);
+        head.transform.localScale = new Vector3(0.42f, 0.42f, 0.42f);
+        head.transform.localRotation = Quaternion.Euler(0f, 30f, 0f);
+        Tint(head.GetComponent<Renderer>(), color, translucent: false, emission: 0.18f);
 
         GameObject blade = CreatePrimitiveNoCollider(PrimitiveType.Cube, "Blade", root.transform);
         blade.transform.localPosition = new Vector3(0.38f, 0.72f, 0f);
@@ -669,7 +705,13 @@ internal static class RelicGeneratedPresentation
 
         Renderer renderer = go.GetComponent<Renderer>();
         if (renderer != null)
-            renderer.sharedMaterial = GetTranslucentMaterial();
+        {
+            Material mat = GetTranslucentMaterial();
+            if (mat != null)
+                renderer.sharedMaterial = mat;
+            else
+                renderer.enabled = false;
+        }
 
         RelicPulseVfx pulse = go.AddComponent<RelicPulseVfx>();
         pulse.Bind(renderer);
@@ -845,6 +887,15 @@ internal static class RelicGeneratedPresentation
         Material mat = overrideMaterial ?? (dark
             ? GetDarkMaterial()
             : translucent ? GetTranslucentMaterial() : GetSolidMaterial());
+        if (mat == null)
+        {
+            renderer.enabled = false;
+            return;
+        }
+
+        if (!renderer.enabled)
+            renderer.enabled = true;
+
         renderer.sharedMaterial = mat;
 
         var props = new MaterialPropertyBlock();
@@ -875,6 +926,17 @@ internal static class RelicGeneratedPresentation
             return;
 
         Material material = GetSolidMaterial();
+        if (material == null)
+        {
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null)
+                    renderers[i].enabled = false;
+            }
+
+            return;
+        }
+
         var props = new MaterialPropertyBlock();
 
         for (int i = 0; i < renderers.Length; i++)
@@ -882,6 +944,9 @@ internal static class RelicGeneratedPresentation
             Renderer renderer = renderers[i];
             if (renderer == null)
                 continue;
+
+            if (!renderer.enabled)
+                renderer.enabled = true;
 
             renderer.sharedMaterial = material;
             renderer.GetPropertyBlock(props);
@@ -908,15 +973,38 @@ internal static class RelicGeneratedPresentation
         if (solidMaterial != null)
             return solidMaterial;
 
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        Shader shader = null;
+        RenderPipelineAsset pipeline = ResolveActiveRenderPipeline();
+        if (pipeline != null)
+        {
+            shader = FindSupportedShader(
+                "Universal Render Pipeline/Lit",
+                "Universal Render Pipeline/Simple Lit",
+                "Universal Render Pipeline/Unlit"
+            );
+
+            if (shader == null && pipeline.defaultMaterial != null && pipeline.defaultMaterial.shader != null && pipeline.defaultMaterial.shader.isSupported)
+                shader = pipeline.defaultMaterial.shader;
+        }
+        else
+        {
+            shader = FindSupportedShader(
+                "Standard",
+                "Sprites/Default"
+            );
+        }
+
         if (shader == null)
-            shader = Shader.Find("Standard");
-        if (shader == null)
-            shader = Shader.Find("Sprites/Default");
+        {
+            LogMissingMaterialWarning();
+            return null;
+        }
 
         solidMaterial = new Material(shader)
         {
-            enableInstancing = true
+            name = "RelicGeneratedSolidMaterial",
+            enableInstancing = true,
+            hideFlags = HideFlags.DontSave
         };
 
         if (solidMaterial.HasProperty("_Glossiness"))
@@ -930,15 +1018,38 @@ internal static class RelicGeneratedPresentation
         if (darkMaterial != null)
             return darkMaterial;
 
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        Shader shader = null;
+        RenderPipelineAsset pipeline = ResolveActiveRenderPipeline();
+        if (pipeline != null)
+        {
+            shader = FindSupportedShader(
+                "Universal Render Pipeline/Lit",
+                "Universal Render Pipeline/Simple Lit",
+                "Universal Render Pipeline/Unlit"
+            );
+
+            if (shader == null && pipeline.defaultMaterial != null && pipeline.defaultMaterial.shader != null && pipeline.defaultMaterial.shader.isSupported)
+                shader = pipeline.defaultMaterial.shader;
+        }
+        else
+        {
+            shader = FindSupportedShader(
+                "Standard",
+                "Sprites/Default"
+            );
+        }
+
         if (shader == null)
-            shader = Shader.Find("Standard");
-        if (shader == null)
-            shader = Shader.Find("Sprites/Default");
+        {
+            LogMissingMaterialWarning();
+            return null;
+        }
 
         darkMaterial = new Material(shader)
         {
-            enableInstancing = true
+            name = "RelicGeneratedDarkMaterial",
+            enableInstancing = true,
+            hideFlags = HideFlags.DontSave
         };
 
         if (darkMaterial.HasProperty("_Glossiness"))
@@ -1001,17 +1112,40 @@ internal static class RelicGeneratedPresentation
 
     private static Material CreateAreaOverlayMaterial()
     {
-        Shader shader = Shader.Find(AreaOverlayShaderName);
+        Shader shader = null;
+        RenderPipelineAsset pipeline = ResolveActiveRenderPipeline();
+        if (pipeline != null)
+        {
+            shader = FindSupportedShader(
+                AreaOverlayShaderName,
+                "Universal Render Pipeline/Unlit",
+                "Universal Render Pipeline/Lit",
+                "Universal Render Pipeline/Simple Lit"
+            );
+
+            if (shader == null && pipeline.defaultMaterial != null && pipeline.defaultMaterial.shader != null && pipeline.defaultMaterial.shader.isSupported)
+                shader = pipeline.defaultMaterial.shader;
+        }
+        else
+        {
+            shader = FindSupportedShader(
+                AreaOverlayShaderName,
+                "Unlit/Color",
+                "Standard"
+            );
+        }
+
         if (shader == null)
-            shader = Shader.Find("Universal Render Pipeline/Unlit");
-        if (shader == null)
-            shader = Shader.Find("Unlit/Color");
-        if (shader == null)
-            shader = Shader.Find("Standard");
+        {
+            LogMissingMaterialWarning();
+            return null;
+        }
 
         Material mat = new(shader)
         {
-            enableInstancing = true
+            name = "RelicAreaOverlayMaterial",
+            enableInstancing = true,
+            hideFlags = HideFlags.DontSave
         };
 
         if (mat.HasProperty("_Surface"))
@@ -1035,15 +1169,38 @@ internal static class RelicGeneratedPresentation
         if (translucentMaterial != null)
             return translucentMaterial;
 
-        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        Shader shader = null;
+        RenderPipelineAsset pipeline = ResolveActiveRenderPipeline();
+        if (pipeline != null)
+        {
+            shader = FindSupportedShader(
+                "Universal Render Pipeline/Unlit",
+                "Universal Render Pipeline/Lit",
+                "Universal Render Pipeline/Simple Lit"
+            );
+
+            if (shader == null && pipeline.defaultMaterial != null && pipeline.defaultMaterial.shader != null && pipeline.defaultMaterial.shader.isSupported)
+                shader = pipeline.defaultMaterial.shader;
+        }
+        else
+        {
+            shader = FindSupportedShader(
+                "Unlit/Color",
+                "Standard"
+            );
+        }
+
         if (shader == null)
-            shader = Shader.Find("Unlit/Color");
-        if (shader == null)
-            shader = Shader.Find("Standard");
+        {
+            LogMissingMaterialWarning();
+            return null;
+        }
 
         translucentMaterial = new Material(shader)
         {
-            enableInstancing = true
+            name = "RelicGeneratedTranslucentMaterial",
+            enableInstancing = true,
+            hideFlags = HideFlags.DontSave
         };
 
         if (translucentMaterial.HasProperty("_Surface"))
@@ -1060,6 +1217,43 @@ internal static class RelicGeneratedPresentation
 
         translucentMaterial.renderQueue = (int)RenderQueue.Transparent;
         return translucentMaterial;
+    }
+
+    private static Shader FindSupportedShader(params string[] shaderNames)
+    {
+        if (shaderNames == null)
+            return null;
+
+        for (int i = 0; i < shaderNames.Length; i++)
+        {
+            string shaderName = shaderNames[i];
+            if (string.IsNullOrWhiteSpace(shaderName))
+                continue;
+
+            Shader shader = Shader.Find(shaderName);
+            if (shader != null && shader.isSupported)
+                return shader;
+        }
+
+        return null;
+    }
+
+    private static RenderPipelineAsset ResolveActiveRenderPipeline()
+    {
+        RenderPipelineAsset pipeline = GraphicsSettings.currentRenderPipeline;
+        if (pipeline != null)
+            return pipeline;
+
+        return GraphicsSettings.defaultRenderPipeline;
+    }
+
+    private static void LogMissingMaterialWarning()
+    {
+        if (missingMaterialWarningLogged)
+            return;
+
+        missingMaterialWarningLogged = true;
+        Debug.LogWarning("Relic generated VFX material disabled: no compatible shader/material found.");
     }
 }
 
