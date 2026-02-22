@@ -52,6 +52,8 @@ public class ZombieEyeEmissionController : MonoBehaviour
     private float lastHealth01 = -1f;
     private float nextPollAt;
     private bool subscribed;
+    private bool hasEliteColorOverride;
+    private Color eliteOverrideColor = Color.yellow;
 
     private void Awake()
     {
@@ -88,6 +90,13 @@ public class ZombieEyeEmissionController : MonoBehaviour
     private void OnDestroy()
     {
         TryUnsubscribe();
+    }
+
+    public void SetEliteColorOverride(bool enabled, Color color)
+    {
+        hasEliteColorOverride = enabled;
+        eliteOverrideColor = color;
+        ForceRefresh();
     }
 
     private void ResolveCombatant()
@@ -387,7 +396,8 @@ public class ZombieEyeEmissionController : MonoBehaviour
 
     private void ApplyEmission(float health01)
     {
-        Color color = Color.Lerp(zeroHealthEmissionColor, fullHealthEmissionColor, health01);
+        Color fullColor = hasEliteColorOverride ? eliteOverrideColor : fullHealthEmissionColor;
+        Color color = Color.Lerp(zeroHealthEmissionColor, fullColor, health01);
         float intensity = Mathf.Lerp(
             Mathf.Max(0f, minEmissionIntensity),
             Mathf.Max(minEmissionIntensity, maxEmissionIntensity),

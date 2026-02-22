@@ -16,6 +16,11 @@ namespace GrassSim.AI
     {
         public int id;
         public int prefabIndex;
+        public bool isElite;
+        public float healthMultiplier = 1f;
+        public float damageMultiplier = 1f;
+        public float expMultiplier = 1f;
+        public float eliteMinHealth;
 
         // aktualna pozycja symulacyjna
         public Vector3 position;

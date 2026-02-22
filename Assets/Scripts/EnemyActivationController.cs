@@ -30,11 +30,21 @@ namespace GrassSim.AI
             public float sqrDistance;
         }
 
+        private struct ActiveDistanceSample
+        {
+            public int id;
+            public float sqrDistance;
+        }
+
         public static EnemyActivationController Instance { get; private set; }
 
         [Header("Activation")]
         public float activeDistance = 48f;
+        [Min(0f)] public float despawnDistanceBuffer = 8f;
+        [Min(0f)] public float minimumDespawnDistanceBuffer = 12f;
+        [Min(0f)] public float despawnOutOfRangeGraceSeconds = 1.25f;
         public int maxActiveEnemies = 34;
+        [Min(1)] public int globalHardActiveEnemyGoCap = 78;
 
         [Header("Update Scheduling")]
         [Min(0.02f)] public float activationRefreshInterval = 0.1f;
@@ -42,7 +52,9 @@ namespace GrassSim.AI
 
         [Header("Frame Budgets")]
         [Min(1)] public int maxActivationSpawnsPerTick = 2;
+        [Min(1)] public int maxEliteSpawnsPerTick = 10;
         [Min(1)] public int maxActivationDespawnsPerTick = 5;
+        [Min(1)] public int maxActivationDespawnsPerTickHardCap = 2;
 
         [Header("Enemy Prefabs")]
         public List<GameObject> enemyPrefabs;
@@ -72,8 +84,11 @@ namespace GrassSim.AI
         private readonly Dictionary<int, GameObject> active = new();
         private readonly List<EnemyCandidate> nearbyCandidates = new(128);
         private readonly List<EnemyCandidate> selectedCandidates = new(64);
+        private readonly List<ActiveDistanceSample> activeDistanceSamples = new(128);
         private readonly List<int> idsToRemove = new(64);
+        private readonly HashSet<int> idsToRemoveSet = new();
         private readonly List<int> cleanupIds = new(32);
+        private readonly Dictionary<int, float> outOfRangeSince = new(128);
 
         private float nextActivationRefreshAt;
         private float nextCleanupAt;
@@ -102,7 +117,8 @@ namespace GrassSim.AI
             }
 
             Instance = this;
-            EnemyQueryService.ConfigureGlobalBudget(Mathf.Max(140, maxActiveEnemies * 7));
+            int budgetSeed = Mathf.Max(maxActiveEnemies, globalHardActiveEnemyGoCap);
+            EnemyQueryService.ConfigureGlobalBudget(Mathf.Max(140, budgetSeed * 7));
         }
 
         private void Start()
@@ -122,8 +138,9 @@ namespace GrassSim.AI
 
             RefreshPlayerPosition();
 
-            int currentMaxEnemies = DifficultyContext.ScaleSpawnCap(maxActiveEnemies);
-            float refreshInterval = GetAdaptiveActivationInterval(currentMaxEnemies);
+            int scaledActiveCap = Mathf.Max(1, DifficultyContext.ScaleSpawnCap(maxActiveEnemies));
+            int currentMaxEnemies = ResolveEffectiveActiveCap(scaledActiveCap);
+            float refreshInterval = GetAdaptiveActivationInterval(scaledActiveCap);
             float now = Time.time;
             if (now < nextActivationRefreshAt)
                 return;
@@ -159,7 +176,11 @@ namespace GrassSim.AI
                 recycleSyncTriggered = true;
             }
 
-            float maxD2 = activeDistance * activeDistance;
+            float activationDistance = Mathf.Max(1f, activeDistance);
+            float activationMaxD2 = activationDistance * activationDistance;
+            float despawnBuffer = Mathf.Max(0f, Mathf.Max(despawnDistanceBuffer, minimumDespawnDistanceBuffer));
+            float despawnDistance = activationDistance + despawnBuffer;
+            float despawnMaxD2 = despawnDistance * despawnDistance;
             nearbyCandidates.Clear();
 
             foreach (EnemySimState state in sim.GetAll())
@@ -167,7 +188,7 @@ namespace GrassSim.AI
                 scannedCandidates++;
                 Vector3 pos = GetEnemyWorldPosition(state);
                 float sqrDistance = SqrDistanceXZ(pos, playerPosition);
-                if (sqrDistance <= maxD2)
+                if (sqrDistance <= activationMaxD2)
                 {
                     nearbyCandidates.Add(
                         new EnemyCandidate
@@ -179,47 +200,113 @@ namespace GrassSim.AI
                 }
             }
 
-            int allowed = Mathf.Min(currentMaxEnemies, nearbyCandidates.Count);
+            int allowed = Mathf.Min(nearbyCandidates.Count, currentMaxEnemies);
             selectedCount = SelectClosestCandidates(allowed);
 
             int spawnBudget = Mathf.Max(1, maxActivationSpawnsPerTick);
+            int eliteSpawnBudget = Mathf.Max(1, maxEliteSpawnsPerTick);
+            int eliteSpawnedThisTick = 0;
             for (int i = 0; i < selectedCount; i++)
             {
-                if (spawnedThisTick >= spawnBudget)
+                if (active.Count >= currentMaxEnemies)
                     break;
 
                 EnemySimState state = selectedCandidates[i].state;
+                if (state == null)
+                    continue;
+
+                bool canSpawnRegular = !state.isElite && spawnedThisTick < spawnBudget;
+                bool canSpawnElite = state.isElite && eliteSpawnedThisTick < eliteSpawnBudget;
+                if (!canSpawnRegular && !canSpawnElite)
+                    continue;
+
                 if (active.TryGetValue(state.id, out GameObject existing))
                 {
                     if (existing != null)
                         continue;
 
                     active.Remove(state.id);
+                    outOfRangeSince.Remove(state.id);
                 }
 
                 SpawnGO(state);
-                spawnedThisTick++;
+                if (state.isElite)
+                    eliteSpawnedThisTick++;
+                else
+                    spawnedThisTick++;
             }
 
             idsToRemove.Clear();
+            idsToRemoveSet.Clear();
+            activeDistanceSamples.Clear();
+            float despawnGrace = Mathf.Max(0f, despawnOutOfRangeGraceSeconds);
 
             foreach (KeyValuePair<int, GameObject> kv in active)
             {
                 GameObject go = kv.Value;
                 if (go == null)
                 {
-                    idsToRemove.Add(kv.Key);
+                    QueueForDespawn(kv.Key);
                     continue;
                 }
 
-                if (SqrDistanceXZ(go.transform.position, playerPosition) > maxD2)
-                    idsToRemove.Add(kv.Key);
+                float sqrDistance = SqrDistanceXZ(go.transform.position, playerPosition);
+                activeDistanceSamples.Add(
+                    new ActiveDistanceSample
+                    {
+                        id = kv.Key,
+                        sqrDistance = sqrDistance
+                    }
+                );
+
+                if (sqrDistance <= despawnMaxD2)
+                {
+                    outOfRangeSince.Remove(kv.Key);
+                    continue;
+                }
+
+                if (despawnGrace <= 0f)
+                {
+                    QueueForDespawn(kv.Key);
+                    continue;
+                }
+
+                if (!outOfRangeSince.TryGetValue(kv.Key, out float outSince))
+                {
+                    outOfRangeSince[kv.Key] = now;
+                    continue;
+                }
+
+                if (now - outSince >= despawnGrace)
+                    QueueForDespawn(kv.Key);
             }
 
-            int despawnBudget = Mathf.Max(1, maxActivationDespawnsPerTick);
+            int projectedActiveAfterDespawn = active.Count - idsToRemove.Count;
+            if (projectedActiveAfterDespawn > currentMaxEnemies)
+            {
+                int overflow = projectedActiveAfterDespawn - currentMaxEnemies;
+                activeDistanceSamples.Sort((a, b) => b.sqrDistance.CompareTo(a.sqrDistance));
+                for (int i = 0; i < activeDistanceSamples.Count && overflow > 0; i++)
+                {
+                    int id = activeDistanceSamples[i].id;
+                    if (idsToRemoveSet.Contains(id))
+                        continue;
+
+                    QueueForDespawn(id);
+                    overflow--;
+                }
+            }
+
+            int despawnBudget = Mathf.Min(
+                Mathf.Max(1, maxActivationDespawnsPerTick),
+                Mathf.Max(1, maxActivationDespawnsPerTickHardCap)
+            );
             despawnCount = Mathf.Min(idsToRemove.Count, despawnBudget);
             for (int i = 0; i < despawnCount; i++)
-                DespawnGO(idsToRemove[i]);
+            {
+                int id = idsToRemove[i];
+                DespawnGO(id);
+            }
 
             lastRuntimeSnapshot = new ActivationRuntimeSnapshot
             {
@@ -268,17 +355,30 @@ namespace GrassSim.AI
 
             Combatant combatant = go.GetComponent<Combatant>();
             EnemyCombatant enemyCombatant = go.GetComponent<EnemyCombatant>();
+            EnemyDifficultyApplier difficultyApplier = go.GetComponent<EnemyDifficultyApplier>();
+
+            if (difficultyApplier != null)
+                difficultyApplier.ApplyDifficultyNow();
+
+            if (enemyCombatant != null)
+            {
+                enemyCombatant.simId = state.id;
+                enemyCombatant.ApplySpawnVariant(state);
+            }
 
             if (combatant != null && enemyCombatant != null && enemyCombatant.stats != null)
             {
                 combatant.Initialize(enemyCombatant.stats.maxHealth);
-                enemyCombatant.simId = state.id;
             }
             else
             {
                 Debug.LogWarning("[EnemyActivation] Enemy spawned WITHOUT Combatant init!", go);
             }
 
+            if (enemyCombatant != null)
+                enemyCombatant.BeginSpawnEmergence(spawnPos);
+
+            outOfRangeSince.Remove(state.id);
             state.position = spawnPos;
             state.anchor = spawnPos;
             active[state.id] = go;
@@ -412,6 +512,7 @@ namespace GrassSim.AI
                 return;
 
             active.Remove(id);
+            outOfRangeSince.Remove(id);
 
             if (go != null)
                 SimplePool.Return(go);
@@ -434,6 +535,7 @@ namespace GrassSim.AI
             if (!active.TryGetValue(state.id, out GameObject go) || go == null)
             {
                 active.Remove(state.id);
+                outOfRangeSince.Remove(state.id);
                 return state.position;
             }
 
@@ -451,9 +553,25 @@ namespace GrassSim.AI
             }
 
             for (int i = 0; i < cleanupIds.Count; i++)
+            {
                 active.Remove(cleanupIds[i]);
+                outOfRangeSince.Remove(cleanupIds[i]);
+            }
 
             return cleanupIds.Count;
+        }
+
+        private int ResolveEffectiveActiveCap(int scaledCap)
+        {
+            int safeScaled = Mathf.Max(1, scaledCap);
+            int hardCap = Mathf.Max(1, globalHardActiveEnemyGoCap);
+            return Mathf.Min(safeScaled, hardCap);
+        }
+
+        private void QueueForDespawn(int id)
+        {
+            if (idsToRemoveSet.Add(id))
+                idsToRemove.Add(id);
         }
 
         private static float SqrDistanceXZ(Vector3 a, Vector3 b)

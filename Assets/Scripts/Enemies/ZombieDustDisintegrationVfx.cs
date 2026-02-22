@@ -36,11 +36,21 @@ namespace GrassSim.Enemies
         private static Material sharedParticleMaterial;
         private static int liveEffects;
         private static float nextSpawnAt;
+        private static bool missingDustShaderWarningLogged;
 
         private readonly List<Piece> pieces = new();
         private readonly List<Mesh> runtimeMeshes = new();
 
         private float elapsed;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            sharedParticleMaterial = null;
+            liveEffects = 0;
+            nextSpawnAt = 0f;
+            missingDustShaderWarningLogged = false;
+        }
 
         public static void SpawnFrom(GameObject source)
         {
@@ -331,7 +341,9 @@ namespace GrassSim.Enemies
 
             var renderer = ps.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = GetParticleMaterial();
+            Material particleMaterial = GetParticleMaterial();
+            if (particleMaterial != null)
+                renderer.sharedMaterial = particleMaterial;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
         }
@@ -341,11 +353,48 @@ namespace GrassSim.Enemies
             if (sharedParticleMaterial != null)
                 return sharedParticleMaterial;
 
-            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null)
-                shader = Shader.Find("Particles/Standard Unlit");
-            if (shader == null)
-                shader = Shader.Find("Sprites/Default");
+            RenderPipelineAsset pipeline = ResolveActiveRenderPipeline();
+            Shader shader = null;
+
+            if (pipeline != null)
+            {
+                shader = FindSupportedShader(
+                    "Universal Render Pipeline/Particles/Unlit",
+                    "Universal Render Pipeline/Unlit",
+                    "Universal Render Pipeline/Particles/Lit"
+                );
+
+                if (shader == null)
+                {
+                    Material defaultParticle = pipeline.defaultParticleMaterial;
+                    if (defaultParticle != null && defaultParticle.shader != null && defaultParticle.shader.isSupported)
+                    {
+                        sharedParticleMaterial = defaultParticle;
+                        return sharedParticleMaterial;
+                    }
+                }
+
+                // In SRP/URP do not fallback to built-in shaders (would render magenta).
+                if (shader == null)
+                {
+                    if (!missingDustShaderWarningLogged)
+                    {
+                        missingDustShaderWarningLogged = true;
+                        Debug.LogWarning("Zombie dust VFX disabled: no URP-compatible particle shader/material found.");
+                    }
+
+                    return null;
+                }
+            }
+            else
+            {
+                shader = FindSupportedShader(
+                    "Particles/Standard Unlit",
+                    "Particles/Additive",
+                    "Sprites/Default"
+                );
+                shader ??= FindSupportedShader("Hidden/Internal-Colored");
+            }
             if (shader == null)
                 return null;
 
@@ -361,6 +410,34 @@ namespace GrassSim.Enemies
                 sharedParticleMaterial.SetColor("_Color", Color.white);
 
             return sharedParticleMaterial;
+        }
+
+        private static RenderPipelineAsset ResolveActiveRenderPipeline()
+        {
+            RenderPipelineAsset pipeline = GraphicsSettings.currentRenderPipeline;
+            if (pipeline != null)
+                return pipeline;
+
+            return GraphicsSettings.defaultRenderPipeline;
+        }
+
+        private static Shader FindSupportedShader(params string[] shaderNames)
+        {
+            if (shaderNames == null)
+                return null;
+
+            for (int i = 0; i < shaderNames.Length; i++)
+            {
+                string shaderName = shaderNames[i];
+                if (string.IsNullOrWhiteSpace(shaderName))
+                    continue;
+
+                Shader shader = Shader.Find(shaderName);
+                if (shader != null && shader.isSupported)
+                    return shader;
+            }
+
+            return null;
         }
     }
 }

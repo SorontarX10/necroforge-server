@@ -29,7 +29,13 @@ public class BossEncounterController : MonoBehaviour
     [Header("Boss Buff")]
     [SerializeField] private float bossHealthMultiplier = 22f;
     [SerializeField] private float bossDamageMultiplier = 1.2f;
+    [SerializeField, Min(1f)] private float globalBossDamageBoost = 1.45f;
     [SerializeField] private int bossExpMultiplier = 5;
+
+    [Header("Late Boss Health Ramp")]
+    [SerializeField] private float lateBossHealthRampStartSeconds = 600f;
+    [SerializeField] private float lateBossHealthBaseMultiplier = 1.6f;
+    [SerializeField] private float lateBossHealthPerMinute = 0.15f;
 
     [Header("Boss Reward")]
     [SerializeField] private int rewardChoices = 3;
@@ -98,12 +104,16 @@ public class BossEncounterController : MonoBehaviour
         rewardChoices = Mathf.Clamp(rewardChoices, 1, 3);
         bossHealthMultiplier = Mathf.Max(1f, bossHealthMultiplier);
         bossDamageMultiplier = Mathf.Max(0.1f, bossDamageMultiplier);
+        globalBossDamageBoost = Mathf.Max(1f, globalBossDamageBoost);
         bossExpMultiplier = Mathf.Max(1, bossExpMultiplier);
         finalBossSpawnTime = Mathf.Max(1f, finalBossSpawnTime);
         finalBossHealthMultiplier = Mathf.Max(1f, finalBossHealthMultiplier);
         finalBossDamageMultiplier = Mathf.Max(0.1f, finalBossDamageMultiplier);
         finalBossExpMultiplier = Mathf.Max(1f, finalBossExpMultiplier);
         postFinalBossOverdriveDelay = Mathf.Max(0f, postFinalBossOverdriveDelay);
+        lateBossHealthRampStartSeconds = Mathf.Max(1f, lateBossHealthRampStartSeconds);
+        lateBossHealthBaseMultiplier = Mathf.Max(1f, lateBossHealthBaseMultiplier);
+        lateBossHealthPerMinute = Mathf.Max(0f, lateBossHealthPerMinute);
     }
 
     private void Update()
@@ -239,6 +249,11 @@ public class BossEncounterController : MonoBehaviour
             expMultiplier = Mathf.Max(1, Mathf.RoundToInt(expMultiplier * finalBossExpMultiplier));
         }
 
+        damageMultiplier *= Mathf.Max(1f, globalBossDamageBoost);
+
+        float elapsedAtSpawn = timer != null ? timer.elapsedTime : lastElapsedTime;
+        healthMultiplier *= GetLateRunHealthMultiplier(elapsedAtSpawn);
+
         boss.Initialize(
             owner: this,
             relicLibrary: relicLibrary,
@@ -261,6 +276,18 @@ public class BossEncounterController : MonoBehaviour
         }
 
         return true;
+    }
+
+    private float GetLateRunHealthMultiplier(float elapsedSeconds)
+    {
+        float rampStart = lateBossHealthRampStartSeconds > 0.01f ? lateBossHealthRampStartSeconds : 600f;
+        if (elapsedSeconds < rampStart)
+            return 1f;
+
+        float baseScale = lateBossHealthBaseMultiplier > 0.01f ? lateBossHealthBaseMultiplier : 1.6f;
+        float perMinute = lateBossHealthPerMinute > 0f ? lateBossHealthPerMinute : 0.15f;
+        float lateMinutes = Mathf.Max(0f, (elapsedSeconds - rampStart) / 60f);
+        return Mathf.Max(1f, baseScale + lateMinutes * perMinute);
     }
 
     private bool EnsureBossPrefabs(bool logIfMissing)

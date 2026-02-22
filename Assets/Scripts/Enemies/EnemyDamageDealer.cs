@@ -61,7 +61,7 @@ public class EnemyDamageDealer : MonoBehaviour
             return;
 
         ResolveOwnerRuntimeRefs(force: false);
-        if (enemy == null || enemy.stats == null)
+        if (enemy == null || enemy.stats == null || !enemy.CanAct)
             return;
 
         if (shareCooldownAcrossOwnerHitboxes)
@@ -127,15 +127,27 @@ public class EnemyDamageDealer : MonoBehaviour
 
     private void SlashAudioPlay()
     {
-        if (audioSource == null)
+        if (audioSource == null || !audioSource.isActiveAndEnabled)
             return;
 
+        AudioClip clip = null;
         int clipVersion = Random.Range(0, 3);
         switch (clipVersion)
         {
-            case 0: audioSource.PlayOneShot(slash_1); break;
-            case 1: audioSource.PlayOneShot(slash_2); break;
-            case 2: audioSource.PlayOneShot(slash_3); break;
+            case 0:
+                clip = slash_1;
+                break;
+            case 1:
+                clip = slash_2;
+                break;
+            default:
+                clip = slash_3;
+                break;
         }
+
+        if (clip == null)
+            return;
+
+        audioSource.PlayOneShot(clip);
     }
 }

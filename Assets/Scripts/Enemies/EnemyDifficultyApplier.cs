@@ -22,6 +22,11 @@ public class EnemyDifficultyApplier : MonoBehaviour
         ApplyDifficulty();
     }
 
+    public void ApplyDifficultyNow()
+    {
+        ApplyDifficulty();
+    }
+
     private void ApplyDifficulty()
     {
         if (combatant == null || baseStats == null)

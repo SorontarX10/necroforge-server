@@ -1,5 +1,6 @@
 using UnityEngine;
 using GrassSim.Core;
+using GrassSim.Enemies;
 
 public class ZombieCombatInput : MonoBehaviour, ICombatInput
 {
@@ -10,11 +11,16 @@ public class ZombieCombatInput : MonoBehaviour, ICombatInput
 
     private Transform fallbackTarget;
     private float nextTargetResolveAt;
+    private EnemyCombatant enemyCombatant;
 
     void Awake()
     {
         if (!perception)
             perception = GetComponent<ZombiePerception>();
+
+        enemyCombatant = GetComponent<EnemyCombatant>();
+        if (enemyCombatant == null)
+            enemyCombatant = GetComponentInParent<EnemyCombatant>();
     }
 
     // ======================
@@ -23,6 +29,9 @@ public class ZombieCombatInput : MonoBehaviour, ICombatInput
 
     public bool IsAttacking()
     {
+        if (enemyCombatant != null && !enemyCombatant.CanAct)
+            return false;
+
         Transform target = ResolveTarget();
         if (target == null)
             return false;

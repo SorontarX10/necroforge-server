@@ -1,4 +1,5 @@
 using GrassSim.Core;
+using GrassSim.Enemies;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody), typeof(Collider))]
@@ -32,6 +33,7 @@ public class EnemyAI : MonoBehaviour
     private const float PlayerResolveInterval = 0.25f;
     private bool isBossUnit;
     private bool registeredToHorde;
+    private EnemyCombatant enemyCombatant;
 
     public int LastSystemTickFrame { get; private set; } = -1;
 
@@ -56,6 +58,7 @@ public class EnemyAI : MonoBehaviour
             Debug.LogWarning("EnemyAI: player transform not found.");
 
         isBossUnit = GetComponent<BossEnemyController>() != null;
+        enemyCombatant = GetComponent<EnemyCombatant>();
     }
 
     private void OnEnable()
@@ -103,6 +106,13 @@ public class EnemyAI : MonoBehaviour
 
     private void TickRuntime()
     {
+        if (enemyCombatant != null && !enemyCombatant.CanAct)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            return;
+        }
+
         if (player == null && Time.time >= nextPlayerResolveAt)
         {
             nextPlayerResolveAt = Time.time + PlayerResolveInterval;

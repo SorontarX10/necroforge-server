@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using GrassSim.Combat;
 using GrassSim.Core;
+using GrassSim.Enemies;
 
 [CreateAssetMenu(
     menuName = "GrassSim/Relics/Effects/Mythic/Writ Of The Eclipse Court",
@@ -244,6 +245,10 @@ public class WritOfTheEclipseCourtRuntime : MonoBehaviour, IRelicBatchedUpdate, 
             return false;
 
         if (c.GetComponent<BossEnemyController>() != null)
+            return true;
+
+        EnemyCombatant enemy = c.GetComponent<EnemyCombatant>();
+        if (enemy != null && enemy.IsElite)
             return true;
 
         return c.MaxHealth >= Mathf.Max(1f, cfg.eliteHealthThreshold);

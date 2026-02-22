@@ -1,5 +1,6 @@
 using UnityEngine;
 using GrassSim.Combat;
+using GrassSim.Enemies;
 
 [CreateAssetMenu(
     menuName = "GrassSim/Relics/Effects/Legendary/Vowblade Of Final Mercy",
@@ -128,7 +129,9 @@ public class VowbladeOfFinalMercyRuntime : MonoBehaviour
         }
 
         bool isBoss = target.GetComponent<BossEnemyController>() != null;
-        bool isElite = target.MaxHealth >= Mathf.Max(1f, cfg.eliteHealthThreshold);
+        EnemyCombatant enemy = target.GetComponent<EnemyCombatant>();
+        bool isElite = (enemy != null && enemy.IsElite)
+            || target.MaxHealth >= Mathf.Max(1f, cfg.eliteHealthThreshold);
 
         float bonusDamage;
         if (isBoss || isElite)

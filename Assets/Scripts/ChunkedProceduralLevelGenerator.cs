@@ -275,9 +275,10 @@ public class ChunkedProceduralLevelGenerator : MonoBehaviour
                 // ✅ SPAWN GRACZA
                 player = Instantiate(
                     playerPrefab,
-                    hit.point + Vector3.up * 1.5f,
+                    hit.point + Vector3.up * 0.2f,
                     Quaternion.identity
                 ).transform;
+                SnapSpawnedPlayerToGround(player, hit.point);
 
                 // init combatant
                 var combatant = player.GetComponent<Combatant>();
@@ -297,6 +298,51 @@ public class ChunkedProceduralLevelGenerator : MonoBehaviour
         }
 
         Debug.LogError("❌ Nie udało się znaleźć poprawnego miejsca spawnu gracza!");
+    }
+
+    private static void SnapSpawnedPlayerToGround(Transform playerTransform, Vector3 groundPoint)
+    {
+        if (playerTransform == null)
+            return;
+
+        const float groundClearance = 0.01f;
+        float scaleY = Mathf.Abs(playerTransform.lossyScale.y);
+        if (scaleY < 0.0001f)
+            scaleY = 1f;
+
+        Vector3 pos = playerTransform.position;
+        bool snapped = false;
+
+        CharacterController characterController = playerTransform.GetComponent<CharacterController>();
+        if (characterController != null)
+        {
+            bool wasEnabled = characterController.enabled;
+            if (wasEnabled)
+                characterController.enabled = false;
+
+            float localFeetOffset = characterController.center.y - (characterController.height * 0.5f);
+            pos.y = groundPoint.y - localFeetOffset * scaleY + groundClearance;
+            playerTransform.position = pos;
+
+            if (wasEnabled)
+                characterController.enabled = true;
+
+            snapped = true;
+        }
+        else
+        {
+            CapsuleCollider capsule = playerTransform.GetComponent<CapsuleCollider>();
+            if (capsule != null)
+            {
+                float localFeetOffset = capsule.center.y - (capsule.height * 0.5f);
+                pos.y = groundPoint.y - localFeetOffset * scaleY + groundClearance;
+                playerTransform.position = pos;
+                snapped = true;
+            }
+        }
+
+        if (!snapped)
+            playerTransform.position = new Vector3(pos.x, groundPoint.y + groundClearance, pos.z);
     }
 
     public Vector2Int WorldToChunkCoord(Vector3 pos)

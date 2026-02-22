@@ -35,6 +35,10 @@ public class SpawnProfile
     public int maxPerChunk = 500;
     public float densityPer10m2 = 0f;
 
+    [Header("Streaming")]
+    [Tooltip("If true, spawned objects stay active even when the source chunk is hidden. Use for atmospheric fog.")]
+    public bool persistWhenChunkHidden = false;
+
     public enum SpawnType
     {
         Environment,

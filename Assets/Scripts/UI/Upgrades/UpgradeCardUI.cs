@@ -15,9 +15,30 @@ public class UpgradeCardUI : MonoBehaviour
     public TMP_Text valueText;
     public Button button;
 
+    [Header("Typography")]
+    [SerializeField, Min(0f)] private float nameCharacterSpacing = 1.2f;
+    [SerializeField, Min(0f)] private float descCharacterSpacing = 0.9f;
+    [SerializeField, Min(0f)] private float valueCharacterSpacing = 1.4f;
+    [SerializeField] private float textLiftPixels = 4f;
+    [SerializeField] private float nameLiftExtraPixels = 4f;
+    [SerializeField, Range(0.6f, 1f)] private float nameWidthScale = 0.88f;
+    [SerializeField, Min(0f)] private float bottomInsetPixels = 4f;
+
     private UpgradeOption boundOption;
     private Action<UpgradeOption> onPickCallback;
+    private bool typographyInitialized;
+    private Vector2 nameBasePosition;
+    private Vector2 descBasePosition;
+    private Vector2 valueBasePosition;
+    private Vector2 nameBaseSize;
+    private Vector2 descBaseSize;
+    private Vector2 valueBaseSize;
     public UpgradeOption BoundOption => boundOption;
+
+    private void Awake()
+    {
+        EnsureTypography();
+    }
 
     public void Bind(
         UpgradeOption option,
@@ -26,6 +47,7 @@ public class UpgradeCardUI : MonoBehaviour
         Action<UpgradeOption> onPick
     )
     {
+        EnsureTypography();
         boundOption = option;
         onPickCallback = onPick;
 
@@ -94,6 +116,79 @@ public class UpgradeCardUI : MonoBehaviour
     private void OnClick()
     {
         onPickCallback?.Invoke(boundOption);
+    }
+
+    private void EnsureTypography()
+    {
+        if (!typographyInitialized)
+        {
+            if (nameText != null)
+            {
+                nameBasePosition = nameText.rectTransform.anchoredPosition;
+                nameBaseSize = nameText.rectTransform.sizeDelta;
+            }
+            if (descText != null)
+            {
+                descBasePosition = descText.rectTransform.anchoredPosition;
+                descBaseSize = descText.rectTransform.sizeDelta;
+            }
+            if (valueText != null)
+            {
+                valueBasePosition = valueText.rectTransform.anchoredPosition;
+                valueBaseSize = valueText.rectTransform.sizeDelta;
+            }
+
+            typographyInitialized = true;
+        }
+
+        ApplyTypography(
+            nameText,
+            nameCharacterSpacing,
+            nameBasePosition,
+            nameBaseSize,
+            textLiftPixels + nameLiftExtraPixels,
+            nameWidthScale
+        );
+        ApplyTypography(
+            descText,
+            descCharacterSpacing,
+            descBasePosition,
+            descBaseSize,
+            textLiftPixels,
+            1f
+        );
+        ApplyTypography(
+            valueText,
+            valueCharacterSpacing,
+            valueBasePosition,
+            valueBaseSize,
+            textLiftPixels,
+            1f
+        );
+    }
+
+    private void ApplyTypography(
+        TMP_Text text,
+        float spacing,
+        Vector2 basePosition,
+        Vector2 baseSize,
+        float liftPixels,
+        float widthScale
+    )
+    {
+        if (text == null)
+            return;
+
+        text.characterSpacing = Mathf.Max(0f, spacing);
+        RectTransform rect = text.rectTransform;
+        rect.anchoredPosition = basePosition + Vector2.up * Mathf.Max(0f, liftPixels);
+
+        if (baseSize.sqrMagnitude > 0.0001f)
+            rect.sizeDelta = new Vector2(baseSize.x * Mathf.Clamp(widthScale, 0.6f, 1f), baseSize.y);
+
+        Vector4 margin = text.margin;
+        margin.w = Mathf.Max(margin.w, bottomInsetPixels);
+        text.margin = margin;
     }
 
     // ================= HELPERS =================

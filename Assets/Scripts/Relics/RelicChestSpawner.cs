@@ -101,11 +101,32 @@ public class RelicChestSpawner : MonoBehaviour
         {
             float borderInset = Mathf.Max(10f, minSpawnDistanceFromMapBorder);
             Vector3 pos = world.GetRandomValidWorldPosition(borderInset);
-            GameObject chest = Instantiate(chestPrefab, pos, Quaternion.identity);
-            if (chest != null && !Mathf.Approximately(spawnedChestScaleMultiplier, 1f))
-                chest.transform.localScale *= spawnedChestScaleMultiplier;
+            SpawnChestAt(pos, reason);
         }
 
         return true;
+    }
+
+    public GameObject SpawnChestAt(Vector3 worldPosition, string reason = null)
+    {
+        if (chestPrefab == null)
+            return null;
+
+        Vector3 spawnPosition = SnapToGround(worldPosition);
+        GameObject chest = Instantiate(chestPrefab, spawnPosition, Quaternion.identity);
+        if (chest != null && !Mathf.Approximately(spawnedChestScaleMultiplier, 1f))
+            chest.transform.localScale *= spawnedChestScaleMultiplier;
+
+        return chest;
+    }
+
+    private static Vector3 SnapToGround(Vector3 worldPosition)
+    {
+        LayerMask mask = LayerMask.GetMask("Ground");
+        Vector3 rayStart = worldPosition + Vector3.up * 12f;
+        if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 28f, mask))
+            return hit.point;
+
+        return worldPosition;
     }
 }

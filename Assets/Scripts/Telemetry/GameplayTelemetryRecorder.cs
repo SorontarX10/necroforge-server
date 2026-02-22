@@ -583,6 +583,13 @@ namespace GrassSim.Telemetry
         private float lowHpWarningEnteredAt = -1f;
         private float lowHpCriticalEnteredAt = -1f;
         private string pendingExitReason;
+        private bool hasExitRequestSnapshot;
+        private float exitRequestRunTime = -1f;
+        private PlayerSnapshot exitRequestPlayerSnapshot;
+        private WorldSnapshot exitRequestWorldSnapshot;
+        private DifficultySnapshot exitRequestDifficultySnapshot;
+        private EnemyPressureSnapshot exitRequestEnemyPressureSnapshot;
+        private CombatContext exitRequestCombatContext;
         private PlayerSnapshot lastValidPlayerSnapshot;
         private WorldSnapshot lastValidWorldSnapshot;
         private DifficultySnapshot lastValidDifficultySnapshot;
@@ -833,13 +840,27 @@ namespace GrassSim.Telemetry
             UpdateLowHealthState(runTime, flushOnly: true);
 
             TelemetryRecord record = CreateRecord("run_ended");
-            record.run_time_s = runTime;
-            record.reason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
-            record.player = CapturePlayerSnapshot(allowFallback: true);
-            record.world = CaptureWorldSnapshot(allowFallback: true);
-            record.difficulty = CaptureDifficultySnapshot(allowFallback: true);
-            record.enemy_pressure = CaptureEnemyPressureSnapshot(allowFallback: true);
-            record.combat_context = CollectCombatContext();
+            string resolvedReason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
+            bool useExitRequestSnapshot = hasExitRequestSnapshot && IsMenuExitReason(resolvedReason);
+            record.run_time_s = useExitRequestSnapshot && exitRequestRunTime > 0f
+                ? exitRequestRunTime
+                : runTime;
+            record.reason = resolvedReason;
+            record.player = useExitRequestSnapshot && IsPlayerSnapshotValid(exitRequestPlayerSnapshot)
+                ? exitRequestPlayerSnapshot
+                : CapturePlayerSnapshot(allowFallback: true);
+            record.world = useExitRequestSnapshot && IsWorldSnapshotValid(exitRequestWorldSnapshot)
+                ? exitRequestWorldSnapshot
+                : CaptureWorldSnapshot(allowFallback: true);
+            record.difficulty = useExitRequestSnapshot && IsDifficultySnapshotValid(exitRequestDifficultySnapshot)
+                ? exitRequestDifficultySnapshot
+                : CaptureDifficultySnapshot(allowFallback: true);
+            record.enemy_pressure = useExitRequestSnapshot && IsEnemyPressureSnapshotValid(exitRequestEnemyPressureSnapshot)
+                ? exitRequestEnemyPressureSnapshot
+                : CaptureEnemyPressureSnapshot(allowFallback: true);
+            record.combat_context = useExitRequestSnapshot && IsCombatContextValid(exitRequestCombatContext)
+                ? exitRequestCombatContext
+                : CollectCombatContext();
             record.enemy_hit_summary = BuildEnemyHitSummaryArray();
             record.counters = CollectRunCounters();
             record.upgrade_contributions = CollectUpgradeContributionArray();
@@ -850,6 +871,7 @@ namespace GrassSim.Telemetry
             runActive = false;
             missingPlayerSince = -1f;
             runStartedRealtime = -1f;
+            ClearExitRequestSnapshotCache();
         }
 
         private void UpdateSubscriptions()
@@ -1219,12 +1241,22 @@ namespace GrassSim.Telemetry
             if (!runActive)
                 return;
 
+            float runTime = ResolveSampleRunTime(sample.runTimeSeconds);
             string reason = string.IsNullOrWhiteSpace(sample.reason) ? "unknown_exit" : sample.reason;
             pendingExitReason = reason;
+            CacheExitRequestSnapshots(runTime);
 
             TelemetryRecord record = CreateRecord("run_exit_requested");
-            record.run_time_s = ResolveSampleRunTime(sample.runTimeSeconds);
+            record.run_time_s = runTime;
             record.reason = reason;
+            record.player = exitRequestPlayerSnapshot;
+            record.world = exitRequestWorldSnapshot;
+            record.difficulty = exitRequestDifficultySnapshot;
+            record.enemy_pressure = exitRequestEnemyPressureSnapshot;
+            record.combat_context = exitRequestCombatContext;
+            record.enemy_hit_summary = BuildEnemyHitSummaryArray();
+            record.counters = CollectRunCounters();
+            record.upgrade_contributions = CollectUpgradeContributionArray();
             EnqueueRecord(record);
         }
 
@@ -1452,8 +1484,13 @@ namespace GrassSim.Telemetry
             DifficultySnapshot snapshot = CollectDifficultySnapshot();
             if (IsDifficultySnapshotValid(snapshot))
             {
-                lastValidDifficultySnapshot = snapshot;
-                return snapshot;
+                bool useFallback = allowFallback
+                    && IsDifficultySnapshotLowSignal(snapshot)
+                    && IsDifficultySnapshotValid(lastValidDifficultySnapshot)
+                    && lastReliableRunTime > 0f;
+                if (!useFallback)
+                    lastValidDifficultySnapshot = snapshot;
+                return useFallback ? lastValidDifficultySnapshot : snapshot;
             }
 
             return allowFallback ? lastValidDifficultySnapshot : snapshot;
@@ -2560,6 +2597,21 @@ namespace GrassSim.Telemetry
                 && snapshot.horde_enemy_count <= 0;
         }
 
+        private static bool IsDifficultySnapshotLowSignal(DifficultySnapshot snapshot)
+        {
+            if (snapshot == null)
+                return true;
+
+            const float epsilon = 0.001f;
+            return Mathf.Abs(snapshot.enemy_health_multiplier - 1f) <= epsilon
+                && Mathf.Abs(snapshot.enemy_damage_multiplier - 1f) <= epsilon
+                && Mathf.Abs(snapshot.enemy_attack_speed_multiplier - 1f) <= epsilon
+                && Mathf.Abs(snapshot.enemy_move_speed_multiplier - 1f) <= epsilon
+                && Mathf.Abs(snapshot.enemy_detection_multiplier - 1f) <= epsilon
+                && Mathf.Abs(snapshot.exp_multiplier - 1f) <= epsilon
+                && Mathf.Abs(snapshot.spawn_cap_multiplier_base_100 - 1f) <= epsilon;
+        }
+
         private static bool IsEnemyPressureLowSignal(EnemyPressureSnapshot snapshot)
         {
             if (snapshot == null)
@@ -2625,6 +2677,7 @@ namespace GrassSim.Telemetry
             lowHpWarningEnteredAt = -1f;
             lowHpCriticalEnteredAt = -1f;
             pendingExitReason = null;
+            ClearExitRequestSnapshotCache();
             runStartedRealtime = -1f;
             lastReliableRunTime = 0f;
             lastValidPlayerSnapshot = null;
@@ -2642,6 +2695,42 @@ namespace GrassSim.Telemetry
             upgradeContributionBuffer.Clear();
             writeBuffer.Clear();
             bufferedLineCount = 0;
+        }
+
+        private void CacheExitRequestSnapshots(float runTime)
+        {
+            exitRequestRunTime = Mathf.Max(0f, runTime);
+            exitRequestPlayerSnapshot = CapturePlayerSnapshot(allowFallback: true);
+            exitRequestWorldSnapshot = CaptureWorldSnapshot(allowFallback: true);
+            exitRequestDifficultySnapshot = CaptureDifficultySnapshot(allowFallback: true);
+            exitRequestEnemyPressureSnapshot = CaptureEnemyPressureSnapshot(allowFallback: true);
+            exitRequestCombatContext = CollectCombatContext();
+            hasExitRequestSnapshot = IsPlayerSnapshotValid(exitRequestPlayerSnapshot)
+                || IsWorldSnapshotValid(exitRequestWorldSnapshot)
+                || IsDifficultySnapshotValid(exitRequestDifficultySnapshot)
+                || IsEnemyPressureSnapshotValid(exitRequestEnemyPressureSnapshot)
+                || IsCombatContextValid(exitRequestCombatContext);
+        }
+
+        private void ClearExitRequestSnapshotCache()
+        {
+            hasExitRequestSnapshot = false;
+            exitRequestRunTime = -1f;
+            exitRequestPlayerSnapshot = null;
+            exitRequestWorldSnapshot = null;
+            exitRequestDifficultySnapshot = null;
+            exitRequestEnemyPressureSnapshot = null;
+            exitRequestCombatContext = null;
+        }
+
+        private static bool IsMenuExitReason(string reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                return false;
+
+            return reason.IndexOf("quit", StringComparison.OrdinalIgnoreCase) >= 0
+                || reason.IndexOf("menu", StringComparison.OrdinalIgnoreCase) >= 0
+                || reason.IndexOf("exit", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private float GetRunTimeSeconds()

@@ -1,4 +1,5 @@
 using GrassSim.Core;
+using GrassSim.Enemies;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -57,6 +58,7 @@ public class ZombieAI : MonoBehaviour
     private float nextDebugLogTime;
     private bool isBossUnit;
     private bool registeredToHorde;
+    private EnemyCombatant enemyCombatant;
 
     public int LastSystemTickFrame { get; private set; } = -1;
 
@@ -78,6 +80,7 @@ public class ZombieAI : MonoBehaviour
         animator = GetComponentInChildren<Animator>();
         player = PlayerLocator.GetTransform();
         isBossUnit = GetComponent<BossEnemyController>() != null;
+        enemyCombatant = GetComponent<EnemyCombatant>();
 
         baseTargetRefreshInterval = Mathf.Max(0.02f, targetRefreshInterval);
         baseSeparationRefreshInterval = Mathf.Max(0.02f, separationRefreshInterval);
@@ -132,6 +135,15 @@ public class ZombieAI : MonoBehaviour
 
     private void TickRuntime()
     {
+        if (enemyCombatant != null && !enemyCombatant.CanAct)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            if (animator != null)
+                animator.SetFloat("Speed", 0f);
+            return;
+        }
+
         ResolvePlayerIfNeeded();
         UpdateRuntimeAiLod();
         RefreshTargetIfNeeded();

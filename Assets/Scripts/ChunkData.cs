@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.Jobs;
 using Unity.Collections;
+using UnityEngine.Rendering;
 using GrassSim.AI;
 
 public class ChunkData
@@ -24,6 +25,20 @@ public class ChunkData
 
     List<GameObject> spawnedObjects = new();
     private readonly List<Vector3> usedAll = new();
+    private static Transform persistentStreamingRoot;
+    private static Transform chunkMaskRoot;
+    private static Material chunkMaskMaterial;
+    private static Texture2D chunkMaskTexture;
+    private GameObject chunkMask;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticStreamingState()
+    {
+        persistentStreamingRoot = null;
+        chunkMaskRoot = null;
+        chunkMaskMaterial = null;
+        chunkMaskTexture = null;
+    }
 
     public ChunkData(Vector2Int coord, ChunkedProceduralLevelGenerator gen)
     {
@@ -140,6 +155,8 @@ public class ChunkData
         terrain.AddComponent<MeshFilter>().mesh = mesh;
         terrain.AddComponent<MeshRenderer>().material = chunkBiome.terrainMaterial;
         terrain.AddComponent<MeshCollider>().sharedMesh = mesh;
+
+        CreateChunkMask(mesh);
     }
 
     IEnumerator SpawnContentAsync()
@@ -250,7 +267,7 @@ public class ChunkData
                     profile.prefabs[Random.Range(0, profile.prefabs.Count)];
 
                 GameObject go = SimplePool.Get(prefab);
-                go.transform.SetParent(root.transform, false);
+                go.transform.SetParent(GetSpawnParentOrChunkRoot(profile, prefab), false);
                 go.transform.position = spawnPos;
 
                 // 6) Rotacja
@@ -301,10 +318,11 @@ public class ChunkData
         if (root == null)
             return;
 
-        if (root.activeSelf == visible)
-            return;
+        if (root.activeSelf != visible)
+            root.SetActive(visible);
 
-        root.SetActive(visible);
+        if (chunkMask != null)
+            chunkMask.SetActive(!visible);
     }
 
     Bounds GetWorldBounds(GameObject go)
@@ -395,7 +413,7 @@ public class ChunkData
                     profile.prefabs[Random.Range(0, profile.prefabs.Count)];
 
                 GameObject go = SimplePool.Get(prefab);
-                go.transform.SetParent(root.transform, false);
+                go.transform.SetParent(GetSpawnParentOrChunkRoot(profile, prefab), false);
                 go.transform.position = spawnPos;
 
                 if (profile.randomRotationY)
@@ -453,5 +471,220 @@ public class ChunkData
 
         float deltaY = groundPoint.y - b.min.y;
         go.transform.position += Vector3.up * deltaY;
+    }
+
+    private static Transform GetSpawnParent(SpawnProfile profile, GameObject prefab)
+    {
+        if (!ShouldPersistWhenChunkHidden(profile, prefab))
+            return null;
+
+        if (persistentStreamingRoot == null)
+        {
+            const string rootName = "ChunkStreamingPersistent";
+            GameObject existing = GameObject.Find(rootName);
+            if (existing == null)
+                existing = new GameObject(rootName);
+
+            persistentStreamingRoot = existing.transform;
+        }
+
+        return persistentStreamingRoot;
+    }
+
+    private Transform GetSpawnParentOrChunkRoot(SpawnProfile profile, GameObject prefab)
+    {
+        Transform parent = GetSpawnParent(profile, prefab);
+        return parent != null ? parent : root.transform;
+    }
+
+    private static bool ShouldPersistWhenChunkHidden(SpawnProfile profile, GameObject prefab)
+    {
+        if (profile != null && profile.persistWhenChunkHidden)
+            return true;
+
+        string profileName = profile != null ? profile.name : string.Empty;
+        string prefabName = prefab != null ? prefab.name : string.Empty;
+        return LooksLikeFog(profileName) || LooksLikeFog(prefabName);
+    }
+
+    private static bool LooksLikeFog(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string normalized = value.ToLowerInvariant();
+        return normalized.Contains("fog")
+            || normalized.Contains("mist")
+            || normalized.Contains("mgla");
+    }
+
+    private void CreateChunkMask(Mesh sourceMesh)
+    {
+        if (sourceMesh == null || chunkMask != null)
+            return;
+
+        GameObject mask = new GameObject($"ChunkMask_{coord.x}_{coord.y}");
+        mask.transform.SetParent(GetChunkMaskRoot(), false);
+        mask.transform.position = root.transform.position;
+
+        MeshFilter filter = mask.AddComponent<MeshFilter>();
+        filter.sharedMesh = sourceMesh;
+
+        MeshRenderer renderer = mask.AddComponent<MeshRenderer>();
+        Material material = GetChunkMaskMaterial();
+        if (material == null)
+        {
+            Object.Destroy(mask);
+            return;
+        }
+
+        renderer.sharedMaterial = material;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        renderer.lightProbeUsage = LightProbeUsage.Off;
+        renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+        renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+
+        mask.SetActive(false);
+        chunkMask = mask;
+    }
+
+    private static Transform GetChunkMaskRoot()
+    {
+        if (chunkMaskRoot != null)
+            return chunkMaskRoot;
+
+        const string rootName = "ChunkStreamingMaskRoot";
+        GameObject existing = GameObject.Find(rootName);
+        if (existing == null)
+            existing = new GameObject(rootName);
+
+        chunkMaskRoot = existing.transform;
+        return chunkMaskRoot;
+    }
+
+    private static Material GetChunkMaskMaterial()
+    {
+        if (chunkMaskMaterial != null)
+            return chunkMaskMaterial;
+
+        RenderPipelineAsset pipeline = ResolveActiveRenderPipeline();
+        Shader shader = null;
+
+        if (pipeline != null)
+        {
+            shader = FindSupportedShader(
+                "Universal Render Pipeline/Unlit",
+                "Universal Render Pipeline/Simple Lit",
+                "Universal Render Pipeline/Lit"
+            );
+
+            if (shader == null && pipeline.defaultShader != null && pipeline.defaultShader.isSupported)
+                shader = pipeline.defaultShader;
+
+            if (shader == null)
+            {
+                Debug.LogWarning("Chunk mask material missing URP-compatible shader. Mask fallback disabled.");
+                return null;
+            }
+        }
+        else
+        {
+            shader = FindSupportedShader(
+                "Unlit/Texture",
+                "Unlit/Color",
+                "Sprites/Default",
+                "Standard"
+            );
+            shader ??= FindSupportedShader("Hidden/Internal-Colored");
+        }
+
+        if (shader == null)
+        {
+            Debug.LogWarning("Chunk mask material could not resolve a supported shader. Mask fallback disabled.");
+            return null;
+        }
+
+        chunkMaskMaterial = new Material(shader)
+        {
+            name = "ChunkStreamingMaskMaterial",
+            enableInstancing = true
+        };
+
+        Texture2D tex = GetChunkMaskTexture();
+        Color baseColor = new Color(0.42f, 0.42f, 0.42f, 1f);
+
+        if (chunkMaskMaterial.HasProperty("_BaseMap"))
+            chunkMaskMaterial.SetTexture("_BaseMap", tex);
+        if (chunkMaskMaterial.HasProperty("_MainTex"))
+            chunkMaskMaterial.SetTexture("_MainTex", tex);
+        if (chunkMaskMaterial.HasProperty("_BaseColor"))
+            chunkMaskMaterial.SetColor("_BaseColor", baseColor);
+        if (chunkMaskMaterial.HasProperty("_Color"))
+            chunkMaskMaterial.SetColor("_Color", baseColor);
+        if (chunkMaskMaterial.HasProperty("_Glossiness"))
+            chunkMaskMaterial.SetFloat("_Glossiness", 0f);
+        if (chunkMaskMaterial.HasProperty("_Smoothness"))
+            chunkMaskMaterial.SetFloat("_Smoothness", 0f);
+
+        return chunkMaskMaterial;
+    }
+
+    private static Shader FindSupportedShader(params string[] shaderNames)
+    {
+        if (shaderNames == null)
+            return null;
+
+        for (int i = 0; i < shaderNames.Length; i++)
+        {
+            string shaderName = shaderNames[i];
+            if (string.IsNullOrWhiteSpace(shaderName))
+                continue;
+
+            Shader shader = Shader.Find(shaderName);
+            if (shader != null && shader.isSupported)
+                return shader;
+        }
+
+        return null;
+    }
+
+    private static RenderPipelineAsset ResolveActiveRenderPipeline()
+    {
+        RenderPipelineAsset pipeline = GraphicsSettings.currentRenderPipeline;
+        if (pipeline != null)
+            return pipeline;
+
+        return GraphicsSettings.defaultRenderPipeline;
+    }
+
+    private static Texture2D GetChunkMaskTexture()
+    {
+        if (chunkMaskTexture != null)
+            return chunkMaskTexture;
+
+        chunkMaskTexture = new Texture2D(4, 4, TextureFormat.RGBA32, false, true)
+        {
+            wrapMode = TextureWrapMode.Repeat,
+            filterMode = FilterMode.Bilinear,
+            name = "ChunkStreamingMaskTexture"
+        };
+
+        Color dark = new Color(0.30f, 0.30f, 0.30f, 1f);
+        Color light = new Color(0.36f, 0.36f, 0.36f, 1f);
+        Color[] pixels = new Color[16];
+
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 4; x++)
+            {
+                int idx = y * 4 + x;
+                pixels[idx] = ((x + y) & 1) == 0 ? dark : light;
+            }
+        }
+
+        chunkMaskTexture.SetPixels(pixels);
+        chunkMaskTexture.Apply(false, true);
+        return chunkMaskTexture;
     }
 }

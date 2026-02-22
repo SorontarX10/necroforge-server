@@ -11,6 +11,7 @@ public class PlayerHUDController : MonoBehaviour
     [Header("Fills")]
     public Image healthFill;
     public Image healthOverhealFill;
+    public Image healthOverhealPulseFill;
     public Image staminaFill;
     public Image expFill;
 
@@ -20,6 +21,10 @@ public class PlayerHUDController : MonoBehaviour
     [Header("Overheal")]
     [SerializeField] private bool autoCreateOverhealFill = true;
     [SerializeField] private Color overhealColor = new Color(1f, 0.78f, 0.2f, 0.9f);
+    [SerializeField] private Color overhealPulseColor = new Color(1f, 0.96f, 0.58f, 0.95f);
+    [SerializeField, Min(0f)] private float minVisibleOverhealFraction = 0.02f;
+    [SerializeField, Min(0.05f)] private float overhealPulseDecaySeconds = 0.7f;
+    [SerializeField, Min(0f)] private float overhealPulseGainScale = 1f;
 
     [Header("Debug Boss Readability")]
     [SerializeField] private bool showBossReadabilityDebug;
@@ -41,6 +46,7 @@ public class PlayerHUDController : MonoBehaviour
     [SerializeField, Min(64)] private int lowHealthOverlayTextureSize = 256;
 
     private PlayerProgressionController player;
+    private PlayerRelicController playerRelics;
     private BossEncounterController bossEncounter;
     private float nextBossReadabilityRefreshAt;
     private Volume lowHealthVolume;
@@ -54,6 +60,12 @@ public class PlayerHUDController : MonoBehaviour
     private Image lowHealthEdgeOverlayImage;
     private Texture2D lowHealthEdgeOverlayTexture;
     private Sprite lowHealthEdgeOverlaySprite;
+    private float overhealPulseFraction;
+    private static readonly Color DefaultOverhealColor = new(1f, 0.78f, 0.2f, 0.9f);
+    private static readonly Color DefaultOverhealPulseColor = new(1f, 0.96f, 0.58f, 0.95f);
+    private const float DefaultMinVisibleOverhealFraction = 0.02f;
+    private const float DefaultOverhealPulseDecaySeconds = 0.7f;
+    private const float DefaultOverhealPulseGainScale = 1f;
 
     void Start()
     {
@@ -68,8 +80,11 @@ public class PlayerHUDController : MonoBehaviour
             yield return null;
         }
 
-        EnsureOverhealFillReference();
-        ConfigureOverhealFill(healthOverhealFill);
+        RefreshRelicHook();
+        EnsureOverhealRuntimeDefaults();
+        EnsureOverhealFillReferences();
+        ConfigureOverhealFill(healthOverhealFill, overhealColor);
+        ConfigureOverhealFill(healthOverhealPulseFill, overhealPulseColor);
         EnsureOverhealFillRenderOrder();
         InitializeLowHealthVignette();
         EnsureLowHealthEdgeOverlay();
@@ -90,31 +105,30 @@ public class PlayerHUDController : MonoBehaviour
 
     void UpdateBars()
     {
+        RefreshRelicHook();
+        EnsureOverhealRuntimeDefaults();
+        EnsureOverhealFillReferences();
         EnsureOverhealFillRenderOrder();
 
         float maxHealth = Mathf.Max(1f, player.MaxHealth);
         float currentHealth = Mathf.Clamp(player.CurrentHealth, 0f, maxHealth);
         float barrier = Mathf.Max(0f, player.CurrentBarrier);
-        float combinedMax = maxHealth + barrier;
 
-        if (healthFill && combinedMax > 0f)
-            healthFill.fillAmount = Mathf.Clamp01(currentHealth / combinedMax);
+        if (healthFill && maxHealth > 0f)
+            healthFill.fillAmount = Mathf.Clamp01(currentHealth / maxHealth);
 
-        if (healthOverhealFill)
+        float barrierFraction = maxHealth > 0f ? Mathf.Clamp01(barrier / maxHealth) : 0f;
+        bool hasBarrier = barrier > 0.01f && barrierFraction > 0f;
+        if (hasBarrier)
+            barrierFraction = Mathf.Max(barrierFraction, Mathf.Clamp01(minVisibleOverhealFraction));
+
+        if (healthOverhealFill != null)
         {
-            bool hasBarrier = barrier > 0.01f && combinedMax > 0f;
             healthOverhealFill.enabled = hasBarrier;
-
-            if (hasBarrier)
-            {
-                float barrierRatio = barrier / combinedMax;
-                healthOverhealFill.fillAmount = Mathf.Clamp01(barrierRatio);
-            }
-            else
-            {
-                healthOverhealFill.fillAmount = 0f;
-            }
+            healthOverhealFill.fillAmount = hasBarrier ? barrierFraction : 0f;
         }
+
+        UpdateOverhealPulseFill();
 
         if (staminaFill && player.MaxStamina > 0f)
             staminaFill.fillAmount = player.CurrentStamina / player.MaxStamina;
@@ -162,17 +176,40 @@ public class PlayerHUDController : MonoBehaviour
             $"Boss readability [{boss.ArchetypeLabel}] dodge {dodgeRate * 100f:0.#}% | react {avgReactionSeconds * 1000f:0} ms | tele x{durationMultiplier:0.00}";
     }
 
-    private void EnsureOverhealFillReference()
+    private void EnsureOverhealFillReferences()
     {
-        if (healthOverhealFill != null || !autoCreateOverhealFill || healthFill == null)
+        if (healthFill == null)
             return;
+
+        bool shouldAutoCreate = autoCreateOverhealFill || healthOverhealFill == null || healthOverhealPulseFill == null;
+        if (!shouldAutoCreate)
+            return;
+
+        if (healthOverhealFill == null)
+            healthOverhealFill = CreateOverhealFill("HealthOverhealFill", overhealColor);
+
+        if (healthOverhealPulseFill == null)
+            healthOverhealPulseFill = CreateOverhealFill("HealthOverhealPulseFill", overhealPulseColor);
+    }
+
+    private Image CreateOverhealFill(string name, Color color)
+    {
+        if (healthFill == null)
+            return null;
 
         RectTransform source = healthFill.rectTransform;
         if (source == null || source.parent == null)
-            return;
+            return null;
+
+        Transform existing = source.parent.Find(name);
+        if (existing != null && existing.TryGetComponent(out Image existingImage))
+        {
+            ConfigureOverhealFill(existingImage, color);
+            return existingImage;
+        }
 
         var go = new GameObject(
-            "HealthOverhealFill",
+            name,
             typeof(RectTransform),
             typeof(CanvasRenderer),
             typeof(Image)
@@ -189,24 +226,37 @@ public class PlayerHUDController : MonoBehaviour
 
         Image created = go.GetComponent<Image>();
         created.sprite = healthFill.sprite;
-        created.type = Image.Type.Filled;
-        created.fillMethod = Image.FillMethod.Horizontal;
-        created.fillOrigin = (int)Image.OriginHorizontal.Right;
-        created.fillClockwise = true;
-        created.fillAmount = 0f;
         created.preserveAspect = healthFill.preserveAspect;
-        created.material = null;
-        created.raycastTarget = false;
-        created.color = overhealColor;
-
-        int healthIndex = source.GetSiblingIndex();
-        rt.SetSiblingIndex(Mathf.Min(healthIndex + 1, source.parent.childCount - 1));
-
-        healthOverhealFill = created;
-        ConfigureOverhealFill(healthOverhealFill);
+        created.material = healthFill.material;
+        ConfigureOverhealFill(created, color);
+        return created;
     }
 
-    private void ConfigureOverhealFill(Image fill)
+    private void EnsureOverhealRuntimeDefaults()
+    {
+        if (healthFill == null)
+            return;
+
+        if (healthOverhealFill == null || healthOverhealPulseFill == null)
+            autoCreateOverhealFill = true;
+
+        if (overhealColor.a <= 0.001f)
+            overhealColor = DefaultOverhealColor;
+
+        if (overhealPulseColor.a <= 0.001f)
+            overhealPulseColor = DefaultOverhealPulseColor;
+
+        if (minVisibleOverhealFraction <= 0f)
+            minVisibleOverhealFraction = DefaultMinVisibleOverhealFraction;
+
+        if (overhealPulseDecaySeconds <= 0.01f)
+            overhealPulseDecaySeconds = DefaultOverhealPulseDecaySeconds;
+
+        if (overhealPulseGainScale <= 0f)
+            overhealPulseGainScale = DefaultOverhealPulseGainScale;
+    }
+
+    private void ConfigureOverhealFill(Image fill, Color color)
     {
         if (fill == null)
             return;
@@ -215,7 +265,7 @@ public class PlayerHUDController : MonoBehaviour
         fill.fillMethod = Image.FillMethod.Horizontal;
         fill.fillOrigin = (int)Image.OriginHorizontal.Right;
         fill.fillClockwise = true;
-        fill.color = overhealColor;
+        fill.color = color;
         fill.raycastTarget = false;
         fill.enabled = false;
         fill.fillAmount = 0f;
@@ -223,17 +273,92 @@ public class PlayerHUDController : MonoBehaviour
 
     private void EnsureOverhealFillRenderOrder()
     {
-        if (healthFill == null || healthOverhealFill == null)
+        if (healthFill == null)
             return;
 
         RectTransform baseFill = healthFill.rectTransform;
-        RectTransform overhealFill = healthOverhealFill.rectTransform;
-        if (baseFill == null || overhealFill == null || baseFill.parent != overhealFill.parent)
+        if (baseFill == null || baseFill.parent == null)
             return;
 
-        int desiredIndex = Mathf.Min(baseFill.GetSiblingIndex() + 1, baseFill.parent.childCount - 1);
-        if (overhealFill.GetSiblingIndex() != desiredIndex)
-            overhealFill.SetSiblingIndex(desiredIndex);
+        int nextIndex = baseFill.GetSiblingIndex() + 1;
+        nextIndex = SetFillSiblingIndex(healthOverhealFill, baseFill, nextIndex);
+        SetFillSiblingIndex(healthOverhealPulseFill, baseFill, nextIndex);
+    }
+
+    private static int SetFillSiblingIndex(Image fill, RectTransform baseFill, int desiredIndex)
+    {
+        if (fill == null)
+            return desiredIndex;
+
+        RectTransform fillRect = fill.rectTransform;
+        if (fillRect == null || fillRect.parent != baseFill.parent)
+            return desiredIndex;
+
+        int clampedIndex = Mathf.Clamp(desiredIndex, 0, baseFill.parent.childCount - 1);
+        if (fillRect.GetSiblingIndex() != clampedIndex)
+            fillRect.SetSiblingIndex(clampedIndex);
+
+        return clampedIndex + 1;
+    }
+
+    private void UpdateOverhealPulseFill()
+    {
+        if (overhealPulseFraction > 0f)
+        {
+            float decay = Time.unscaledDeltaTime / Mathf.Max(0.05f, overhealPulseDecaySeconds);
+            overhealPulseFraction = Mathf.Max(0f, overhealPulseFraction - decay);
+        }
+
+        if (healthOverhealPulseFill == null)
+            return;
+
+        bool showPulse = overhealPulseFraction > 0.001f;
+        healthOverhealPulseFill.enabled = showPulse;
+        if (!showPulse)
+        {
+            healthOverhealPulseFill.fillAmount = 0f;
+            return;
+        }
+
+        float minVisible = Mathf.Clamp01(minVisibleOverhealFraction);
+        float pulseFraction = Mathf.Max(overhealPulseFraction, minVisible);
+        healthOverhealPulseFill.fillAmount = Mathf.Clamp01(pulseFraction);
+
+        Color pulseColor = overhealPulseColor;
+        float fade = Mathf.Clamp01(overhealPulseFraction * 3f);
+        pulseColor.a *= Mathf.Lerp(0.35f, 1f, fade);
+        healthOverhealPulseFill.color = pulseColor;
+    }
+
+    private void RefreshRelicHook()
+    {
+        if (player == null)
+            return;
+
+        PlayerRelicController resolved = player.GetComponent<PlayerRelicController>();
+        if (resolved == playerRelics)
+            return;
+
+        if (playerRelics != null)
+            playerRelics.OnHealed -= HandlePlayerHealed;
+
+        playerRelics = resolved;
+        if (playerRelics != null)
+            playerRelics.OnHealed += HandlePlayerHealed;
+    }
+
+    private void HandlePlayerHealed(float amount, float overheal)
+    {
+        if (overheal <= 0f || player == null)
+            return;
+
+        float maxHealth = Mathf.Max(1f, player.MaxHealth);
+        float gainScale = Mathf.Max(0f, overhealPulseGainScale);
+        float normalized = Mathf.Clamp01((overheal / maxHealth) * gainScale);
+        if (normalized <= 0f)
+            return;
+
+        overhealPulseFraction = Mathf.Clamp01(overhealPulseFraction + normalized);
     }
 
     private void InitializeLowHealthVignette()
@@ -434,6 +559,9 @@ public class PlayerHUDController : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (playerRelics != null)
+            playerRelics.OnHealed -= HandlePlayerHealed;
+
         if (lowHealthEdgeOverlaySprite != null)
             Destroy(lowHealthEdgeOverlaySprite);
 

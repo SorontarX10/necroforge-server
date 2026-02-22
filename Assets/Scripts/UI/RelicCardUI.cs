@@ -17,14 +17,20 @@ public class RelicCardUI : MonoBehaviour
     [Header("Card Description Fit")]
     [SerializeField, Min(80)] private int maxDescriptionChars = 175;
     [SerializeField, Min(40)] private int smartCutMinChars = 120;
-    [SerializeField] private Vector2 titleSize = new Vector2(186f, 36f);
-    [SerializeField] private Vector2 titlePosition = new Vector2(0f, -120f);
+    [SerializeField] private Vector2 titleSize = new Vector2(166f, 34f);
+    [SerializeField] private Vector2 titlePosition = new Vector2(0f, -112f);
     [SerializeField] private Vector2 descriptionSize = new Vector2(182f, 82f);
     [SerializeField] private Vector2 descriptionPosition = new Vector2(0f, -62f);
     [SerializeField, Min(8f)] private float descriptionMinFont = 10f;
     [SerializeField, Min(8f)] private float descriptionMaxFont = 15f;
     [SerializeField, Min(8f)] private float titleMinFont = 14f;
     [SerializeField, Min(8f)] private float titleMaxFont = 24f;
+    [SerializeField, Min(0f)] private float titleCharacterSpacing = 1.5f;
+    [SerializeField, Min(0f)] private float descriptionCharacterSpacing = 0.9f;
+    [SerializeField] private float cardTextLiftPixels = 4f;
+    [SerializeField] private float titleLiftExtraPixels = 5f;
+    [SerializeField, Range(0.6f, 1f)] private float titleWidthScale = 0.88f;
+    [SerializeField, Min(0f)] private float textBottomInsetPixels = 4f;
     [SerializeField] private string relicIconsResourcesPath = "Textures/UI/UpgradeMenu/Relics";
 
     private RelicDefinition relic;
@@ -122,6 +128,10 @@ public class RelicCardUI : MonoBehaviour
             title.textWrappingMode = TextWrappingModes.Normal;
             title.overflowMode = TextOverflowModes.Ellipsis;
             title.alignment = TextAlignmentOptions.Center;
+            title.characterSpacing = Mathf.Max(0f, titleCharacterSpacing);
+            Vector4 margin = title.margin;
+            margin.w = Mathf.Max(margin.w, textBottomInsetPixels);
+            title.margin = margin;
         }
 
         if (description != null)
@@ -132,6 +142,10 @@ public class RelicCardUI : MonoBehaviour
             description.textWrappingMode = TextWrappingModes.Normal;
             description.overflowMode = TextOverflowModes.Ellipsis;
             description.alignment = TextAlignmentOptions.Top;
+            description.characterSpacing = Mathf.Max(0f, descriptionCharacterSpacing);
+            Vector4 margin = description.margin;
+            margin.w = Mathf.Max(margin.w, textBottomInsetPixels);
+            description.margin = margin;
         }
     }
 
@@ -144,12 +158,12 @@ public class RelicCardUI : MonoBehaviour
             smartCutMinChars = Mathf.Min(120, maxDescriptionChars - 10);
 
         if (titleSize.sqrMagnitude < 1f)
-            titleSize = new Vector2(186f, 36f);
+            titleSize = new Vector2(166f, 34f);
         if (descriptionSize.sqrMagnitude < 1f)
             descriptionSize = new Vector2(182f, 82f);
 
         if (Mathf.Abs(titlePosition.x) < 0.01f && Mathf.Abs(titlePosition.y) < 0.01f)
-            titlePosition = new Vector2(0f, -120f);
+            titlePosition = new Vector2(0f, -112f);
         if (Mathf.Abs(descriptionPosition.x) < 0.01f && Mathf.Abs(descriptionPosition.y) < 0.01f)
             descriptionPosition = new Vector2(0f, -62f);
 
@@ -167,7 +181,7 @@ public class RelicCardUI : MonoBehaviour
     private void ApplyDescriptionLayout()
     {
         RectTransform rect = description.rectTransform;
-        rect.anchoredPosition = descriptionPosition;
+        rect.anchoredPosition = descriptionPosition + Vector2.up * cardTextLiftPixels;
         rect.sizeDelta = descriptionSize;
     }
 
@@ -176,8 +190,10 @@ public class RelicCardUI : MonoBehaviour
         RectTransform rect = title.rectTransform;
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = titlePosition;
-        rect.sizeDelta = titleSize;
+        float lift = Mathf.Max(0f, cardTextLiftPixels + titleLiftExtraPixels);
+        rect.anchoredPosition = titlePosition + Vector2.up * lift;
+        float widthScale = Mathf.Clamp(titleWidthScale, 0.6f, 1f);
+        rect.sizeDelta = new Vector2(titleSize.x * widthScale, titleSize.y);
     }
 
     private string BuildCardDescription(RelicDefinition def)

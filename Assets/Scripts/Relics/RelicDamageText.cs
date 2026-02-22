@@ -12,9 +12,29 @@ public static class RelicDamageText
     private static readonly Color DefaultRelicColor = new(0.72f, 0.5f, 1f, 1f);
     private static readonly Dictionary<int, float> LastEffectTextAt = new();
     private static readonly Dictionary<int, float> LastProcPresentationAt = new();
+    private static readonly Queue<float> ProcDamageEventTimes = new();
+    private static readonly Dictionary<int, float> LastTargetProcAt = new();
+    private static readonly List<int> StaleTargetProcIds = new();
+    private static readonly string[] ProcBudgetLimitedRelicTokens =
+    {
+        "choir",
+        "ossuary",
+        "mortwarden",
+        "ledger",
+        "executioner"
+    };
 
     private const float EffectTextCooldown = 0.35f;
     private const float ProcPresentationCooldown = 0.06f;
+    private const int MaxProcDamageEventsPerFrame = 4;
+    private const int MaxProcDamageEventsPerSecond = 40;
+    private const float TargetProcCooldownSeconds = 0.1f;
+    private const float TargetProcCleanupInterval = 2f;
+    private const float TargetProcStaleAfterSeconds = 8f;
+
+    private static int procDamageFrame = -1;
+    private static int procDamageEventsThisFrame;
+    private static float nextTargetProcCleanupAt;
 
     public static void Deal(
         Combatant target,
@@ -37,6 +57,8 @@ public static class RelicDamageText
             out RelicRarity rarity,
             out string relicId
         );
+        if (!TryConsumeProcBudget(target, relicId, label))
+            return;
 
         string effectText = ShouldShowEffectText(target, label) ? label : null;
         float effectFontSize = Mathf.Max(20f, damageFontSize * 0.72f);
@@ -56,6 +78,81 @@ public static class RelicDamageText
         ReportRelicProcTelemetry(target, clampedDamage, relicId, label, rarity, causedKill);
 
         TrySpawnProcPresentation(target, source, color, rarity);
+    }
+
+    private static bool TryConsumeProcBudget(Combatant target, string relicId, string label)
+    {
+        if (!ShouldLimitProcBudget(relicId, label))
+            return true;
+
+        float now = Time.unscaledTime;
+        int frame = Time.frameCount;
+
+        if (procDamageFrame != frame)
+        {
+            procDamageFrame = frame;
+            procDamageEventsThisFrame = 0;
+        }
+
+        if (procDamageEventsThisFrame >= MaxProcDamageEventsPerFrame)
+            return false;
+
+        float threshold = now - 1f;
+        while (ProcDamageEventTimes.Count > 0 && ProcDamageEventTimes.Peek() < threshold)
+            ProcDamageEventTimes.Dequeue();
+
+        if (ProcDamageEventTimes.Count >= MaxProcDamageEventsPerSecond)
+            return false;
+
+        if (target != null)
+        {
+            int targetId = target.GetInstanceID();
+            if (LastTargetProcAt.TryGetValue(targetId, out float lastProcAt) && now - lastProcAt < TargetProcCooldownSeconds)
+                return false;
+
+            LastTargetProcAt[targetId] = now;
+        }
+
+        CleanupStaleTargetProcTimestamps(now);
+
+        ProcDamageEventTimes.Enqueue(now);
+        procDamageEventsThisFrame++;
+        return true;
+    }
+
+    private static bool ShouldLimitProcBudget(string relicId, string label)
+    {
+        string id = string.IsNullOrWhiteSpace(relicId) ? string.Empty : relicId.ToLowerInvariant();
+        string display = string.IsNullOrWhiteSpace(label) ? string.Empty : label.ToLowerInvariant();
+
+        for (int i = 0; i < ProcBudgetLimitedRelicTokens.Length; i++)
+        {
+            string token = ProcBudgetLimitedRelicTokens[i];
+            if ((id.Length > 0 && id.Contains(token)) || (display.Length > 0 && display.Contains(token)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void CleanupStaleTargetProcTimestamps(float now)
+    {
+        if (now < nextTargetProcCleanupAt || LastTargetProcAt.Count == 0)
+            return;
+
+        float staleThreshold = now - TargetProcStaleAfterSeconds;
+        StaleTargetProcIds.Clear();
+
+        foreach (KeyValuePair<int, float> kv in LastTargetProcAt)
+        {
+            if (kv.Value < staleThreshold)
+                StaleTargetProcIds.Add(kv.Key);
+        }
+
+        for (int i = 0; i < StaleTargetProcIds.Count; i++)
+            LastTargetProcAt.Remove(StaleTargetProcIds[i]);
+
+        nextTargetProcCleanupAt = now + TargetProcCleanupInterval;
     }
 
     public static GameObject CreateGeneratedAuraCircle(
