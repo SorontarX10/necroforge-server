@@ -45,6 +45,8 @@ public class NamelessVespers : RelicEffect
 
 public class NamelessVespersRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color BellColor = new(0.72f, 0.86f, 1f, 0.95f);
+
     private readonly Dictionary<int, float> uniqueHitExpiry = new();
     private readonly List<int> expiredKeys = new(16);
 
@@ -129,6 +131,16 @@ public class NamelessVespersRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
     {
         if (cfg == null)
             return;
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            transform.position + Vector3.up * 0.04f,
+            Mathf.Max(0.9f, cfg.bellRadius),
+            BellColor,
+            0.42f,
+            null,
+            default,
+            "NamelessVespers_BellWave"
+        );
 
         LayerMask mask = cfg.enemyMask.value != 0 ? cfg.enemyMask : LayerMask.GetMask("Enemy", "Zombie");
         Collider[] hits;

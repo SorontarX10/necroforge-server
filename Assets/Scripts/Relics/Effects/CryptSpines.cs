@@ -41,6 +41,8 @@ public class CryptSpines : RelicEffect
 
 public class CryptSpinesRuntime : MonoBehaviour
 {
+    private static readonly Color SpineWaveColor = new(0.62f, 0.88f, 0.36f, 0.95f);
+
     private PlayerRelicController player;
     private CryptSpines cfg;
     private int stacks;
@@ -126,6 +128,16 @@ public class CryptSpinesRuntime : MonoBehaviour
         float range = Mathf.Max(1f, cfg.baseRange + cfg.extraRangePerStack * Mathf.Max(0, stacks - 1));
         float radius = Mathf.Max(0.2f, cfg.waveRadius);
         Vector3 end = start + dir * range;
+
+        RelicGeneratedVfx.SpawnLineWave(
+            start + Vector3.up * 0.02f,
+            dir,
+            range,
+            radius,
+            SpineWaveColor,
+            0.34f,
+            "CryptSpines_Wave"
+        );
 
         Collider[] hits;
         if (mask.value != 0)

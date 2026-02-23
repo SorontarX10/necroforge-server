@@ -92,17 +92,17 @@ public class CenserOfRebukeRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicB
         if (cfg == null)
             return;
 
+        if (cloudEndsAt > 0f && now >= cloudEndsAt)
+        {
+            DeactivateCloud();
+            return;
+        }
+
         if (!IsCloudActive(now) && now >= nextCloudAt)
             ActivateCloud();
 
         if (IsCloudActive(now))
         {
-            if (now >= cloudEndsAt)
-            {
-                DeactivateCloud();
-                return;
-            }
-
             float healPerSec = cfg.baseHealPerSecond + cfg.healPerSecondPerStack * Mathf.Max(0, stacks - 1);
             if (healPerSec > 0f)
                 player?.Progression?.Heal(healPerSec * deltaTime);

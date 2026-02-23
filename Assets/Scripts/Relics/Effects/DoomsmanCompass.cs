@@ -52,6 +52,8 @@ public class DoomsmanCompass : RelicEffect, IDamageModifier
 
 public class DoomsmanCompassRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color CondemnedColor = new(1f, 0.56f, 0.32f, 0.95f);
+
     private PlayerRelicController player;
     private DoomsmanCompass cfg;
     private int stacks;
@@ -105,6 +107,17 @@ public class DoomsmanCompassRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
         {
             nextRetargetAt = now + Mathf.Max(0.1f, cfg.retargetInterval);
             condemnedTarget = FindFarthestEnemy();
+            if (condemnedTarget != null)
+            {
+                RelicGeneratedVfx.SpawnAttachedMarker(
+                    condemnedTarget.transform,
+                    0.82f,
+                    CondemnedColor,
+                    Mathf.Max(0.2f, cfg.retargetInterval),
+                    new Vector3(0f, 0.05f, 0f),
+                    "DoomsmanCompass_Condemned"
+                );
+            }
         }
 
         if (condemnedTarget != null && condemnedTarget.IsDead)

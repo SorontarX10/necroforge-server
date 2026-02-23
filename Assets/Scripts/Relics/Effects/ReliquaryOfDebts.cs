@@ -45,6 +45,8 @@ public class ReliquaryOfDebts : RelicEffect
 
 public class ReliquaryOfDebtsRuntime : MonoBehaviour
 {
+    private static readonly Color DebtExplosionColor = new(0.52f, 0.98f, 0.74f, 0.95f);
+
     private PlayerRelicController player;
     private ReliquaryOfDebts cfg;
     private int stacks;
@@ -117,6 +119,16 @@ public class ReliquaryOfDebtsRuntime : MonoBehaviour
         float explosionMul = cfg.baseExplosionDamageMultiplier +
             cfg.explosionDamageMultiplierPerStack * Mathf.Max(0, stacks - 1);
         float explosionDamage = Mathf.Max(1f, debt * Mathf.Max(0f, explosionMul));
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            target.transform.position + Vector3.up * 0.04f,
+            Mathf.Max(0.8f, cfg.explosionRadius),
+            DebtExplosionColor,
+            0.46f,
+            null,
+            default,
+            "ReliquaryOfDebts_Detonation"
+        );
 
         LayerMask mask = cfg.enemyMask.value != 0 ? cfg.enemyMask : LayerMask.GetMask("Enemy", "Zombie");
         Collider[] hits;

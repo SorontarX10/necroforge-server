@@ -40,6 +40,8 @@ public class SigilOfRot : RelicEffect
 
 public class SigilOfRotRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color RotColor = new(0.66f, 0.9f, 0.42f, 0.95f);
+
     private readonly Dictionary<Combatant, float> markedUntil = new();
 
     private PlayerRelicController player;
@@ -160,6 +162,14 @@ public class SigilOfRotRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatch
 
         debuff.Apply(reduction, duration);
         markedUntil[target] = Time.time + duration;
+        RelicGeneratedVfx.SpawnAttachedMarker(
+            target.transform,
+            0.74f,
+            RotColor,
+            Mathf.Max(0.2f, duration),
+            new Vector3(0f, 0.045f, 0f),
+            "SigilOfRot_Mark"
+        );
     }
 
     private Combatant FindNearestEnemy(Vector3 origin, Combatant exclude)

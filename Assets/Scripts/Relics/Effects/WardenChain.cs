@@ -45,6 +45,8 @@ public class WardenChain : RelicEffect
 
 public class WardenChainRuntime : MonoBehaviour
 {
+    private static readonly Color ChainColor = new(0.68f, 0.9f, 1f, 0.95f);
+
     private PlayerRelicController player;
     private WardenChain cfg;
     private int stacks;
@@ -113,6 +115,14 @@ public class WardenChainRuntime : MonoBehaviour
             return;
 
         chargedUntil = 0f;
+        RelicGeneratedVfx.SpawnBeam(
+            target.transform.position + Vector3.up * 1.0f,
+            transform.position + Vector3.up * 1.0f,
+            0.05f,
+            ChainColor,
+            0.16f,
+            "WardenChain_Pull"
+        );
         PullTarget(target);
 
         float duration = cfg.baseRootDuration + cfg.extraRootDurationPerStack * Mathf.Max(0, stacks - 1);
@@ -120,6 +130,14 @@ public class WardenChainRuntime : MonoBehaviour
         if (rootDebuff == null)
             rootDebuff = target.gameObject.AddComponent<RelicRootDebuff>();
         rootDebuff.Apply(duration);
+        RelicGeneratedVfx.SpawnAttachedMarker(
+            target.transform,
+            0.78f,
+            ChainColor,
+            Mathf.Max(0.15f, duration),
+            new Vector3(0f, 0.045f, 0f),
+            "WardenChain_Root"
+        );
     }
 
     private void PullTarget(Combatant target)

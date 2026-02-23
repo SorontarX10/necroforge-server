@@ -159,10 +159,19 @@ public static class RelicDamageText
         string name,
         float radius,
         RelicRarity rarity,
-        float yThickness = 0.02f
+        float yThickness = 0.02f,
+        Color? edgeAccentColor = null
     )
     {
-        return RelicGeneratedPresentation.CreateAuraCircle(name, radius, RelicRarityColors.Get(rarity), yThickness);
+        Color rarityColor = RelicRarityColors.Get(rarity);
+        Color resolvedEdgeColor = edgeAccentColor ?? rarityColor;
+        return RelicGeneratedPresentation.CreateAuraCircle(
+            name,
+            radius,
+            rarityColor,
+            yThickness,
+            resolvedEdgeColor
+        );
     }
 
     public static GameObject CreateGeneratedCloud(
@@ -196,10 +205,22 @@ public static class RelicDamageText
         string name,
         float auraRadius,
         RelicRarity rarity,
-        bool withBanner
+        bool withBanner,
+        Color? bannerColorOverride = null,
+        Color? auraEdgeColorOverride = null
     )
     {
-        return RelicGeneratedPresentation.CreateStandard(name, auraRadius, RelicRarityColors.Get(rarity), withBanner);
+        Color rarityColor = RelicRarityColors.Get(rarity);
+        Color resolvedBannerColor = bannerColorOverride ?? rarityColor;
+        Color resolvedEdgeColor = auraEdgeColorOverride ?? rarityColor;
+        return RelicGeneratedPresentation.CreateStandard(
+            name,
+            auraRadius,
+            rarityColor,
+            withBanner,
+            resolvedBannerColor,
+            resolvedEdgeColor
+        );
     }
 
     public static GameObject CreateGeneratedMinionBody(
@@ -483,7 +504,13 @@ internal static class RelicGeneratedPresentation
         TryPlaySfx(worldPos, rarity);
     }
 
-    public static GameObject CreateAuraCircle(string name, float radius, Color color, float yThickness)
+    public static GameObject CreateAuraCircle(
+        string name,
+        float radius,
+        Color color,
+        float yThickness,
+        Color? edgeAccentColor = null
+    )
     {
         GameObject root = new(name);
         float safeRadius = Mathf.Max(0.35f, radius);
@@ -502,6 +529,9 @@ internal static class RelicGeneratedPresentation
             emission: 0.22f,
             overrideMaterial: GetAreaRingMaterial()
         );
+
+        if (edgeAccentColor.HasValue)
+            AddAuraEdgeAccent(root.transform, safeRadius, edgeAccentColor.Value);
 
         return root;
     }
@@ -598,7 +628,14 @@ internal static class RelicGeneratedPresentation
         return root;
     }
 
-    public static GameObject CreateStandard(string name, float auraRadius, Color color, bool withBanner)
+    public static GameObject CreateStandard(
+        string name,
+        float auraRadius,
+        Color color,
+        bool withBanner,
+        Color? bannerColorOverride = null,
+        Color? auraEdgeColorOverride = null
+    )
     {
         GameObject root = new(name);
 
@@ -617,27 +654,86 @@ internal static class RelicGeneratedPresentation
         {
             Vector3 bannerPos = new(0.28f, 1.7f, 0f);
             Vector3 bannerScale = new(0.6f, 0.95f, 1f);
-            Color bannerColor = new(color.r, color.g, color.b, 0.62f);
+            Color bannerBaseColor = bannerColorOverride ?? color;
+            float bannerAlpha = bannerColorOverride.HasValue
+                ? Mathf.Clamp(bannerBaseColor.a, 0.65f, 0.92f)
+                : 0.62f;
+            Color bannerColor = new(bannerBaseColor.r, bannerBaseColor.g, bannerBaseColor.b, bannerAlpha);
+            float bannerEmission = bannerColorOverride.HasValue ? 0.62f : 0.34f;
 
             GameObject bannerFront = CreatePrimitiveNoCollider(PrimitiveType.Quad, "Banner_Front", root.transform);
             bannerFront.transform.localPosition = bannerPos;
             bannerFront.transform.localScale = bannerScale;
             bannerFront.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-            Tint(bannerFront.GetComponent<Renderer>(), bannerColor, translucent: true, emission: 0.34f);
+            Tint(bannerFront.GetComponent<Renderer>(), bannerColor, translucent: true, emission: bannerEmission);
 
             // Back face so the flag remains visible from both sides.
             GameObject bannerBack = CreatePrimitiveNoCollider(PrimitiveType.Quad, "Banner_Back", root.transform);
             bannerBack.transform.localPosition = bannerPos;
             bannerBack.transform.localScale = bannerScale;
             bannerBack.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
-            Tint(bannerBack.GetComponent<Renderer>(), bannerColor, translucent: true, emission: 0.34f);
+            Tint(bannerBack.GetComponent<Renderer>(), bannerColor, translucent: true, emission: bannerEmission);
         }
 
         GameObject aura = CreateAuraCircle("Aura", auraRadius, color, 0.02f);
         aura.transform.SetParent(root.transform, false);
         aura.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+        if (auraEdgeColorOverride.HasValue)
+            AddAuraEdgeAccent(aura.transform, auraRadius, auraEdgeColorOverride.Value);
 
         return root;
+    }
+
+    private static void AddAuraEdgeAccent(Transform auraRoot, float auraRadius, Color edgeColor)
+    {
+        if (auraRoot == null)
+            return;
+
+        float safeRadius = Mathf.Max(0.35f, auraRadius);
+        GameObject edge = CreatePrimitiveNoCollider(PrimitiveType.Quad, "Aura_EdgeAccent", auraRoot);
+        if (edge == null)
+            return;
+
+        edge.transform.localPosition = new Vector3(0f, 0.003f, 0f);
+        edge.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        edge.transform.localScale = new Vector3(safeRadius * 2f, safeRadius * 2f, 1f);
+
+        Renderer renderer = edge.GetComponent<Renderer>();
+        if (renderer == null)
+            return;
+
+        Color accent = new(edgeColor.r, edgeColor.g, edgeColor.b, Mathf.Clamp(edgeColor.a, 0.7f, 1f));
+        Tint(
+            renderer,
+            accent,
+            translucent: true,
+            emission: 0.78f,
+            overrideMaterial: GetAreaRingMaterial()
+        );
+
+        Material mat = renderer.sharedMaterial;
+        if (mat == null)
+            return;
+
+        var props = new MaterialPropertyBlock();
+        renderer.GetPropertyBlock(props);
+        if (mat.HasProperty("_BaseColor"))
+            props.SetColor("_BaseColor", accent);
+        if (mat.HasProperty("_Color"))
+            props.SetColor("_Color", accent);
+        if (mat.HasProperty("_InnerAlpha"))
+            props.SetFloat("_InnerAlpha", 0f);
+        if (mat.HasProperty("_EdgeAlpha"))
+            props.SetFloat("_EdgeAlpha", 1f);
+        if (mat.HasProperty("_EdgeWidth"))
+            props.SetFloat("_EdgeWidth", 0.06f);
+        if (mat.HasProperty("_EdgeSoftness"))
+            props.SetFloat("_EdgeSoftness", 0.02f);
+        if (mat.HasProperty("_NoiseStrength"))
+            props.SetFloat("_NoiseStrength", 0.04f);
+        if (mat.HasProperty("_Emission"))
+            props.SetFloat("_Emission", 1.45f);
+        renderer.SetPropertyBlock(props);
     }
 
     public static GameObject CreateMinionBody(string name, Color color)
@@ -1411,3 +1507,358 @@ internal sealed class RelicOneShotAudioHub : MonoBehaviour
         return src;
     }
 }
+public static class RelicGeneratedVfx
+{
+    public static GameObject SpawnGroundCircle(
+        Vector3 position,
+        float radius,
+        Color color,
+        float lifetime,
+        Transform followAnchor = null,
+        Vector3 followOffset = default,
+        string name = "RelicGroundCircle")
+    {
+        GameObject go = RelicGeneratedPresentation.CreateAuraCircle(
+            name,
+            Mathf.Max(0.2f, radius),
+            color,
+            0.02f,
+            color
+        );
+        if (go == null)
+            return null;
+
+        go.transform.position = position;
+        ArmLifetime(go, lifetime, followAnchor, followOffset);
+        return go;
+    }
+
+    public static GameObject SpawnAttachedMarker(
+        Transform anchor,
+        float radius,
+        Color color,
+        float lifetime,
+        Vector3 offset,
+        string name = "RelicMarker")
+    {
+        if (anchor == null)
+            return null;
+
+        Vector3 worldPos = anchor.position + offset;
+        return SpawnGroundCircle(worldPos, radius, color, lifetime, anchor, offset, name);
+    }
+
+    public static GameObject SpawnLineWave(
+        Vector3 start,
+        Vector3 direction,
+        float range,
+        float width,
+        Color color,
+        float lifetime,
+        string name = "RelicLineWave")
+    {
+        Vector3 dir = direction;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.0001f)
+            dir = Vector3.forward;
+        dir.Normalize();
+
+        GameObject go = CreatePrimitiveNoCollider(PrimitiveType.Cube, name);
+        if (go == null)
+            return null;
+
+        go.transform.position = start;
+        go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+        go.transform.localScale = new Vector3(
+            Mathf.Max(0.25f, width * 2f),
+            0.08f,
+            Mathf.Max(0.6f, width * 1.6f)
+        );
+
+        RelicGeneratedPresentation.ApplySolidTintHierarchy(go, color, emission: 0.7f, disableShadows: true);
+
+        var motion = go.GetComponent<RelicGeneratedTravelVfx>();
+        if (motion == null)
+            motion = go.AddComponent<RelicGeneratedTravelVfx>();
+
+        Vector3 end = start + dir * Mathf.Max(0.6f, range);
+        motion.Play(start, end, lifetime, scaleOut: true);
+        return go;
+    }
+
+    public static GameObject SpawnBeam(
+        Vector3 start,
+        Vector3 end,
+        float width,
+        Color color,
+        float lifetime,
+        string name = "RelicBeam")
+    {
+        Vector3 delta = end - start;
+        float len = delta.magnitude;
+        if (len <= 0.001f)
+            return null;
+
+        Vector3 dir = delta / len;
+        GameObject go = CreatePrimitiveNoCollider(PrimitiveType.Cube, name);
+        if (go == null)
+            return null;
+
+        go.transform.position = start + dir * (len * 0.5f);
+        go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+        go.transform.localScale = new Vector3(
+            Mathf.Max(0.03f, width),
+            Mathf.Max(0.03f, width),
+            len
+        );
+
+        RelicGeneratedPresentation.ApplySolidTintHierarchy(go, color, emission: 0.85f, disableShadows: true);
+        ArmLifetime(go, lifetime, null, default);
+        return go;
+    }
+
+    public static GameObject SpawnTravelOrb(
+        Vector3 start,
+        Vector3 end,
+        float scale,
+        Color color,
+        float lifetime,
+        string name = "RelicTravelOrb")
+    {
+        GameObject go = CreatePrimitiveNoCollider(PrimitiveType.Sphere, name);
+        if (go == null)
+            return null;
+
+        go.transform.position = start;
+        go.transform.localScale = Vector3.one * Mathf.Max(0.08f, scale);
+        RelicGeneratedPresentation.ApplySolidTintHierarchy(go, color, emission: 1f, disableShadows: true);
+
+        var motion = go.GetComponent<RelicGeneratedTravelVfx>();
+        if (motion == null)
+            motion = go.AddComponent<RelicGeneratedTravelVfx>();
+        motion.Play(start, end, lifetime, scaleOut: false);
+        return go;
+    }
+
+    public static GameObject SpawnLink(
+        Transform a,
+        Transform b,
+        float width,
+        Color color,
+        float lifetime,
+        string name = "RelicLink")
+    {
+        if (a == null || b == null)
+            return null;
+
+        GameObject go = CreatePrimitiveNoCollider(PrimitiveType.Cylinder, name);
+        if (go == null)
+            return null;
+
+        go.transform.localScale = new Vector3(
+            Mathf.Max(0.03f, width),
+            0.5f,
+            Mathf.Max(0.03f, width)
+        );
+
+        RelicGeneratedPresentation.ApplySolidTintHierarchy(go, color, emission: 0.72f, disableShadows: true);
+
+        var link = go.GetComponent<RelicGeneratedLinkVfx>();
+        if (link == null)
+            link = go.AddComponent<RelicGeneratedLinkVfx>();
+        link.Play(a, b, Mathf.Max(0.03f, width), lifetime);
+
+        return go;
+    }
+
+    private static void ArmLifetime(GameObject go, float lifetime, Transform followAnchor, Vector3 followOffset)
+    {
+        if (go == null)
+            return;
+
+        bool useTracking = followAnchor != null;
+        if (useTracking)
+            RelicVfxTickSystem.Track(followAnchor, go.transform, followOffset);
+
+        var timer = go.GetComponent<RelicGeneratedLifetimeVfx>();
+        if (timer == null)
+            timer = go.AddComponent<RelicGeneratedLifetimeVfx>();
+        timer.Play(Mathf.Max(0.05f, lifetime), useTracking);
+    }
+
+    private static GameObject CreatePrimitiveNoCollider(PrimitiveType type, string name)
+    {
+        GameObject go = GameObject.CreatePrimitive(type);
+        go.name = name;
+        Collider col = go.GetComponent<Collider>();
+        if (col != null)
+            UnityEngine.Object.Destroy(col);
+        return go;
+    }
+}
+
+public sealed class RelicGeneratedLifetimeVfx : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
+{
+    private float endsAt;
+    private bool untrackOnEnd;
+    private bool playing;
+
+    private void OnEnable()
+    {
+        RelicBatchedTickSystem.Register(this);
+    }
+
+    private void OnDisable()
+    {
+        RelicBatchedTickSystem.Unregister(this);
+    }
+
+    public void Play(float lifetime, bool shouldUntrack)
+    {
+        playing = true;
+        endsAt = Time.time + Mathf.Max(0.05f, lifetime);
+        untrackOnEnd = shouldUntrack;
+    }
+
+    public bool IsBatchedUpdateActive => isActiveAndEnabled && playing;
+
+    public float BatchedUpdateInterval => 0.04f;
+
+    public RelicTickArchetype BatchedTickArchetype => RelicTickArchetype.PlayerAura;
+
+    public void TickFromRelicBatch(float now, float deltaTime)
+    {
+        if (!playing || now < endsAt)
+            return;
+
+        playing = false;
+        if (untrackOnEnd)
+            RelicVfxTickSystem.Untrack(transform);
+        RelicVfxTickSystem.Return(gameObject);
+    }
+}
+
+public sealed class RelicGeneratedTravelVfx : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
+{
+    private Vector3 start;
+    private Vector3 end;
+    private float startsAt;
+    private float duration;
+    private bool scaleOut;
+    private Vector3 initialScale;
+    private bool playing;
+
+    private void OnEnable()
+    {
+        RelicBatchedTickSystem.Register(this);
+    }
+
+    private void OnDisable()
+    {
+        RelicBatchedTickSystem.Unregister(this);
+    }
+
+    public void Play(Vector3 from, Vector3 to, float life, bool scaleOut)
+    {
+        start = from;
+        end = to;
+        startsAt = Time.time;
+        duration = Mathf.Max(0.05f, life);
+        this.scaleOut = scaleOut;
+        initialScale = transform.localScale;
+        transform.position = from;
+        playing = true;
+    }
+
+    public bool IsBatchedUpdateActive => isActiveAndEnabled && playing;
+
+    public float BatchedUpdateInterval => 0.016f;
+
+    public RelicTickArchetype BatchedTickArchetype => RelicTickArchetype.PlayerAura;
+
+    public void TickFromRelicBatch(float now, float deltaTime)
+    {
+        if (!playing)
+            return;
+
+        float t = Mathf.Clamp01((now - startsAt) / duration);
+        transform.position = Vector3.Lerp(start, end, t);
+        if (scaleOut)
+            transform.localScale = Vector3.Lerp(initialScale, initialScale * 0.35f, t);
+
+        if (t >= 1f)
+        {
+            playing = false;
+            RelicVfxTickSystem.Return(gameObject);
+        }
+    }
+}
+
+public sealed class RelicGeneratedLinkVfx : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
+{
+    private Transform a;
+    private Transform b;
+    private float width;
+    private float endsAt;
+    private bool playing;
+
+    private void OnEnable()
+    {
+        RelicBatchedTickSystem.Register(this);
+    }
+
+    private void OnDisable()
+    {
+        RelicBatchedTickSystem.Unregister(this);
+    }
+
+    public void Play(Transform a, Transform b, float width, float lifetime)
+    {
+        this.a = a;
+        this.b = b;
+        this.width = Mathf.Max(0.03f, width);
+        endsAt = Time.time + Mathf.Max(0.05f, lifetime);
+        playing = true;
+        UpdateTransform();
+    }
+
+    public bool IsBatchedUpdateActive => isActiveAndEnabled && playing;
+
+    public float BatchedUpdateInterval => 0.02f;
+
+    public RelicTickArchetype BatchedTickArchetype => RelicTickArchetype.PlayerAura;
+
+    public void TickFromRelicBatch(float now, float deltaTime)
+    {
+        if (!playing)
+            return;
+
+        if (a == null || b == null || now >= endsAt)
+        {
+            playing = false;
+            RelicVfxTickSystem.Return(gameObject);
+            return;
+        }
+
+        UpdateTransform();
+    }
+
+    private void UpdateTransform()
+    {
+        if (a == null || b == null)
+            return;
+
+        Vector3 start = a.position + Vector3.up * 0.9f;
+        Vector3 end = b.position + Vector3.up * 0.9f;
+        Vector3 delta = end - start;
+        float len = delta.magnitude;
+        if (len <= 0.001f)
+            len = 0.001f;
+
+        Vector3 dir = delta / len;
+        transform.position = start + dir * (len * 0.5f);
+        transform.rotation = Quaternion.FromToRotation(Vector3.up, dir);
+        transform.localScale = new Vector3(width, len * 0.5f, width);
+    }
+}
+

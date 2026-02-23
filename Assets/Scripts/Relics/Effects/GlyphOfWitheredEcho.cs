@@ -43,6 +43,8 @@ public class GlyphOfWitheredEcho : RelicEffect
 
 public class GlyphOfWitheredEchoRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color EchoColor = new(0.7f, 0.55f, 1f, 0.95f);
+
     private struct PendingEcho
     {
         public Combatant target;
@@ -154,6 +156,11 @@ public class GlyphOfWitheredEchoRuntime : MonoBehaviour, IRelicBatchedUpdate, IR
 
         if (chosen == null || chosen.IsDead)
             return;
+
+        Vector3 start = transform.position + Vector3.up * 1.05f;
+        Vector3 end = chosen.transform.position + Vector3.up * 1.05f;
+        RelicGeneratedVfx.SpawnTravelOrb(start, end, 0.24f, EchoColor, 0.24f, "GlyphWitheredEcho_Orb");
+        RelicGeneratedVfx.SpawnBeam(start, end, 0.05f, EchoColor, 0.16f, "GlyphWitheredEcho_Beam");
 
         float damage = Mathf.Max(1f, echo.sourceDamage * Mathf.Max(0f, cfg.echoDamagePercent));
         RelicDamageText.Deal(chosen, damage, transform, cfg);

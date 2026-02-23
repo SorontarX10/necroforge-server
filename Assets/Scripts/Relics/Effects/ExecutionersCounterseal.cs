@@ -54,6 +54,8 @@ public class ExecutionersCounterseal : RelicEffect, IIncomingHitModifier
 
 public class ExecutionersCountersealRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color ExecutionWaveColor = new(1f, 0.38f, 0.3f, 0.95f);
+
     private readonly HashSet<int> reducedAttackers = new();
     private readonly Dictionary<int, float> recordedUntil = new();
     private readonly List<int> expiredAttackers = new(16);
@@ -154,6 +156,16 @@ public class ExecutionersCountersealRuntime : MonoBehaviour, IRelicBatchedUpdate
         float multiplier = cfg.waveDamageFromKillMultiplier +
             cfg.waveDamagePerStackMultiplier * Mathf.Max(0, stacks - 1);
         float waveDamage = Mathf.Max(cfg.baseWaveDamage, killDamage * Mathf.Max(0f, multiplier));
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            center + Vector3.up * 0.04f,
+            Mathf.Max(0.8f, cfg.waveRadius),
+            ExecutionWaveColor,
+            0.45f,
+            null,
+            default,
+            "ExecutionersCounterseal_Wave"
+        );
 
         LayerMask mask = cfg.enemyMask.value != 0 ? cfg.enemyMask : LayerMask.GetMask("Enemy", "Zombie");
         Collider[] hits;

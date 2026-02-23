@@ -46,6 +46,8 @@ public class MortwardenBrand : RelicEffect
 
 public class MortwardenBrandRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color BrandColor = new(1f, 0.52f, 0.32f, 0.95f);
+
     private struct BrandMarker
     {
         public Vector3 position;
@@ -130,6 +132,16 @@ public class MortwardenBrandRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
             position = target.transform.position,
             expiresAt = Time.time + Mathf.Max(0.1f, cfg.brandDuration)
         });
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            target.transform.position + Vector3.up * 0.04f,
+            0.9f,
+            BrandColor,
+            Mathf.Clamp(cfg.brandDuration, 0.3f, 2.5f),
+            null,
+            default,
+            "MortwardenBrand_Marker"
+        );
     }
 
     private void OnDodged()
@@ -144,6 +156,15 @@ public class MortwardenBrandRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
         for (int b = 0; b < brands.Count; b++)
         {
             Vector3 pos = brands[b].position;
+            RelicGeneratedVfx.SpawnGroundCircle(
+                pos + Vector3.up * 0.04f,
+                Mathf.Max(0.8f, cfg.explosionRadius),
+                BrandColor,
+                0.42f,
+                null,
+                default,
+                "MortwardenBrand_Detonation"
+            );
 
             Collider[] hits;
             if (mask.value != 0)

@@ -56,6 +56,8 @@ public class EpitaphOfIronDawn : RelicEffect, IDamageReductionModifier
 
 public class EpitaphOfIronDawnRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color JudgedColor = new(1f, 0.75f, 0.2f, 0.95f);
+
     private PlayerRelicController player;
     private EpitaphOfIronDawn cfg;
     private int stacks;
@@ -174,11 +176,28 @@ public class EpitaphOfIronDawnRuntime : MonoBehaviour, IRelicBatchedUpdate, IRel
         {
             judgedTarget = target;
             judgedArmed = true;
+            RelicGeneratedVfx.SpawnAttachedMarker(
+                target.transform,
+                0.85f,
+                JudgedColor,
+                1.1f,
+                new Vector3(0f, 0.05f, 0f),
+                "Epitaph_JudgedMarker"
+            );
             return;
         }
 
         float mul = cfg.baseDetonationMultiplier + cfg.detonationMultiplierPerStack * Mathf.Max(0, stacks - 1);
         float detonation = Mathf.Max(cfg.minDetonationDamage, damage * Mathf.Max(0f, mul));
+        RelicGeneratedVfx.SpawnGroundCircle(
+            target.transform.position + Vector3.up * 0.04f,
+            1.2f,
+            JudgedColor,
+            0.42f,
+            null,
+            default,
+            "Epitaph_DetonationPulse"
+        );
         RelicDamageText.Deal(target, detonation, transform, cfg);
 
         judgedTarget = null;

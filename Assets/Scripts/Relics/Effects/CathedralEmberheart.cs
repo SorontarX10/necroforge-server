@@ -60,6 +60,8 @@ public class CathedralEmberheart : RelicEffect, ISpeedModifier
 
 public class CathedralEmberheartRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color EmberColor = new(1f, 0.42f, 0.14f, 0.95f);
+
     private struct TrailSegment
     {
         public Vector3 position;
@@ -179,6 +181,17 @@ public class CathedralEmberheartRuntime : MonoBehaviour, IRelicBatchedUpdate, IR
         embers = 0;
         float duration = cfg.baseAshenDuration + cfg.ashenDurationPerStack * Mathf.Max(0, stacks - 1);
         ashenEndsAt = Time.time + Mathf.Max(0.2f, duration);
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            transform.position + Vector3.up * 0.04f,
+            Mathf.Max(0.9f, cfg.trailRadius * 1.12f),
+            EmberColor,
+            Mathf.Min(1.2f, Mathf.Max(0.35f, duration)),
+            transform,
+            new Vector3(0f, 0.04f, 0f),
+            "CathedralEmberheart_AshenAura"
+        );
+        RelicDamageText.PlayGeneratedEventFeedback(transform, RelicRarity.Legendary, 1.12f);
     }
 
     private void AddTrailSegment(Vector3 position)
@@ -188,6 +201,16 @@ public class CathedralEmberheartRuntime : MonoBehaviour, IRelicBatchedUpdate, IR
             position = position,
             expiresAt = Time.time + Mathf.Max(0.1f, cfg.trailDuration)
         });
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            position + Vector3.up * 0.02f,
+            Mathf.Max(0.3f, cfg.trailRadius * 0.58f),
+            EmberColor,
+            Mathf.Min(0.85f, Mathf.Max(0.25f, cfg.trailDuration)),
+            null,
+            default,
+            "CathedralEmberheart_EmberTrail"
+        );
     }
 
     private void TickTrailDamage()

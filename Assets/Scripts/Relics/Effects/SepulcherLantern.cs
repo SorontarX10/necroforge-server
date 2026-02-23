@@ -46,6 +46,8 @@ public class SepulcherLantern : RelicEffect
 
 public class SepulcherLanternRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color WitherColor = new(0.58f, 0.95f, 0.8f, 0.95f);
+
     private readonly Dictionary<Combatant, float> markedUntil = new();
 
     private PlayerRelicController player;
@@ -174,6 +176,14 @@ public class SepulcherLanternRuntime : MonoBehaviour, IRelicBatchedUpdate, IReli
         slowDebuff.Apply(slowPercent, duration);
 
         markedUntil[target] = Time.time + duration;
+        RelicGeneratedVfx.SpawnAttachedMarker(
+            target.transform,
+            0.76f,
+            WitherColor,
+            Mathf.Max(0.2f, duration),
+            new Vector3(0f, 0.045f, 0f),
+            "SepulcherLantern_Wither"
+        );
     }
 
     private Combatant FindNearestEnemy(Vector3 origin, Combatant exclude)

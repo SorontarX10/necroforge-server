@@ -46,6 +46,8 @@ public class SepulcherLens : RelicEffect
 
 public class SepulcherLensRuntime : MonoBehaviour
 {
+    private static readonly Color RiftColor = new(0.5f, 0.78f, 1f, 0.95f);
+
     private PlayerRelicController player;
     private SepulcherLens cfg;
     private int stacks;
@@ -124,6 +126,11 @@ public class SepulcherLensRuntime : MonoBehaviour
         if (farthest == null)
             return;
 
+        Vector3 from = target.transform.position + Vector3.up * 1.05f;
+        Vector3 to = farthest.transform.position + Vector3.up * 1.05f;
+        RelicGeneratedVfx.SpawnTravelOrb(from, to, 0.21f, RiftColor, 0.22f, "SepulcherLens_DuplicateOrb");
+        RelicGeneratedVfx.SpawnBeam(from, to, 0.04f, RiftColor, 0.12f, "SepulcherLens_DuplicateBeam");
+
         float duplicatedDamage = Mathf.Max(1f, damage * Mathf.Clamp01(cfg.duplicateDamagePercent));
         RelicDamageText.Deal(farthest, duplicatedDamage, transform, cfg);
     }
@@ -140,6 +147,15 @@ public class SepulcherLensRuntime : MonoBehaviour
         riftStart = start;
         riftEnd = start + dir * Mathf.Max(1f, cfg.riftLength);
         riftEndsAt = Time.time + Mathf.Max(0.2f, cfg.riftDuration);
+
+        RelicGeneratedVfx.SpawnBeam(
+            riftStart + Vector3.up * 0.06f,
+            riftEnd + Vector3.up * 0.06f,
+            Mathf.Max(0.05f, cfg.riftRadius * 0.3f),
+            RiftColor,
+            Mathf.Max(0.2f, cfg.riftDuration),
+            "SepulcherLens_Rift"
+        );
     }
 
     private bool IsTargetWithinRift(Vector3 point)

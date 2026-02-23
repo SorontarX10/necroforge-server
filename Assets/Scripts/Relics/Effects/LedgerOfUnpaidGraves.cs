@@ -47,6 +47,8 @@ public class LedgerOfUnpaidGraves : RelicEffect
 
 public class LedgerOfUnpaidGravesRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color DebtWaveColor = new(0.28f, 0.9f, 1f, 0.95f);
+
     private readonly HashSet<Combatant> affectedByWave = new();
 
     private PlayerRelicController player;
@@ -184,6 +186,16 @@ public class LedgerOfUnpaidGravesRuntime : MonoBehaviour, IRelicBatchedUpdate, I
         Vector3 end = start + dir * Mathf.Max(0.5f, cfg.waveRange);
         float radius = Mathf.Max(0.15f, cfg.waveRadius);
         float damage = Mathf.Max(1f, damageValue);
+
+        RelicGeneratedVfx.SpawnLineWave(
+            start + Vector3.up * 0.03f,
+            dir,
+            Mathf.Max(0.5f, cfg.waveRange),
+            radius,
+            DebtWaveColor,
+            0.36f,
+            "LedgerOfUnpaidGraves_DebtWave"
+        );
 
         LayerMask mask = cfg.enemyMask.value != 0 ? cfg.enemyMask : LayerMask.GetMask("Enemy", "Zombie");
         Collider[] hits;

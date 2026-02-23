@@ -105,11 +105,11 @@ public class FuneralStandardRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
 
     public void TickFromRelicBatch(float now, float deltaTime)
     {
+        if (standardEndsAt > 0f && now >= standardEndsAt)
+            EndStandard();
+
         if (!IsStandardActive(now) && now >= nextPlantAt)
             PlantStandard();
-
-        if (IsStandardActive(now) && now >= standardEndsAt)
-            EndStandard();
 
         bool nowInAura = false;
         if (IsStandardActive(now))

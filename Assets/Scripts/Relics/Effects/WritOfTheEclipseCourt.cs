@@ -51,6 +51,8 @@ public class WritOfTheEclipseCourt : RelicEffect
 
 public class WritOfTheEclipseCourtRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color CourtColor = new(0.62f, 0.42f, 1f, 0.95f);
+
     private PlayerRelicController player;
     private WritOfTheEclipseCourt cfg;
     private int stacks;
@@ -168,6 +170,17 @@ public class WritOfTheEclipseCourtRuntime : MonoBehaviour, IRelicBatchedUpdate, 
         courtCenter.y = transform.position.y;
         courtEndsAt = Time.time + Mathf.Max(0.2f, cfg.courtDuration);
         nextTickAt = 0f;
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            courtCenter + Vector3.up * 0.05f,
+            Mathf.Max(0.8f, cfg.courtRadius),
+            CourtColor,
+            Mathf.Max(0.2f, cfg.courtDuration),
+            null,
+            default,
+            "WritEclipseCourt_Field"
+        );
+        RelicDamageText.PlayGeneratedEventFeedback(transform, RelicRarity.Mythic, 1.18f);
     }
 
     private void ApplyCourtDebuffs()
@@ -211,6 +224,16 @@ public class WritOfTheEclipseCourtRuntime : MonoBehaviour, IRelicBatchedUpdate, 
     {
         if (cfg == null)
             return;
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            center + Vector3.up * 0.05f,
+            Mathf.Max(0.7f, cfg.detonationRadius),
+            CourtColor,
+            0.46f,
+            null,
+            default,
+            "WritEclipseCourt_Detonation"
+        );
 
         float damage = cfg.baseDetonationDamage + cfg.detonationDamagePerStack * Mathf.Max(0, stacks - 1);
         damage = Mathf.Max(1f, damage);

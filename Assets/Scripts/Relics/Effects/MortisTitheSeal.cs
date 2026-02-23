@@ -51,6 +51,8 @@ public class MortisTitheSeal : RelicEffect
 
 public class MortisTitheSealRuntime : MonoBehaviour
 {
+    private static readonly Color TitheBoltColor = new(0.45f, 0.96f, 1f, 0.95f);
+
     private struct Candidate
     {
         public Combatant combatant;
@@ -132,16 +134,33 @@ public class MortisTitheSealRuntime : MonoBehaviour
         damage = Mathf.Max(1f, damage);
 
         var targets = FindNearestTargets(Mathf.Max(1, cfg.maxBoltTargets));
+        Vector3 start = transform.position + Vector3.up * 1.1f;
         for (int i = 0; i < targets.Count; i++)
         {
             if (targets[i] != null && !targets[i].IsDead)
+            {
+                Vector3 end = targets[i].transform.position + Vector3.up * 1.05f;
+                RelicGeneratedVfx.SpawnTravelOrb(start, end, 0.22f, TitheBoltColor, 0.24f, "MortisTitheSeal_Bolt");
+                RelicGeneratedVfx.SpawnBeam(start, end, 0.045f, TitheBoltColor, 0.14f, "MortisTitheSeal_Arc");
                 RelicDamageText.Deal(targets[i], damage, transform, cfg);
+            }
         }
 
         float healPct = cfg.baseHealPercent + cfg.healPercentPerStack * Mathf.Max(0, stacks - 1);
         float heal = player.Progression.MaxHealth * Mathf.Clamp(healPct, 0f, 1f);
         if (heal > 0f)
+        {
             player.Progression.Heal(heal);
+            RelicGeneratedVfx.SpawnGroundCircle(
+                transform.position + Vector3.up * 0.04f,
+                1.1f,
+                TitheBoltColor,
+                0.42f,
+                transform,
+                new Vector3(0f, 0.04f, 0f),
+                "MortisTitheSeal_HealPulse"
+            );
+        }
     }
 
     private List<Combatant> FindNearestTargets(int count)

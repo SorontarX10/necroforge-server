@@ -152,13 +152,13 @@ public class OssuaryChoirRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBat
 
     public void TickFromRelicBatch(float now, float deltaTime)
     {
+        if (choirEndsAt > 0f && now >= choirEndsAt)
+            EndChoir();
+
         float pacedWindow = player != null
             ? RelicProcPacingService.GetKillWindow(player, cfg.killWindow, cfg.targetTtkSeconds)
             : Mathf.Max(0.2f, cfg.killWindow);
         CleanupOldKills(pacedWindow, now);
-
-        if (IsChoirActive(now) && now >= choirEndsAt)
-            EndChoir();
     }
 
     private bool IsChoirActive(float now)

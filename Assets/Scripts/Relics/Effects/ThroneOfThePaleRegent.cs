@@ -69,6 +69,8 @@ public class ThroneOfThePaleRegent : RelicEffect, IDamageModifier, ISpeedModifie
 
 public class ThroneOfThePaleRegentRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color RegentMarkColor = new(0.92f, 0.72f, 1f, 0.95f);
+
     private PlayerRelicController player;
     private ThroneOfThePaleRegent cfg;
     private int stacks;
@@ -171,7 +173,17 @@ public class ThroneOfThePaleRegentRuntime : MonoBehaviour, IRelicBatchedUpdate, 
 
         float mirror = damage * Mathf.Clamp01(cfg.mirrorDamagePercent);
         if (mirror > 0f)
+        {
+            RelicGeneratedVfx.SpawnBeam(
+                target.transform.position + Vector3.up * 1.05f,
+                markedTarget.transform.position + Vector3.up * 1.05f,
+                0.045f,
+                RegentMarkColor,
+                0.14f,
+                "ThronePaleRegent_MirrorBeam"
+            );
             RelicDamageText.Deal(markedTarget, mirror, transform, cfg);
+        }
     }
 
     private void OnMeleeKill(Combatant target, float damage, bool isCrit)
@@ -224,6 +236,18 @@ public class ThroneOfThePaleRegentRuntime : MonoBehaviour, IRelicBatchedUpdate, 
 
         markedTarget = best;
         markEndsAt = best != null ? Time.time + Mathf.Max(0.2f, cfg.markDuration) : 0f;
+
+        if (best != null)
+        {
+            RelicGeneratedVfx.SpawnAttachedMarker(
+                best.transform,
+                1.05f,
+                RegentMarkColor,
+                Mathf.Max(0.2f, cfg.markDuration),
+                new Vector3(0f, 0.05f, 0f),
+                "ThronePaleRegent_Mark"
+            );
+        }
     }
 
     private bool IsEliteOrBoss(Combatant c)

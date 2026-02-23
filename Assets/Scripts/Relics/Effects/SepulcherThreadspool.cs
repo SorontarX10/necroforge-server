@@ -42,6 +42,8 @@ public class SepulcherThreadspool : RelicEffect
 
 public class SepulcherThreadspoolRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color StitchColor = new(0.7f, 0.5f, 1f, 0.95f);
+
     private class StitchLink
     {
         public Combatant a;
@@ -153,6 +155,14 @@ public class SepulcherThreadspoolRuntime : MonoBehaviour, IRelicBatchedUpdate, I
             if ((link.a == first && link.b == second) || (link.a == second && link.b == first))
             {
                 link.expiresAt = Time.time + Mathf.Max(0.1f, cfg.stitchDuration);
+                RelicGeneratedVfx.SpawnLink(
+                    first.transform,
+                    second.transform,
+                    0.055f,
+                    StitchColor,
+                    Mathf.Max(0.12f, cfg.stitchDuration),
+                    "SepulcherThreadspool_Link"
+                );
                 return;
             }
         }
@@ -163,6 +173,15 @@ public class SepulcherThreadspoolRuntime : MonoBehaviour, IRelicBatchedUpdate, I
             b = second,
             expiresAt = Time.time + Mathf.Max(0.1f, cfg.stitchDuration)
         });
+
+        RelicGeneratedVfx.SpawnLink(
+            first.transform,
+            second.transform,
+            0.055f,
+            StitchColor,
+            Mathf.Max(0.12f, cfg.stitchDuration),
+            "SepulcherThreadspool_Link"
+        );
     }
 
     private void ApplySharedDamage(Combatant hitTarget, float damage)
@@ -195,6 +214,14 @@ public class SepulcherThreadspoolRuntime : MonoBehaviour, IRelicBatchedUpdate, I
             if (other.GetComponent<PlayerProgressionController>() != null)
                 continue;
 
+            RelicGeneratedVfx.SpawnBeam(
+                hitTarget.transform.position + Vector3.up * 1.0f,
+                other.transform.position + Vector3.up * 1.0f,
+                0.04f,
+                StitchColor,
+                0.12f,
+                "SepulcherThreadspool_Sharing"
+            );
             RelicDamageText.Deal(other, sharedDamage, transform, cfg);
         }
     }

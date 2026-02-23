@@ -36,6 +36,8 @@ public class GravediggerHook : RelicEffect
 
 public class GravediggerHookRuntime : MonoBehaviour
 {
+    private static readonly Color RootColor = new(0.78f, 0.9f, 0.5f, 0.95f);
+
     private PlayerRelicController player;
     private GravediggerHook cfg;
     private int stacks;
@@ -102,5 +104,13 @@ public class GravediggerHookRuntime : MonoBehaviour
             debuff = target.gameObject.AddComponent<RelicRootDebuff>();
 
         debuff.Apply(duration);
+        RelicGeneratedVfx.SpawnAttachedMarker(
+            target.transform,
+            0.72f,
+            RootColor,
+            Mathf.Max(0.15f, duration),
+            new Vector3(0f, 0.04f, 0f),
+            "GravediggerHook_Root"
+        );
     }
 }

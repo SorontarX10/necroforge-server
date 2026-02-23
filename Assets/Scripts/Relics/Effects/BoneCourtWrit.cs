@@ -50,6 +50,11 @@ public class BoneCourtWrit : RelicEffect
 
 public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+    private static readonly Color JudgementRarityColor = RelicRarityColors.Get(RelicRarity.Rare);
+
     private PlayerRelicController player;
     private BoneCourtWrit cfg;
     private int stacks;
@@ -92,17 +97,17 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
         if (cfg == null)
             return;
 
+        if (endsAt > 0f && now >= endsAt)
+        {
+            Deactivate();
+            return;
+        }
+
         if (!IsActive(now) && now >= nextCastAt)
             Activate();
 
         if (IsActive(now))
         {
-            if (now >= endsAt)
-            {
-                Deactivate();
-                return;
-            }
-
             if (now >= nextTickAt)
             {
                 nextTickAt = now + 0.2f;
@@ -139,6 +144,7 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
         {
             visual = RelicVfxTickSystem.Rent(cfg.circlePrefab, transform.position + Vector3.up * 0.05f, Quaternion.identity);
             visualFromPrefabPool = true;
+            ApplyRarityTintToVisual(visual, JudgementRarityColor);
         }
         else
         {
@@ -147,7 +153,8 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
                 cachedGeneratedVisual = RelicDamageText.CreateGeneratedAuraCircle(
                     "BoneCourtWritCircle",
                     cfg.radius,
-                    RelicRarity.Rare
+                    RelicRarity.Rare,
+                    edgeAccentColor: JudgementRarityColor
                 );
             }
 
@@ -182,6 +189,37 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
 
         visual = null;
         visualFromPrefabPool = false;
+    }
+
+    private static void ApplyRarityTintToVisual(GameObject root, Color rarityColor)
+    {
+        if (root == null)
+            return;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        if (renderers == null || renderers.Length == 0)
+            return;
+
+        var props = new MaterialPropertyBlock();
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+                continue;
+
+            Material mat = renderer.sharedMaterial;
+            if (mat == null)
+                continue;
+
+            renderer.GetPropertyBlock(props);
+            if (mat.HasProperty(BaseColorId))
+                props.SetColor(BaseColorId, rarityColor);
+            if (mat.HasProperty(ColorId))
+                props.SetColor(ColorId, rarityColor);
+            if (mat.HasProperty(EmissionColorId))
+                props.SetColor(EmissionColorId, rarityColor * 0.45f);
+            renderer.SetPropertyBlock(props);
+        }
     }
 
     private void ApplyCourtEffects()

@@ -45,6 +45,8 @@ public class CryptJudgement : RelicEffect
 
 public class CryptJudgementRuntime : MonoBehaviour
 {
+    private static readonly Color SlashWaveColor = new(0.42f, 0.92f, 1f, 0.95f);
+
     private PlayerRelicController player;
     private CryptJudgement cfg;
     private int stacks;
@@ -132,6 +134,16 @@ public class CryptJudgementRuntime : MonoBehaviour
         float lineRange = Mathf.Max(1f, cfg.range);
         float lineRadius = Mathf.Max(0.2f, cfg.radius);
         Vector3 end = start + dir * lineRange;
+
+        RelicGeneratedVfx.SpawnLineWave(
+            start + Vector3.up * 0.02f,
+            dir,
+            lineRange,
+            lineRadius,
+            SlashWaveColor,
+            0.36f,
+            "CryptJudgement_SlashWave"
+        );
 
         Collider[] hits;
         if (mask.value != 0)

@@ -49,11 +49,12 @@ public class BlackChapelHourglassRuntime : MonoBehaviour, IRelicBatchedUpdate, I
     private const float FloatingTextHeight = 1.95f;
     private const float FloatingTextSize = 30f;
     private const float EchoStrikeDelaySeconds = 0.07f;
-    private const float EchoGhostLifetimeSeconds = 0.34f;
+    private const float EchoGhostLifetimeSeconds = 0.55f;
 
     private PlayerRelicController player;
     private BlackChapelHourglass cfg;
     private WeaponController weapon;
+    private ICombatInput combatInput;
     private int stacks;
     private bool subscribed;
 
@@ -76,6 +77,7 @@ public class BlackChapelHourglassRuntime : MonoBehaviour, IRelicBatchedUpdate, I
     {
         player = GetComponent<PlayerRelicController>();
         weapon = GetComponentInChildren<WeaponController>(true);
+        combatInput = ResolveCombatInput();
     }
 
     private void OnEnable()
@@ -173,8 +175,12 @@ public class BlackChapelHourglassRuntime : MonoBehaviour, IRelicBatchedUpdate, I
 
     private void OnMeleeHit(Combatant target, float damage, bool isCrit)
     {
-        if (damage > 0f)
+        bool attackPressed = IsAttackInputPressed();
+        if (damage > 0f && attackPressed)
             lastHitDamage = damage;
+
+        if (!attackPressed)
+            return;
 
         if (applyingEcho)
             return;
@@ -244,6 +250,31 @@ public class BlackChapelHourglassRuntime : MonoBehaviour, IRelicBatchedUpdate, I
 
         return weapon != null ? weapon.transform : null;
     }
+
+    private bool IsAttackInputPressed()
+    {
+        combatInput = ResolveCombatInput();
+        return combatInput != null && combatInput.IsAttacking();
+    }
+
+    private ICombatInput ResolveCombatInput()
+    {
+        if (weapon == null)
+            weapon = GetComponentInChildren<WeaponController>(true);
+
+        if (weapon != null && weapon.combatInputSource != null)
+            return weapon.combatInputSource;
+
+        ICombatInput fromSelf = GetComponent<ICombatInput>();
+        if (fromSelf != null)
+            return fromSelf;
+
+        ICombatInput fromChildren = GetComponentInChildren<ICombatInput>(true);
+        if (fromChildren != null)
+            return fromChildren;
+
+        return GetComponentInParent<ICombatInput>();
+    }
 }
 
 public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
@@ -251,10 +282,10 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-    private static readonly Color GhostColor = new(0.33f, 0.76f, 1f, 0.85f);
+    private static readonly Color GhostColor = new(0.22f, 0.78f, 1f, 1f);
 
-    private const float FollowPositionSharpness = 26f;
-    private const float FollowRotationSharpness = 32f;
+    private const float FollowPositionSharpness = 34f;
+    private const float FollowRotationSharpness = 40f;
 
     private static Material sharedGhostMaterial;
 
@@ -269,14 +300,16 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
     private float duration;
     private Vector3 smoothedOffset;
 
-    private readonly Vector3 offsetTarget = new(0.12f, 0.02f, -0.08f);
-    private readonly Vector3 offsetStart = new(0.28f, 0.08f, -0.2f);
+    private readonly Vector3 offsetTarget = new(0.34f, 0.06f, -0.14f);
+    private readonly Vector3 offsetStart = new(0.56f, 0.14f, -0.26f);
 
     public bool IsPlaying => playing;
 
     public void Bind(Transform target)
     {
         followTarget = target;
+        if (followTarget != null)
+            gameObject.layer = followTarget.gameObject.layer;
         EnsureInitialized();
     }
 
@@ -354,23 +387,23 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
         Material ghostMaterial = GetSharedGhostMaterial();
 
         GameObject blade = CreatePrimitiveNoCollider(PrimitiveType.Cube, "GhostBlade", transform);
-        blade.transform.localPosition = new Vector3(0f, 0.86f, 0f);
-        blade.transform.localScale = new Vector3(0.06f, 1.28f, 0.14f);
+        blade.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+        blade.transform.localScale = new Vector3(0.1f, 1.42f, 0.2f);
         AddRenderer(blade, ghostMaterial);
 
         GameObject tip = CreatePrimitiveNoCollider(PrimitiveType.Cube, "GhostTip", transform);
-        tip.transform.localPosition = new Vector3(0f, 1.62f, 0f);
-        tip.transform.localScale = new Vector3(0.045f, 0.24f, 0.12f);
+        tip.transform.localPosition = new Vector3(0f, 1.74f, 0f);
+        tip.transform.localScale = new Vector3(0.08f, 0.24f, 0.16f);
         AddRenderer(tip, ghostMaterial);
 
         GameObject guard = CreatePrimitiveNoCollider(PrimitiveType.Cube, "GhostGuard", transform);
         guard.transform.localPosition = new Vector3(0f, 0.14f, 0f);
-        guard.transform.localScale = new Vector3(0.22f, 0.06f, 0.2f);
+        guard.transform.localScale = new Vector3(0.32f, 0.07f, 0.24f);
         AddRenderer(guard, ghostMaterial);
 
         GameObject grip = CreatePrimitiveNoCollider(PrimitiveType.Cube, "GhostGrip", transform);
         grip.transform.localPosition = new Vector3(0f, -0.2f, 0f);
-        grip.transform.localScale = new Vector3(0.09f, 0.36f, 0.09f);
+        grip.transform.localScale = new Vector3(0.11f, 0.36f, 0.11f);
         AddRenderer(grip, ghostMaterial);
     }
 
@@ -388,6 +421,7 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
 
         renderer.shadowCastingMode = ShadowCastingMode.Off;
         renderer.receiveShadows = false;
+        go.layer = gameObject.layer;
         renderers.Add(renderer);
     }
 
@@ -404,9 +438,14 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
     {
         props ??= new MaterialPropertyBlock();
 
-        float alpha = Mathf.Clamp01(0.85f * intensity);
+        float alpha = Mathf.Clamp01(Mathf.Lerp(0.12f, 0.98f, intensity));
         Color tint = new(GhostColor.r, GhostColor.g, GhostColor.b, alpha);
-        Color emission = tint * Mathf.Lerp(0.65f, 0.2f, 1f - intensity);
+        Color emission = new(
+            GhostColor.r * Mathf.Lerp(0.8f, 2.2f, intensity),
+            GhostColor.g * Mathf.Lerp(0.9f, 2.4f, intensity),
+            GhostColor.b * Mathf.Lerp(1.2f, 3.0f, intensity),
+            1f
+        );
 
         for (int i = 0; i < renderers.Count; i++)
         {
@@ -427,6 +466,8 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
         GameObject go = GameObject.CreatePrimitive(type);
         go.name = name;
         go.transform.SetParent(parent, false);
+        if (parent != null)
+            go.layer = parent.gameObject.layer;
 
         Collider col = go.GetComponent<Collider>();
         if (col != null)
@@ -460,15 +501,17 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
         if (sharedGhostMaterial.HasProperty("_Surface"))
             sharedGhostMaterial.SetFloat("_Surface", 1f);
         if (sharedGhostMaterial.HasProperty("_Blend"))
-            sharedGhostMaterial.SetFloat("_Blend", 0f);
+            sharedGhostMaterial.SetFloat("_Blend", 1f);
         if (sharedGhostMaterial.HasProperty("_ZWrite"))
             sharedGhostMaterial.SetFloat("_ZWrite", 0f);
         if (sharedGhostMaterial.HasProperty("_SrcBlend"))
             sharedGhostMaterial.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
         if (sharedGhostMaterial.HasProperty("_DstBlend"))
-            sharedGhostMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            sharedGhostMaterial.SetFloat("_DstBlend", (float)BlendMode.One);
+        if (sharedGhostMaterial.HasProperty("_EmissionColor"))
+            sharedGhostMaterial.EnableKeyword("_EMISSION");
 
-        sharedGhostMaterial.renderQueue = (int)RenderQueue.Transparent;
+        sharedGhostMaterial.renderQueue = (int)RenderQueue.Transparent + 180;
         return sharedGhostMaterial;
     }
 

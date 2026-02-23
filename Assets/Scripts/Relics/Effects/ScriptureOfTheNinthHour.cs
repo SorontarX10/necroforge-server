@@ -60,6 +60,9 @@ public class ScriptureOfTheNinthHour : RelicEffect, IIncomingHitModifier, IMaxHe
 
 public class ScriptureOfTheNinthHourRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color CondemnedColor = new(1f, 0.42f, 0.62f, 0.95f);
+    private static readonly Color FailedColor = new(0.4f, 0.25f, 0.25f, 0.95f);
+
     private PlayerRelicController player;
     private ScriptureOfTheNinthHour cfg;
     private int stacks;
@@ -138,6 +141,27 @@ public class ScriptureOfTheNinthHourRuntime : MonoBehaviour, IRelicBatchedUpdate
         condemnationResolved = attacker == null;
         condemnedTarget = attacker;
         condemnedEndsAt = Time.time + Mathf.Max(0.1f, cfg.condemnedDuration);
+
+        if (attacker != null)
+        {
+            RelicGeneratedVfx.SpawnAttachedMarker(
+                attacker.transform,
+                0.9f,
+                CondemnedColor,
+                Mathf.Max(0.2f, cfg.condemnedDuration),
+                new Vector3(0f, 0.05f, 0f),
+                "ScriptureNinthHour_Condemned"
+            );
+            RelicGeneratedVfx.SpawnBeam(
+                transform.position + Vector3.up * 1.05f,
+                attacker.transform.position + Vector3.up * 1.05f,
+                0.045f,
+                CondemnedColor,
+                0.16f,
+                "ScriptureNinthHour_Link"
+            );
+        }
+
         return 0f;
     }
 
@@ -201,6 +225,16 @@ public class ScriptureOfTheNinthHourRuntime : MonoBehaviour, IRelicBatchedUpdate
         float pct = Mathf.Clamp01(cfg.failedPenaltyMaxHealthPercent);
         penaltyFlatHealthLoss = player.Progression.MaxHealth * pct;
         penaltyEndsAt = Time.time + Mathf.Max(0.2f, cfg.failedPenaltyDuration);
+
+        RelicGeneratedVfx.SpawnGroundCircle(
+            transform.position + Vector3.up * 0.04f,
+            1.3f,
+            FailedColor,
+            0.5f,
+            transform,
+            new Vector3(0f, 0.04f, 0f),
+            "ScriptureNinthHour_Failure"
+        );
 
         player.Progression.NotifyStatsChanged();
         player.Progression.currentHealth = Mathf.Min(player.Progression.currentHealth, player.Progression.MaxHealth);

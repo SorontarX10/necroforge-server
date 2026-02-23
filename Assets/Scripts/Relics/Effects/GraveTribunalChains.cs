@@ -52,6 +52,8 @@ public class GraveTribunalChains : RelicEffect
 
 public class GraveTribunalChainsRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color ChainColor = new(0.55f, 0.84f, 1f, 0.95f);
+
     private struct Candidate
     {
         public Combatant combatant;
@@ -183,6 +185,14 @@ public class GraveTribunalChainsRuntime : MonoBehaviour, IRelicBatchedUpdate, IR
             outgoing.Apply(Mathf.Clamp01(cfg.outgoingDamageReduction), Mathf.Max(0.1f, duration));
 
             boundUntil[target.GetInstanceID()] = activeEndsAt;
+            RelicGeneratedVfx.SpawnAttachedMarker(
+                target.transform,
+                0.85f,
+                ChainColor,
+                Mathf.Max(0.2f, duration),
+                new Vector3(0f, 0.05f, 0f),
+                "GraveTribunalChains_Bound"
+            );
         }
     }
 

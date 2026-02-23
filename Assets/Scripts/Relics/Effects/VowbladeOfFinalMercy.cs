@@ -47,6 +47,8 @@ public class VowbladeOfFinalMercy : RelicEffect
 
 public class VowbladeOfFinalMercyRuntime : MonoBehaviour
 {
+    private static readonly Color MercyCutColor = new(1f, 0.62f, 0.22f, 0.95f);
+
     private PlayerRelicController player;
     private VowbladeOfFinalMercy cfg;
     private int stacks;
@@ -121,9 +123,19 @@ public class VowbladeOfFinalMercyRuntime : MonoBehaviour
         if (target == null || target.IsDead)
             return;
 
+        Vector3 targetPos = target.transform.position + Vector3.up * 0.04f;
         float healthPct = target.CurrentHealth / Mathf.Max(1f, target.MaxHealth);
         if (healthPct <= Mathf.Clamp01(cfg.executeHealthThresholdPercent))
         {
+            RelicGeneratedVfx.SpawnGroundCircle(
+                targetPos,
+                1.1f,
+                MercyCutColor,
+                0.42f,
+                null,
+                default,
+                "VowbladeFinalMercy_Execute"
+            );
             RelicDamageText.Deal(target, target.CurrentHealth + 5f, transform, cfg);
             return;
         }
@@ -146,6 +158,19 @@ public class VowbladeOfFinalMercyRuntime : MonoBehaviour
             bonusDamage = recentHitDamage * Mathf.Max(0f, mul);
         }
 
+        Vector3 slashDir = Vector3.ProjectOnPlane(target.transform.position - transform.position, Vector3.up);
+        if (slashDir.sqrMagnitude < 0.001f)
+            slashDir = transform.forward;
+
+        RelicGeneratedVfx.SpawnLineWave(
+            targetPos + Vector3.up * 0.02f,
+            slashDir,
+            2.4f,
+            0.65f,
+            MercyCutColor,
+            0.24f,
+            "VowbladeFinalMercy_Cut"
+        );
         RelicDamageText.Deal(target, Mathf.Max(1f, bonusDamage), transform, cfg);
     }
 }
