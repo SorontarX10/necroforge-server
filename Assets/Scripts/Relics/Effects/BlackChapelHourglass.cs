@@ -258,7 +258,7 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
 
     private static Material sharedGhostMaterial;
 
-    private readonly MaterialPropertyBlock props = new();
+    private MaterialPropertyBlock props;
     private readonly System.Collections.Generic.List<Renderer> renderers = new();
 
     private Transform followTarget;
@@ -402,6 +402,8 @@ public sealed class HourglassEchoSwordGhostVfx : MonoBehaviour
 
     private void UpdateTint(float intensity)
     {
+        props ??= new MaterialPropertyBlock();
+
         float alpha = Mathf.Clamp01(0.85f * intensity);
         Color tint = new(GhostColor.r, GhostColor.g, GhostColor.b, alpha);
         Color emission = tint * Mathf.Lerp(0.65f, 0.2f, 1f - intensity);

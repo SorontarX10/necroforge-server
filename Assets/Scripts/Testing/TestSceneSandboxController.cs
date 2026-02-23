@@ -29,6 +29,7 @@ namespace GrassSim.Testing
         private const string OssuaryChoirRelicId = "legendary_ossuary_choir";
         private const string BlackChapelHourglassRelicId = "rare_black_chapel_hourglass";
         private const string BlackMassCenserRelicId = "mythic_black_mass_censer";
+        private const string FloatingTextPrefabPath = "Assets/Prefabs/UI/FloatingText.prefab";
 
         private static TestSceneSandboxController instance;
 
@@ -121,8 +122,8 @@ namespace GrassSim.Testing
             }
 
             DisableAutonomousSpawners();
-            FloatingTextSystem.EnsureInstance();
             ResolveAssetReferences();
+            ConfigureFloatingTextSystem();
             SpawnFreshSandboxPlayer();
             BuildAllCatalogs();
             SetCursorLockMode(false);
@@ -728,6 +729,26 @@ namespace GrassSim.Testing
                 if (loadedLibraries != null && loadedLibraries.Length > 0)
                     relicLibrary = loadedLibraries[0];
             }
+        }
+
+        private void ConfigureFloatingTextSystem()
+        {
+            FloatingTextSystem system = FloatingTextSystem.EnsureInstance();
+            if (system == null)
+                return;
+
+            FloatingText floatingTextPrefab = Resources.Load<FloatingText>("UI/FloatingText");
+#if UNITY_EDITOR
+            if (floatingTextPrefab == null)
+                floatingTextPrefab = AssetDatabase.LoadAssetAtPath<FloatingText>(FloatingTextPrefabPath);
+#endif
+            if (floatingTextPrefab == null)
+            {
+                Debug.LogWarning("[TestSceneSandbox] Missing FloatingText prefab for sandbox configuration.", this);
+                return;
+            }
+
+            system.prefab = floatingTextPrefab;
         }
 
         private void BuildAllCatalogs()

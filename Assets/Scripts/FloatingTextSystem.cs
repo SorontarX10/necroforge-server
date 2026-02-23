@@ -1,11 +1,19 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using GrassSim.Core;
 using TMPro;
+using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class FloatingTextSystem : MonoBehaviour
 {
     public static FloatingTextSystem Instance;
+    private const string RuntimeFloatingTextResourcePath = "UI/FloatingText";
+#if UNITY_EDITOR
+    private const string EditorFloatingTextPrefabPath = "Assets/Prefabs/UI/FloatingText.prefab";
+#endif
 
     public FloatingText prefab;
 
@@ -44,7 +52,7 @@ public class FloatingTextSystem : MonoBehaviour
         if (Instance != null)
             return Instance;
 
-        FloatingTextSystem existing = Object.FindFirstObjectByType<FloatingTextSystem>();
+        FloatingTextSystem existing = UnityEngine.Object.FindFirstObjectByType<FloatingTextSystem>();
         if (existing != null)
         {
             Instance = existing;
@@ -139,14 +147,11 @@ public class FloatingTextSystem : MonoBehaviour
                 : Camera.main;
 
             if (cam == null)
-                cam = Object.FindFirstObjectByType<Camera>();
+                cam = UnityEngine.Object.FindFirstObjectByType<Camera>();
 
             if (cam != null && canvas != null)
                 canvas.worldCamera = cam;
         }
-
-        if (cam == null)
-            return;
 
         int frame = Time.frameCount;
         if (spawnFrame != frame)
@@ -169,7 +174,15 @@ public class FloatingTextSystem : MonoBehaviour
         activeTextCount++;
 
         ft.transform.position = worldPos;
-        ft.Init(cam, value, color, fontSize, ReturnTextToPool);
+        try
+        {
+            ft.Init(cam, value, color, fontSize, ReturnTextToPool);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex, this);
+            ReturnTextToPool(ft);
+        }
     }
 
     private FloatingText RentText()
@@ -184,10 +197,16 @@ public class FloatingTextSystem : MonoBehaviour
             return cached;
         }
 
-        if (prefab == null || canvas == null)
+        if (prefab == null)
             return null;
 
-        FloatingText created = Instantiate(prefab, canvas.transform);
+        Transform parent = PrefabRequiresCanvasParent(prefab)
+            ? canvas != null ? canvas.transform : null
+            : transform;
+        if (parent == null)
+            return null;
+
+        FloatingText created = Instantiate(prefab, parent);
         if (created != null && !created.gameObject.activeSelf)
             created.gameObject.SetActive(true);
 
@@ -213,7 +232,15 @@ public class FloatingTextSystem : MonoBehaviour
 
     private void EnsurePrefabAssigned()
     {
-        if (prefab != null)
+        if (prefab != null && IsPrefabUsable(prefab))
+            return;
+
+        prefab = Resources.Load<FloatingText>(RuntimeFloatingTextResourcePath);
+#if UNITY_EDITOR
+        if (prefab == null)
+            prefab = AssetDatabase.LoadAssetAtPath<FloatingText>(EditorFloatingTextPrefabPath);
+#endif
+        if (prefab != null && IsPrefabUsable(prefab))
             return;
 
         runtimeFallbackPrefabRoot = BuildRuntimeFallbackPrefab();
@@ -233,6 +260,7 @@ public class FloatingTextSystem : MonoBehaviour
         GameObject textRoot = new GameObject("Text");
         textRoot.transform.SetParent(root.transform, false);
         TextMeshPro tmp = textRoot.AddComponent<TextMeshPro>();
+        textRoot.transform.localScale = Vector3.one * 24f;
         tmp.text = string.Empty;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.textWrappingMode = TextWrappingModes.NoWrap;
@@ -245,5 +273,23 @@ public class FloatingTextSystem : MonoBehaviour
         fallback.text = tmp;
         root.SetActive(false);
         return root;
+    }
+
+    private static bool PrefabRequiresCanvasParent(FloatingText source)
+    {
+        if (source == null)
+            return false;
+
+        TMP_Text text = source.text != null ? source.text : source.GetComponentInChildren<TMP_Text>(true);
+        return text is TextMeshProUGUI;
+    }
+
+    private static bool IsPrefabUsable(FloatingText source)
+    {
+        if (source == null)
+            return false;
+
+        TMP_Text text = source.text != null ? source.text : source.GetComponentInChildren<TMP_Text>(true);
+        return text != null;
     }
 }

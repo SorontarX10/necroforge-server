@@ -1,5 +1,5 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 
 public class FloatingText : MonoBehaviour
 {
@@ -31,6 +31,13 @@ public class FloatingText : MonoBehaviour
         if (text == null)
             text = GetComponentInChildren<TMP_Text>(true);
 
+        if (text == null)
+        {
+            Debug.LogWarning("[FloatingText] TMP_Text reference missing. Popup will be skipped.", this);
+            Complete();
+            return;
+        }
+
         text.text = content;
         text.color = color;
         text.fontSize = fontSize;
@@ -46,7 +53,7 @@ public class FloatingText : MonoBehaviour
 
         transform.position += Vector3.up * floatSpeed * dt;
 
-        // ✅ BILLBOARD – ZAWSZE W STRONĘ KAMERY
+        // Billboard always towards camera.
         if (cam != null)
         {
             transform.LookAt(
@@ -55,7 +62,12 @@ public class FloatingText : MonoBehaviour
             );
         }
 
-        // fade
+        if (text == null)
+        {
+            Complete();
+            return;
+        }
+
         if (t >= fadeStart)
         {
             float a = Mathf.Lerp(1f, 0f, (t - fadeStart) / (lifetime - fadeStart));
