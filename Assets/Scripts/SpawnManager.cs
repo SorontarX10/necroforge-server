@@ -1,8 +1,11 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 public class SpawnManager : MonoBehaviour
 {
+    private const string TestSceneName = "TestScene";
+
     [Header("Spawn Area")]
     public Vector3 center = Vector3.zero;
     public Vector3 size = new Vector3(50f, 0f, 50f);
@@ -33,6 +36,13 @@ public class SpawnManager : MonoBehaviour
 
     void Start()
     {
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (activeScene.IsValid() && string.Equals(activeScene.name, TestSceneName, System.StringComparison.Ordinal))
+        {
+            enabled = false;
+            return;
+        }
+
         if (!player)
         {
             Debug.LogError("SpawnManager: Player reference missing!");

@@ -21,14 +21,35 @@ public class EnemyAgent : Agent
 
     public override void OnEpisodeBegin()
     {
-        combatant.Initialize(maxHealth);
-        stamina = maxStamina;
+        if (!combatant)
+            combatant = GetComponent<Combatant>();
+
+        if (!combatant)
+        {
+            Debug.LogWarning("[EnemyAgent] Missing Combatant component. Disabling agent.", this);
+            enabled = false;
+            return;
+        }
+
+        float resolvedMaxHealth = Mathf.Max(1f, maxHealth);
+        combatant.Initialize(resolvedMaxHealth);
+        stamina = Mathf.Max(0f, maxStamina);
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        sensor.AddObservation(combatant.currentHealth / maxHealth);
-        sensor.AddObservation(stamina / maxStamina);
+        if (!combatant)
+        {
+            sensor.AddObservation(0f);
+            sensor.AddObservation(0f);
+            return;
+        }
+
+        float hpDenominator = Mathf.Max(1f, maxHealth);
+        float staminaDenominator = Mathf.Max(0.01f, maxStamina);
+
+        sensor.AddObservation(combatant.currentHealth / hpDenominator);
+        sensor.AddObservation(stamina / staminaDenominator);
     }
 
     public override void OnActionReceived(ActionBuffers actions)

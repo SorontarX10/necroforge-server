@@ -91,8 +91,6 @@ public class WorldMapController : MonoBehaviour
     private bool collectibleMarkersDirty = true;
     private float lastMinimapMarkerScale = -1f;
     private Rect minimapUvWindow = new Rect(0f, 0f, 1f, 1f);
-    private bool legacyFallbackChecked;
-    private bool legacyFallbackAvailable = true;
 
     private readonly Dictionary<int, MapTargetMarker> chestMarkers = new Dictionary<int, MapTargetMarker>();
     private readonly Dictionary<int, MapTargetMarker> enhancerMarkers = new Dictionary<int, MapTargetMarker>();
@@ -182,7 +180,7 @@ public class WorldMapController : MonoBehaviour
             mapRoot.SetActive(false);
 
         if (minimapRoot != null)
-            minimapRoot.SetActive(showMinimap);
+            minimapRoot.SetActive(false);
 
         mapVisible = false;
         SetCaptureOverlayVisible(true);
@@ -190,6 +188,10 @@ public class WorldMapController : MonoBehaviour
         yield return StartCoroutine(BakeMapTextureRoutine());
         BuildFogTexture();
         SetCaptureOverlayVisible(false);
+
+        if (minimapRoot != null)
+            minimapRoot.SetActive(showMinimap);
+
         collectibleMarkersDirty = true;
         RefreshCollectibleMarkersFromRegistry(forceRefresh: true);
 
@@ -252,43 +254,10 @@ public class WorldMapController : MonoBehaviour
 #if ENABLE_LEGACY_INPUT_MANAGER
         if (!toggleRequested)
             toggleRequested = Input.GetKeyDown(legacyToggleKey);
-#else
-        if (!toggleRequested)
-            toggleRequested = TryLegacyToggleFallback();
 #endif
 
         if (toggleRequested)
             SetMapVisible(!mapVisible);
-    }
-
-    private bool TryLegacyToggleFallback()
-    {
-        if (!legacyFallbackAvailable)
-            return false;
-
-        if (!legacyFallbackChecked)
-        {
-            legacyFallbackChecked = true;
-            try
-            {
-                _ = Input.anyKey;
-            }
-            catch
-            {
-                legacyFallbackAvailable = false;
-                return false;
-            }
-        }
-
-        try
-        {
-            return Input.GetKeyDown(KeyCode.M);
-        }
-        catch
-        {
-            legacyFallbackAvailable = false;
-            return false;
-        }
     }
 
     private void SetMapVisible(bool visible)

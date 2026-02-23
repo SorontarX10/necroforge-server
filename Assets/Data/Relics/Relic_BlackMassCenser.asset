@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Relic_BlackMassCenser
   m_EditorClassIdentifier: Assembly-CSharp::BlackMassCenser
   displayName: Black Mass Censer
-  description: Rites alternate every 8s. Wrath grants +25% damage and +20% swing speed. Mercy grants +30% damage reduction and +18 HP/s. Kills extend the current rite.
+  description: Rites alternate every 8s. Wrath grants +25% damage and +20% swing speed. Mercy grants +16% damage reduction and +12 HP/s. Kills extend the current rite.
   riteDuration: 8
   extendOnKill: 0.5
   maxExtraDuration: 4

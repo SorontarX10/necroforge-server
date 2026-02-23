@@ -71,6 +71,9 @@ public class AnvilOfNightOathsRuntime : MonoBehaviour, IRelicBatchedUpdate, IRel
     private float forgedEndsAt;
 
     public bool IsForgedActive => Time.time < forgedEndsAt;
+    public int ForgedHitProgress => forgedHits;
+    public int HitsToForge => cfg != null ? Mathf.Max(1, cfg.hitsToForge) : 0;
+    public float ForgedTimeRemaining => Mathf.Max(0f, forgedEndsAt - Time.time);
 
     private void Awake()
     {
@@ -132,7 +135,9 @@ public class AnvilOfNightOathsRuntime : MonoBehaviour, IRelicBatchedUpdate, IRel
 
     private void OnMeleeHit(Combatant target, float damage, bool isCrit)
     {
-        if (cfg == null || target == null || target.IsDead)
+        // OnMeleeHitDealt is raised after damage is applied, so killing blows can already have target.IsDead == true.
+        // We still want those hits to count toward forging progress.
+        if (cfg == null || target == null)
             return;
 
         if (IsForgedActive)

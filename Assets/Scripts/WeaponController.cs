@@ -3,6 +3,9 @@ using GrassSim.Combat;
 using GrassSim.Core;
 using GrassSim.Stats;
 using GrassSim.Enhancers;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 public class WeaponController : MonoBehaviour
 {
@@ -143,7 +146,7 @@ public class WeaponController : MonoBehaviour
         if (weaponPivot == null || combatInputSource == null) return;
 
         // 🔁 RESET (PPM) – tylko gdy NIE atakujemy
-        if (!combatInputSource.IsAttacking() && Input.GetKeyDown(resetKey))
+        if (!combatInputSource.IsAttacking() && WasResetPressedThisFrame())
             isResetting = true;
 
         if (isResetting)
@@ -305,6 +308,70 @@ public class WeaponController : MonoBehaviour
             hasBounce = false;
         }
     }
+
+    private bool WasResetPressedThisFrame()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (WasResetPressedWithInputSystem())
+            return true;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        return Input.GetKeyDown(resetKey);
+#else
+        return false;
+#endif
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    private bool WasResetPressedWithInputSystem()
+    {
+        var mouse = Mouse.current;
+        switch (resetKey)
+        {
+            case KeyCode.Mouse0:
+                return mouse != null && mouse.leftButton.wasPressedThisFrame;
+            case KeyCode.Mouse1:
+                return mouse != null && mouse.rightButton.wasPressedThisFrame;
+            case KeyCode.Mouse2:
+                return mouse != null && mouse.middleButton.wasPressedThisFrame;
+            case KeyCode.Mouse3:
+                return mouse != null && mouse.forwardButton.wasPressedThisFrame;
+            case KeyCode.Mouse4:
+                return mouse != null && mouse.backButton.wasPressedThisFrame;
+        }
+
+        var keyboard = Keyboard.current;
+        if (keyboard == null)
+            return false;
+
+        switch (resetKey)
+        {
+            case KeyCode.Space:
+                return keyboard.spaceKey.wasPressedThisFrame;
+            case KeyCode.Tab:
+                return keyboard.tabKey.wasPressedThisFrame;
+            case KeyCode.Escape:
+                return keyboard.escapeKey.wasPressedThisFrame;
+            case KeyCode.Return:
+            case KeyCode.KeypadEnter:
+                return keyboard.enterKey.wasPressedThisFrame;
+            case KeyCode.LeftShift:
+                return keyboard.leftShiftKey.wasPressedThisFrame;
+            case KeyCode.RightShift:
+                return keyboard.rightShiftKey.wasPressedThisFrame;
+            case KeyCode.LeftControl:
+                return keyboard.leftCtrlKey.wasPressedThisFrame;
+            case KeyCode.RightControl:
+                return keyboard.rightCtrlKey.wasPressedThisFrame;
+            case KeyCode.LeftAlt:
+                return keyboard.leftAltKey.wasPressedThisFrame;
+            case KeyCode.RightAlt:
+                return keyboard.rightAltKey.wasPressedThisFrame;
+        }
+
+        return false;
+    }
+#endif
 
     private bool TryDrainStamina(float dt)
     {

@@ -16,6 +16,9 @@ namespace GrassSim.Core
         [Header("Upgrades")]
         public UpgradeLibrary upgradeLibrary;
 
+        [Header("Experience")]
+        [SerializeField] private bool enableLeveling = true;
+
         [Header("Runtime")]
         public RuntimeStats stats;
         public PlayerExperience xp = new PlayerExperience();
@@ -33,6 +36,27 @@ namespace GrassSim.Core
 
         public bool IsDead => currentHealth <= 0f;
         public bool IsChoosingUpgrade { get; private set; }
+        public bool LevelingEnabled
+        {
+            get => enableLeveling;
+            set
+            {
+                if (enableLeveling == value)
+                    return;
+
+                enableLeveling = value;
+                if (enableLeveling)
+                    return;
+
+                pendingLevelUps = 0;
+                if (!IsChoosingUpgrade)
+                    return;
+
+                IsChoosingUpgrade = false;
+                OnUpgradeMenuStateChanged?.Invoke(false);
+                Time.timeScale = 1f;
+            }
+        }
 
         // Hook for UI
         public event Action<List<UpgradeOption>> OnLevelUpOptionsRolled;
@@ -86,6 +110,30 @@ namespace GrassSim.Core
 
         private void TickRegen(float dt)
         {
+            if (GameSettings.GodMode)
+            {
+                float godModeMaxHealth = MaxHealth;
+                float godModeMaxStamina = MaxStamina;
+                bool changed = false;
+
+                if (!Mathf.Approximately(currentHealth, godModeMaxHealth))
+                {
+                    currentHealth = godModeMaxHealth;
+                    changed = true;
+                }
+
+                if (!Mathf.Approximately(currentStamina, godModeMaxStamina))
+                {
+                    currentStamina = godModeMaxStamina;
+                    changed = true;
+                }
+
+                if (changed)
+                    OnStatsChanged?.Invoke();
+
+                return;
+            }
+
             float maxHealth = MaxHealth;
             if (stats.healthRegen > 0f && currentHealth < maxHealth)
             {
@@ -109,6 +157,9 @@ namespace GrassSim.Core
 
         public void TakeDamage(float amount)
         {
+            if (GameSettings.GodMode)
+                return;
+
             if (amount <= 0f || IsDead)
                 return;
 
@@ -283,6 +334,12 @@ namespace GrassSim.Core
 
         public bool TrySpendStamina(float cost)
         {
+            if (GameSettings.GodMode)
+            {
+                currentStamina = MaxStamina;
+                return true;
+            }
+
             if (cost <= 0f) return true;
             if (currentStamina < cost) return false;
  
@@ -300,6 +357,9 @@ namespace GrassSim.Core
 
         public void AddExp(int amount)
         {
+            if (!enableLeveling)
+                return;
+
             int levelsGained = xp.AddExpAndGetLevelUps(amount);
             if (levelsGained <= 0)
                 return;
@@ -384,6 +444,9 @@ namespace GrassSim.Core
 
         private void TryStartNextUpgradeRoll()
         {
+            if (!enableLeveling)
+                return;
+
             if (IsChoosingUpgrade || pendingLevelUps <= 0)
                 return;
 

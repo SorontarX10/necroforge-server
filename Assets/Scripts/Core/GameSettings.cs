@@ -11,6 +11,7 @@ public static class GameSettings
 
     // GAMEPLAY
     public static float MouseSensitivity { get; private set; } = 1f;
+    public static bool GodMode { get; private set; } = false;
 
     // GRAPHICS
     public static bool Fullscreen { get; private set; } = true;
@@ -44,6 +45,12 @@ public static class GameSettings
         OnMouseSensitivityChanged?.Invoke();
     }
 
+    public static void SetGodMode(bool value)
+    {
+        GodMode = value;
+        Save();
+    }
+
     // ===== GRAPHICS =====
     public static void SetFullscreen(bool value)
     {
@@ -59,6 +66,7 @@ public static class GameSettings
         MusicVolume  = PlayerPrefs.GetFloat("opt_music", 0.8f);
         SfxVolume    = PlayerPrefs.GetFloat("opt_sfx", 0.8f);
         MouseSensitivity = PlayerPrefs.GetFloat("opt_mouse", 1f);
+        GodMode = PlayerPrefs.GetInt("opt_godmode", 0) == 1;
         Fullscreen = PlayerPrefs.GetInt("opt_fullscreen", 1) == 1;
 
         Apply();
@@ -70,6 +78,7 @@ public static class GameSettings
         PlayerPrefs.SetFloat("opt_music", MusicVolume);
         PlayerPrefs.SetFloat("opt_sfx", SfxVolume);
         PlayerPrefs.SetFloat("opt_mouse", MouseSensitivity);
+        PlayerPrefs.SetInt("opt_godmode", GodMode ? 1 : 0);
         PlayerPrefs.SetInt("opt_fullscreen", Fullscreen ? 1 : 0);
         PlayerPrefs.Save();
     }

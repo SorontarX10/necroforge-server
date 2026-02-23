@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RelicDefinition
   id: mythic_black_mass_censer
   displayName: Black Mass Censer
-  description: Rites alternate every 8s. Wrath grants +25% damage and +20% swing speed. Mercy grants +30% damage reduction and +18 HP/s. Kills extend the current rite.
+  description: Rites alternate every 8s. Wrath grants +25% damage and +20% swing speed. Mercy grants +16% damage reduction and +12 HP/s. Kills extend the current rite.
   icon: {fileID: 21300000, guid: f136fb542ada44bdb341b8a6a190a734, type: 3}
   rarity: 4
   stackable: 1

@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
 using GrassSim.Combat;
+using UnityEngine.SceneManagement;
 
 public class SpawnManagerML : MonoBehaviour
 {
+    private const string TestSceneName = "TestScene";
+
     [Header("Prefabs")]
     public GameObject enemyPrefab;
     public GameObject zombiePrefab;
@@ -22,6 +25,9 @@ public class SpawnManagerML : MonoBehaviour
     [Header("Fallback Health (only if agent missing)")]
     public float defaultSpawnHealth = 100f;
 
+    [Header("Scene Guard")]
+    [SerializeField] private bool disableInTestScene = true;
+
     private readonly List<GameObject> enemies = new();
     private readonly List<GameObject> zombies = new();
     private readonly List<GameObject> simPlayers = new();
@@ -30,6 +36,12 @@ public class SpawnManagerML : MonoBehaviour
 
     private void Awake()
     {
+        if (ShouldDisableForCurrentScene())
+        {
+            enabled = false;
+            return;
+        }
+
         player = GameObject.FindGameObjectWithTag("Player")?.transform;
         SpawnInitial();
     }
@@ -192,5 +204,15 @@ public class SpawnManagerML : MonoBehaviour
 
             Destroy(owner);
         }
+    }
+
+    private bool ShouldDisableForCurrentScene()
+    {
+        if (!disableInTestScene)
+            return false;
+
+        Scene activeScene = SceneManager.GetActiveScene();
+        return activeScene.IsValid()
+               && string.Equals(activeScene.name, TestSceneName, System.StringComparison.Ordinal);
     }
 }

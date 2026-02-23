@@ -43,11 +43,33 @@ public class PauseMenuController : MonoBehaviour
             GameTimerController.Instance.gameEnded)
             return;
 
+        bool togglePressed = false;
+
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null)
+        {
 #if UNITY_EDITOR
-        if (Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame)
+            togglePressed =
+                Keyboard.current.pKey.wasPressedThisFrame
+                || Keyboard.current.escapeKey.wasPressedThisFrame;
 #else
-        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            togglePressed = Keyboard.current.escapeKey.wasPressedThisFrame;
 #endif
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (!togglePressed)
+        {
+#if UNITY_EDITOR
+            togglePressed = Input.GetKeyDown(KeyCode.P) || Input.GetKeyDown(KeyCode.Escape);
+#else
+            togglePressed = Input.GetKeyDown(KeyCode.Escape);
+#endif
+        }
+#endif
+
+        if (togglePressed)
         {
             if (!isPaused)
                 Pause();

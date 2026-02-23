@@ -3,6 +3,9 @@ using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 using GrassSim.Combat;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 public abstract class BaseCombatAgent : Agent
 {
@@ -87,10 +90,55 @@ public abstract class BaseCombatAgent : Agent
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var cont = actionsOut.ContinuousActions;
-        cont[0] = Input.GetAxis("Horizontal");
-        cont[1] = Input.GetAxis("Vertical");
-        cont[2] = Mathf.Clamp(Input.GetAxis("Mouse X"), -1f, 1f);
-        cont[3] = Mathf.Clamp(Input.GetAxis("Mouse Y"), -1f, 1f);
+        Vector2 move = ReadMoveInput();
+        Vector2 look = ReadLookInput();
+
+        cont[0] = move.x;
+        cont[1] = move.y;
+        cont[2] = Mathf.Clamp(look.x, -1f, 1f);
+        cont[3] = Mathf.Clamp(look.y, -1f, 1f);
+    }
+
+    private static Vector2 ReadMoveInput()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var keyboard = Keyboard.current;
+        if (keyboard == null)
+            return Vector2.zero;
+
+        float horizontal = 0f;
+        float vertical = 0f;
+
+        if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
+            horizontal -= 1f;
+        if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
+            horizontal += 1f;
+        if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed)
+            vertical -= 1f;
+        if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
+            vertical += 1f;
+
+        return new Vector2(Mathf.Clamp(horizontal, -1f, 1f), Mathf.Clamp(vertical, -1f, 1f));
+#elif ENABLE_LEGACY_INPUT_MANAGER
+        return new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
+#else
+        return Vector2.zero;
+#endif
+    }
+
+    private static Vector2 ReadLookInput()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var mouse = Mouse.current;
+        if (mouse == null)
+            return Vector2.zero;
+
+        return mouse.delta.ReadValue();
+#elif ENABLE_LEGACY_INPUT_MANAGER
+        return new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+#else
+        return Vector2.zero;
+#endif
     }
 
     protected float GetDistanceToTarget()

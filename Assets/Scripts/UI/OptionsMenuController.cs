@@ -8,11 +8,15 @@ public class OptionsMenuController : MonoBehaviour
     public Slider sfxVolume;
     public Slider mouseSensitivity;
     public Toggle fullscreenToggle;
+    public Toggle godModeToggle;
 
     private bool isInitializing = false;
+    private const string GodModeToggleObjectName = "GodMode";
+    private const string GodModeLabel = "GOD MODE";
 
     void OnEnable()
     {
+        EnsureGodModeToggle();
         isInitializing = true;
 
         masterVolume.SetValueWithoutNotify(GameSettings.MasterVolume);
@@ -20,6 +24,8 @@ public class OptionsMenuController : MonoBehaviour
         sfxVolume.SetValueWithoutNotify(GameSettings.SfxVolume);
         mouseSensitivity.SetValueWithoutNotify(GameSettings.MouseSensitivity);
         fullscreenToggle.SetIsOnWithoutNotify(GameSettings.Fullscreen);
+        if (godModeToggle != null)
+            godModeToggle.SetIsOnWithoutNotify(GameSettings.GodMode);
 
         isInitializing = false;
     }
@@ -82,5 +88,54 @@ public class OptionsMenuController : MonoBehaviour
     {
         if (isInitializing) return;
         GameSettings.SetFullscreen(v);
+    }
+
+    public void OnGodMode(bool v)
+    {
+        if (isInitializing) return;
+        GameSettings.SetGodMode(v);
+    }
+
+    private void EnsureGodModeToggle()
+    {
+        if (godModeToggle != null)
+            return;
+
+        if (fullscreenToggle == null || fullscreenToggle.transform.parent == null)
+            return;
+
+        Transform parent = fullscreenToggle.transform.parent;
+        Transform existing = parent.Find(GodModeToggleObjectName);
+        if (existing != null)
+        {
+            godModeToggle = existing.GetComponent<Toggle>();
+            ConfigureGodModeToggle();
+            return;
+        }
+
+        GameObject clone = Instantiate(fullscreenToggle.gameObject, parent);
+        clone.name = GodModeToggleObjectName;
+        clone.transform.SetSiblingIndex(fullscreenToggle.transform.GetSiblingIndex() + 1);
+
+        RectTransform fullRect = fullscreenToggle.GetComponent<RectTransform>();
+        RectTransform cloneRect = clone.GetComponent<RectTransform>();
+        if (fullRect != null && cloneRect != null)
+            cloneRect.anchoredPosition = fullRect.anchoredPosition + new Vector2(0f, -30f);
+
+        godModeToggle = clone.GetComponent<Toggle>();
+        ConfigureGodModeToggle();
+    }
+
+    private void ConfigureGodModeToggle()
+    {
+        if (godModeToggle == null)
+            return;
+
+        Text[] labels = godModeToggle.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < labels.Length; i++)
+            labels[i].text = GodModeLabel;
+
+        godModeToggle.onValueChanged = new Toggle.ToggleEvent();
+        godModeToggle.onValueChanged.AddListener(OnGodMode);
     }
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 - 2026-02-23
+
+### Test Scene Sandbox
+- Added a dedicated `TestScene` sandbox bootstrap that auto-spawns a clean player test runtime.
+- Added an in-game test panel for selecting and applying any relics, enhancers, and upgrade entries.
+- Added full loadout editing in runtime: stack increase/decrease, individual remove, full clear, and instant player rebuild.
+- Added direct zombie arena controls: spawn waves, clear all spawned zombies, and switch between walking or standing zombie mode.
+- Disabled autonomous spawn systems in `TestScene` during sandbox runtime, so tests are deterministic.
+- Added quick utility actions for test flow: respawn with preserved loadout, refill health/stamina, cursor lock toggle, and catalog refresh.
+
 ## 0.5.2 - 2026-02-22
 
 ### Gameplay

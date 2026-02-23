@@ -1,4 +1,7 @@
 using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerLookSyncWithCinemachine : MonoBehaviour
@@ -15,15 +18,15 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
     void Awake()
     {
         cc = GetComponent<CharacterController>();
-        if (cameraFollow == null)
-        {
-            Debug.LogError(
-                "PlayerLookSyncWithCinemachine: przypisz cameraFollow (MainCamera / VirtualCamera Follow)!",
-                this
-            );
-            enabled = false;
+        cameraFollow ??= ResolveCameraFollow();
+        if (cameraFollow != null)
             return;
-        }
+
+        Debug.LogWarning(
+            "PlayerLookSyncWithCinemachine: brak cameraFollow i nie znaleziono aktywnej kamery. Komponent zostaje wyłączony.",
+            this
+        );
+        enabled = false;
     }
 
     void Update()
@@ -33,12 +36,8 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
 
     private void SyncRotationWithCamera()
     {
-        // Pobierz wektor ruchu (input lub CharacterController)
-        Vector3 movementInput = new Vector3(
-            Input.GetAxis("Horizontal"),
-            0f,
-            Input.GetAxis("Vertical")
-        );
+        Vector2 moveInput = ReadMoveInput();
+        Vector3 movementInput = new Vector3(moveInput.x, 0f, moveInput.y);
 
         // Jeżeli gracz się nie rusza — nie zmieniaj rotacji
         if (movementInput.sqrMagnitude < 0.001f)
@@ -62,5 +61,50 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
                 targetRotation,
                 rotationSpeed * Time.deltaTime
             );
+    }
+
+    private static Vector2 ReadMoveInput()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var keyboard = Keyboard.current;
+        if (keyboard == null)
+            return Vector2.zero;
+
+        float horizontal = 0f;
+        float vertical = 0f;
+
+        if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
+            horizontal -= 1f;
+        if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
+            horizontal += 1f;
+        if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed)
+            vertical -= 1f;
+        if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
+            vertical += 1f;
+
+        return new Vector2(Mathf.Clamp(horizontal, -1f, 1f), Mathf.Clamp(vertical, -1f, 1f));
+#elif ENABLE_LEGACY_INPUT_MANAGER
+        return new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
+#else
+        return Vector2.zero;
+#endif
+    }
+
+    private static Transform ResolveCameraFollow()
+    {
+        if (Camera.main != null)
+            return Camera.main.transform;
+
+        Camera[] cameras = FindObjectsByType<Camera>(FindObjectsSortMode.None);
+        for (int i = 0; i < cameras.Length; i++)
+        {
+            Camera cam = cameras[i];
+            if (cam == null || !cam.isActiveAndEnabled || !cam.gameObject.activeInHierarchy)
+                continue;
+
+            return cam.transform;
+        }
+
+        return null;
     }
 }

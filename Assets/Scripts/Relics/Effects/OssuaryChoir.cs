@@ -74,6 +74,38 @@ public class OssuaryChoirRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBat
     private int stacks;
     private bool subscribed;
     private float choirEndsAt;
+    public bool IsChoirActiveNow => Time.time < choirEndsAt;
+    public float ChoirTimeRemaining => Mathf.Max(0f, choirEndsAt - Time.time);
+    public int ActiveSkullCount => skulls.Count;
+    public int KillProgress => killTimes.Count;
+    public int RequiredKills
+    {
+        get
+        {
+            if (cfg == null)
+                return 0;
+
+            return RelicProcPacingService.GetKillsRequired(
+                player,
+                Mathf.Max(1, cfg.killsRequired),
+                cfg.targetTtkSeconds
+            );
+        }
+    }
+    public float KillWindowSeconds
+    {
+        get
+        {
+            if (cfg == null)
+                return 0f;
+
+            return RelicProcPacingService.GetKillWindow(
+                player,
+                cfg.killWindow,
+                cfg.targetTtkSeconds
+            );
+        }
+    }
 
     private void Awake()
     {

@@ -82,6 +82,11 @@ public class BlackMassCenser : RelicEffect, IDamageModifier, ISwingSpeedModifier
 
 public class BlackMassCenserRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
+    private static readonly Color WrathTextColor = new(1f, 0.42f, 0.32f, 1f);
+    private static readonly Color MercyTextColor = new(0.46f, 0.9f, 0.58f, 1f);
+    private const float FloatingTextHeight = 2.05f;
+    private const float FloatingTextSize = 32f;
+
     private PlayerRelicController player;
     private BlackMassCenser cfg;
     private int stacks;
@@ -93,6 +98,7 @@ public class BlackMassCenserRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
     private float riteHardCapAt;
 
     public BlackMassCenser.RiteType CurrentRite => currentRite;
+    public float RiteTimeRemaining => Mathf.Max(0f, riteEndsAt - Time.time);
 
     private void Awake()
     {
@@ -174,6 +180,7 @@ public class BlackMassCenserRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
         currentRite = rite;
         riteEndsAt = Time.time + Mathf.Max(0.2f, cfg.riteDuration);
         riteHardCapAt = riteEndsAt + Mathf.Max(0f, cfg.maxExtraDuration);
+        SpawnRiteSwitchText(rite);
     }
 
     private void OnMeleeKill(Combatant target, float damage, bool isCrit)
@@ -182,5 +189,16 @@ public class BlackMassCenserRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
             return;
 
         riteEndsAt = Mathf.Min(riteHardCapAt, riteEndsAt + Mathf.Max(0f, cfg.extendOnKill));
+    }
+
+    private void SpawnRiteSwitchText(BlackMassCenser.RiteType rite)
+    {
+        if (FloatingTextSystem.Instance == null)
+            return;
+
+        string label = rite == BlackMassCenser.RiteType.Wrath ? "Rite: WRATH" : "Rite: MERCY";
+        Color color = rite == BlackMassCenser.RiteType.Wrath ? WrathTextColor : MercyTextColor;
+        Vector3 pos = transform.position + Vector3.up * FloatingTextHeight;
+        FloatingTextSystem.Instance.SpawnText(pos, label, color, FloatingTextSize);
     }
 }
