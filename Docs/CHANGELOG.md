@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 - 2026-03-01
+
+### Release
+- Bumped application version to `0.7.0`.
+- Updated test sandbox version fallback to `0.7.0`.
+
 ## 0.6.2 - 2026-03-01
 
 ### Gameplay Feel and Control

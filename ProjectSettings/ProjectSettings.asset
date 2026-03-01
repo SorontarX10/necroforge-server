@@ -141,9 +141,9 @@ PlayerSettings:
   vulkanEnableLateAcquireNextImage: 0
   vulkanEnableCommandBufferRecycling: 1
   loadStoreDebugModeEnabled: 0
-  visionOSBundleVersion: 0.6.1
-  tvOSBundleVersion: 0.6.1
-  bundleVersion: 0.6.1
+  visionOSBundleVersion: 0.7.0
+  tvOSBundleVersion: 0.7.0
+  bundleVersion: 0.7.0
   preloadedAssets:
   - {fileID: -944628639613478452, guid: 492e4e481677855448fabc2ff3c886f4, type: 3}
   - {fileID: 0}

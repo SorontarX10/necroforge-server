@@ -1274,7 +1274,7 @@ namespace GrassSim.Testing
         private static string GetSandboxWindowTitle()
         {
             string version = string.IsNullOrWhiteSpace(Application.version)
-                ? "0.6.2"
+                ? "0.7.0"
                 : Application.version;
 
             return $"{version} Test Sandbox";
