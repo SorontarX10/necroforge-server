@@ -166,6 +166,7 @@ public class FuneralStandardRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelic
         {
             standardVisual = RelicVfxTickSystem.Rent(visualPrefab, standardPosition, Quaternion.identity);
             SetVisualNonBlocking(standardVisual);
+            RelicVisualRarityTint.Apply(standardVisual, RelicRarity.Uncommon);
         }
 
         RelicDamageText.PlayGeneratedEventFeedback(transform, RelicRarity.Uncommon, 1.05f);

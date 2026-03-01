@@ -14,6 +14,7 @@ public class BossEmissiveLutProfile : ScriptableObject
 
     [SerializeField] private Color fallbackLutColor = Color.white;
     [SerializeField, Min(0.1f)] private float fallbackGlowScale = 1f;
+    [SerializeField, Min(0.1f)] private float globalGlowScaleCap = 1.35f;
     [SerializeField] private EmissiveEntry[] entries =
     {
         new EmissiveEntry { archetype = BossEnemyController.BossArchetype.Zombie, lutColor = new Color(0.24f, 0.95f, 0.38f, 1f), glowScale = 0.95f },
@@ -33,26 +34,27 @@ public class BossEmissiveLutProfile : ScriptableObject
                     continue;
 
                 lutColor = entry.lutColor;
-                glowScale = Mathf.Max(0.1f, entry.glowScale);
+                glowScale = Mathf.Min(Mathf.Max(0.1f, entry.glowScale), Mathf.Max(0.1f, globalGlowScaleCap));
                 return true;
             }
         }
 
         lutColor = fallbackLutColor;
-        glowScale = Mathf.Max(0.1f, fallbackGlowScale);
+        glowScale = Mathf.Min(Mathf.Max(0.1f, fallbackGlowScale), Mathf.Max(0.1f, globalGlowScaleCap));
         return false;
     }
 
     private void OnValidate()
     {
         fallbackGlowScale = Mathf.Max(0.1f, fallbackGlowScale);
+        globalGlowScaleCap = Mathf.Max(0.1f, globalGlowScaleCap);
         if (entries == null)
             return;
 
         for (int i = 0; i < entries.Length; i++)
         {
             EmissiveEntry entry = entries[i];
-            entry.glowScale = Mathf.Max(0.1f, entry.glowScale);
+            entry.glowScale = Mathf.Min(Mathf.Max(0.1f, entry.glowScale), globalGlowScaleCap);
             entries[i] = entry;
         }
     }

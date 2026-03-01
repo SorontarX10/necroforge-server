@@ -50,9 +50,6 @@ public class BoneCourtWrit : RelicEffect
 
 public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
-    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-    private static readonly int ColorId = Shader.PropertyToID("_Color");
-    private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
     private static readonly Color JudgementRarityColor = RelicRarityColors.Get(RelicRarity.Rare);
 
     private PlayerRelicController player;
@@ -144,7 +141,7 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
         {
             visual = RelicVfxTickSystem.Rent(cfg.circlePrefab, transform.position + Vector3.up * 0.05f, Quaternion.identity);
             visualFromPrefabPool = true;
-            ApplyRarityTintToVisual(visual, JudgementRarityColor);
+            RelicVisualRarityTint.Apply(visual, JudgementRarityColor, 0.5f);
         }
         else
         {
@@ -191,37 +188,6 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
         visualFromPrefabPool = false;
     }
 
-    private static void ApplyRarityTintToVisual(GameObject root, Color rarityColor)
-    {
-        if (root == null)
-            return;
-
-        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-        if (renderers == null || renderers.Length == 0)
-            return;
-
-        var props = new MaterialPropertyBlock();
-        for (int i = 0; i < renderers.Length; i++)
-        {
-            Renderer renderer = renderers[i];
-            if (renderer == null)
-                continue;
-
-            Material mat = renderer.sharedMaterial;
-            if (mat == null)
-                continue;
-
-            renderer.GetPropertyBlock(props);
-            if (mat.HasProperty(BaseColorId))
-                props.SetColor(BaseColorId, rarityColor);
-            if (mat.HasProperty(ColorId))
-                props.SetColor(ColorId, rarityColor);
-            if (mat.HasProperty(EmissionColorId))
-                props.SetColor(EmissionColorId, rarityColor * 0.45f);
-            renderer.SetPropertyBlock(props);
-        }
-    }
-
     private void ApplyCourtEffects()
     {
         float outgoingReduction = cfg.baseOutgoingReduction + cfg.outgoingReductionPerStack * Mathf.Max(0, stacks - 1);
@@ -259,6 +225,69 @@ public class BoneCourtWritRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBa
             if (slow == null)
                 slow = combatant.gameObject.AddComponent<RelicMoveSpeedDebuff>();
             slow.Apply(slowPercent, 0.35f);
+        }
+    }
+}
+
+public static class RelicVisualRarityTint
+{
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+
+    public static void Apply(GameObject root, RelicRarity rarity, float baseEmission = 0.42f)
+    {
+        Apply(root, RelicRarityColors.Get(rarity), baseEmission);
+    }
+
+    public static void Apply(GameObject root, Color rarityColor, float baseEmission = 0.42f)
+    {
+        if (root == null)
+            return;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        if (renderers == null || renderers.Length == 0)
+            return;
+
+        float emission = Mathf.Max(0f, baseEmission);
+        MaterialPropertyBlock props = new MaterialPropertyBlock();
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+                continue;
+
+            Material mat = renderer.sharedMaterial;
+            if (mat == null)
+                continue;
+
+            Color tint = rarityColor;
+            float emissionMul = 1f;
+            string lowerName = renderer.gameObject.name.ToLowerInvariant();
+
+            if (lowerName.Contains("banner") || lowerName.Contains("flag"))
+            {
+                tint.a = Mathf.Clamp(tint.a, 0.7f, 1f);
+                emissionMul = 1.5f;
+            }
+            else if (lowerName.Contains("aura") || lowerName.Contains("edge") || lowerName.Contains("ring") || lowerName.Contains("circle"))
+            {
+                emissionMul = 1.65f;
+            }
+
+            renderer.GetPropertyBlock(props);
+            if (mat.HasProperty(BaseColorId))
+                props.SetColor(BaseColorId, tint);
+            if (mat.HasProperty(ColorId))
+                props.SetColor(ColorId, tint);
+            if (mat.HasProperty(EmissionColorId))
+            {
+                mat.EnableKeyword("_EMISSION");
+                props.SetColor(EmissionColorId, tint * (emission * emissionMul));
+            }
+
+            renderer.SetPropertyBlock(props);
         }
     }
 }

@@ -5,29 +5,32 @@ using UnityEngine.InputSystem;
 public class PlayerLookSyncWithCinemachine : MonoBehaviour
 {
     [Header("References")]
-    public Transform cameraFollow;  // przypisz obiekt kamery (rig Cinemachine / główna kamera)
+    public Transform cameraFollow;
 
     [Header("Settings")]
-    [Tooltip("Szybkość obracania postaci względem kierunku kamery")]
-    public float rotationSpeed = 720f; // stopnie na sekundę
+    [Tooltip("Max rotation speed in degrees per second.")]
+    public float rotationSpeed = 720f;
+    [Tooltip("Lower values make turning faster, higher values smoother.")]
+    public float turnSmoothTime = 0.07f;
+    [Tooltip("Small deadzone to avoid snapping on tiny input noise.")]
+    public float minMoveInput = 0.08f;
 
-    private CharacterController cc;
+    private float turnVelocity;
 
-    void Awake()
+    private void Awake()
     {
-        cc = GetComponent<CharacterController>();
         cameraFollow ??= ResolveCameraFollow();
         if (cameraFollow != null)
             return;
 
         Debug.LogWarning(
-            "PlayerLookSyncWithCinemachine: brak cameraFollow i nie znaleziono aktywnej kamery. Komponent zostaje wyłączony.",
+            "PlayerLookSyncWithCinemachine: missing cameraFollow and no active camera found. Disabling component.",
             this
         );
         enabled = false;
     }
 
-    void Update()
+    private void Update()
     {
         SyncRotationWithCamera();
     }
@@ -35,35 +38,34 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
     private void SyncRotationWithCamera()
     {
         Vector2 moveInput = ReadMoveInput();
-        Vector3 movementInput = new Vector3(moveInput.x, 0f, moveInput.y);
-
-        // Jeżeli gracz się nie rusza — nie zmieniaj rotacji
-        if (movementInput.sqrMagnitude < 0.001f)
+        if (moveInput.sqrMagnitude < minMoveInput * minMoveInput)
+        {
+            turnVelocity = Mathf.MoveTowards(turnVelocity, 0f, Time.deltaTime * 30f);
             return;
+        }
 
-        movementInput.Normalize();
-
-        // Kierunek patrzenia kamery na osi Y
+        Vector3 movementInput = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
         float cameraYaw = cameraFollow.eulerAngles.y;
-
-        // Oblicz docelowy kierunek świata, do którego gracz powinien się obrócić
         float targetAngle = Mathf.Atan2(movementInput.x, movementInput.z) * Mathf.Rad2Deg + cameraYaw;
 
-        // Aktualny i docelowy quaternion
-        Quaternion targetRotation = Quaternion.Euler(0f, targetAngle, 0f);
+        float currentAngle = transform.eulerAngles.y;
+        float smoothTime = Mathf.Max(0.01f, turnSmoothTime);
+        float maxTurnSpeed = Mathf.Max(1f, rotationSpeed);
+        float smoothedAngle = Mathf.SmoothDampAngle(
+            currentAngle,
+            targetAngle,
+            ref turnVelocity,
+            smoothTime,
+            maxTurnSpeed,
+            Time.deltaTime
+        );
 
-        // Płynna rotacja: ograniczona prędkością rotationSpeed
-        transform.rotation =
-            Quaternion.RotateTowards(
-                transform.rotation,
-                targetRotation,
-                rotationSpeed * Time.deltaTime
-            );
+        transform.rotation = Quaternion.Euler(0f, smoothedAngle, 0f);
     }
 
     private static Vector2 ReadMoveInput()
     {
-        var keyboard = Keyboard.current;
+        Keyboard keyboard = Keyboard.current;
         if (keyboard == null)
             return Vector2.zero;
 
@@ -98,5 +100,12 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void OnValidate()
+    {
+        rotationSpeed = Mathf.Max(1f, rotationSpeed);
+        turnSmoothTime = Mathf.Clamp(turnSmoothTime, 0.01f, 0.4f);
+        minMoveInput = Mathf.Clamp(minMoveInput, 0.01f, 0.4f);
     }
 }

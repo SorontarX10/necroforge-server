@@ -18,6 +18,9 @@ public class ZombieEyeEmissionController : MonoBehaviour
     public float maxEmissionIntensity = 3f;
     [Tooltip("Minimum visible intensity near zero health")]
     public float minEmissionIntensity = 0f;
+    [SerializeField, Min(0.1f)] private float globalEmissionIntensityCap = 4.5f;
+    [SerializeField, Min(0f)] private float globalMinimumIntensityFloor = 0.08f;
+    [SerializeField, Min(0.1f)] private float emissionSmoothing = 3.5f;
 
     [Header("Targeting (optional overrides)")]
     [SerializeField] private Renderer[] eyeRenderers;
@@ -50,6 +53,7 @@ public class ZombieEyeEmissionController : MonoBehaviour
     private Combatant combatant;
     private int emissionColorID;
     private float lastHealth01 = -1f;
+    private float currentEmissionIntensity = -1f;
     private float nextPollAt;
     private bool subscribed;
     private bool hasEliteColorOverride;
@@ -358,6 +362,7 @@ public class ZombieEyeEmissionController : MonoBehaviour
     private void ForceRefresh()
     {
         lastHealth01 = -1f;
+        currentEmissionIntensity = -1f;
         RefreshIfChanged();
     }
 
@@ -375,9 +380,6 @@ public class ZombieEyeEmissionController : MonoBehaviour
         float health01 = Mathf.Clamp01(
             combatant.CurrentHealth / Mathf.Max(1f, combatant.MaxHealth)
         );
-
-        if (Mathf.Abs(health01 - lastHealth01) < 0.001f)
-            return;
 
         lastHealth01 = health01;
         ApplyEmission(health01);
@@ -398,12 +400,25 @@ public class ZombieEyeEmissionController : MonoBehaviour
     {
         Color fullColor = hasEliteColorOverride ? eliteOverrideColor : fullHealthEmissionColor;
         Color color = Color.Lerp(zeroHealthEmissionColor, fullColor, health01);
-        float intensity = Mathf.Lerp(
-            Mathf.Max(0f, minEmissionIntensity),
-            Mathf.Max(minEmissionIntensity, maxEmissionIntensity),
+        float minIntensity = Mathf.Max(globalMinimumIntensityFloor, minEmissionIntensity);
+        float maxIntensity = Mathf.Min(Mathf.Max(minIntensity, maxEmissionIntensity), globalEmissionIntensityCap);
+        float targetIntensity = Mathf.Lerp(
+            minIntensity,
+            maxIntensity,
             health01
         );
-        Color emission = color * intensity;
+
+        if (currentEmissionIntensity < 0f)
+        {
+            currentEmissionIntensity = targetIntensity;
+        }
+        else
+        {
+            float step = Mathf.Max(0.01f, emissionSmoothing) * Mathf.Max(0.05f, fallbackPollInterval);
+            currentEmissionIntensity = Mathf.MoveTowards(currentEmissionIntensity, targetIntensity, step);
+        }
+
+        Color emission = color * currentEmissionIntensity;
 
         for (int i = 0; i < targets.Count; i++)
         {
@@ -415,5 +430,15 @@ public class ZombieEyeEmissionController : MonoBehaviour
             target.props.SetColor(emissionColorID, emission);
             target.renderer.SetPropertyBlock(target.props, target.materialIndex);
         }
+    }
+
+    private void OnValidate()
+    {
+        maxEmissionIntensity = Mathf.Max(0f, maxEmissionIntensity);
+        minEmissionIntensity = Mathf.Max(0f, minEmissionIntensity);
+        globalEmissionIntensityCap = Mathf.Max(0.1f, globalEmissionIntensityCap);
+        globalMinimumIntensityFloor = Mathf.Max(0f, globalMinimumIntensityFloor);
+        emissionSmoothing = Mathf.Max(0.1f, emissionSmoothing);
+        fallbackPollInterval = Mathf.Max(0.05f, fallbackPollInterval);
     }
 }

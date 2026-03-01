@@ -51,7 +51,7 @@ public class WritOfTheEclipseCourt : RelicEffect
 
 public class WritOfTheEclipseCourtRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
-    private static readonly Color CourtColor = new(0.62f, 0.42f, 1f, 0.95f);
+    private static readonly Color CourtColor = RelicRarityColors.Get(RelicRarity.Mythic);
 
     private PlayerRelicController player;
     private WritOfTheEclipseCourt cfg;

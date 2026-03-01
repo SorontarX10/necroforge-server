@@ -26,10 +26,18 @@ public class FloatingTextSystem : MonoBehaviour
     [SerializeField, Min(8)] private int maxActiveTexts = 180;
     [SerializeField, Min(1)] private int maxSpawnsPerFrame = 24;
 
+    [Header("Readability")]
+    [SerializeField, Min(8f)] private float minFontSize = 24f;
+    [SerializeField, Min(8f)] private float maxFontSize = 44f;
+    [SerializeField, Min(0f)] private float spawnJitterRadius = 0.22f;
+    [SerializeField, Min(0f)] private float samePositionVerticalStep = 0.14f;
+    [SerializeField, Min(0f)] private float minTextAlpha = 0.82f;
+
     private Canvas canvas;
     private Camera cam;
     private bool cameraLocked;
     private readonly Queue<FloatingText> pool = new();
+    private readonly Dictionary<int, int> spawnBuckets = new(64);
     private int activeTextCount;
     private int spawnFrame = -1;
     private int spawnsThisFrame;
@@ -140,6 +148,9 @@ public class FloatingTextSystem : MonoBehaviour
         if (prefab == null)
             return;
 
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
         if (cam == null)
         {
             cam = canvas != null && canvas.worldCamera != null
@@ -158,6 +169,7 @@ public class FloatingTextSystem : MonoBehaviour
         {
             spawnFrame = frame;
             spawnsThisFrame = 0;
+            spawnBuckets.Clear();
         }
 
         if (activeTextCount >= Mathf.Max(1, maxActiveTexts))
@@ -173,16 +185,62 @@ public class FloatingTextSystem : MonoBehaviour
         spawnsThisFrame++;
         activeTextCount++;
 
-        ft.transform.position = worldPos;
+        int clusterIndex = RegisterSpawnCluster(worldPos);
+        Vector3 spawnPos = ComputeSpawnPosition(worldPos, clusterIndex);
+        float normalizedFontSize = Mathf.Clamp(fontSize, minFontSize, maxFontSize);
+        Color normalizedColor = NormalizeTextColor(color);
+
+        ft.transform.position = spawnPos;
         try
         {
-            ft.Init(cam, value, color, fontSize, ReturnTextToPool);
+            ft.Init(cam, value, normalizedColor, normalizedFontSize, ReturnTextToPool);
         }
         catch (Exception ex)
         {
             Debug.LogException(ex, this);
             ReturnTextToPool(ft);
         }
+    }
+
+    private int RegisterSpawnCluster(Vector3 worldPos)
+    {
+        int key = BuildSpawnBucketKey(worldPos);
+        if (!spawnBuckets.TryGetValue(key, out int count))
+            count = 0;
+
+        spawnBuckets[key] = count + 1;
+        return count;
+    }
+
+    private int BuildSpawnBucketKey(Vector3 worldPos)
+    {
+        int x = Mathf.RoundToInt(worldPos.x * 3f);
+        int y = Mathf.RoundToInt(worldPos.y * 2f);
+        int z = Mathf.RoundToInt(worldPos.z * 3f);
+
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + x;
+            hash = hash * 31 + y;
+            hash = hash * 31 + z;
+            return hash;
+        }
+    }
+
+    private Vector3 ComputeSpawnPosition(Vector3 worldPos, int clusterIndex)
+    {
+        Vector2 random = UnityEngine.Random.insideUnitCircle * spawnJitterRadius;
+        Vector3 offset = new Vector3(random.x, 0f, random.y);
+        offset += Vector3.up * samePositionVerticalStep * Mathf.Max(0, clusterIndex);
+        return worldPos + offset;
+    }
+
+    private Color NormalizeTextColor(Color color)
+    {
+        Color normalized = color;
+        normalized.a = Mathf.Clamp(normalized.a, minTextAlpha, 1f);
+        return normalized;
     }
 
     private FloatingText RentText()

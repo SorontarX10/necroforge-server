@@ -204,6 +204,7 @@ public class BoneforgeStandardRuntime : MonoBehaviour, IRelicBatchedUpdate, IRel
         {
             standardVisual = RelicVfxTickSystem.Rent(visualPrefab, standardPos, Quaternion.identity);
             SetVisualNonBlocking(standardVisual);
+            RelicVisualRarityTint.Apply(standardVisual, RelicRarity.Mythic);
         }
 
         RelicDamageText.PlayGeneratedEventFeedback(transform, RelicRarity.Mythic, 1.2f);

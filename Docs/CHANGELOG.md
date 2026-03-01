@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.2 - 2026-03-01
+
+### Gameplay Feel and Control
+- Restored strict camera lock during attack and selection overlays (upgrade/relic choice), including clearing residual look smoothing while UI blocks input.
+- Re-tuned enemy head knockback response to prevent reliable head-stomp locking while keeping the pushback readable and controllable.
+
+### Release
+- Bumped application version to `0.6.2`.
+- Updated test sandbox version fallback to `0.6.2`.
+
 ## 0.6.1 - 2026-03-01
 
 ### Input and Controls
@@ -12,6 +22,18 @@
 
 ### Visual Planning
 - Added a new complete visual improvement roadmap with milestones, metrics, acceptance criteria, and risk mitigations (`Docs/PLAN_0.6.1_VISUAL.md`).
+
+### Visual Readability
+- Added runtime visual guardrails for post-process and fog (`RuntimeVisualReadabilityStabilizer`) to reduce black crush/overbloom extremes.
+- Reworked `DynamicFogController` defaults toward readability-safe ranges and linear fog guardrails.
+- Improved floating text clarity under heavy combat load (size clamp, alpha clamp, spawn jitter, stacked offset, fade-safety).
+- Added emissive guardrails and smoothing for enemy eye emission, plus capped boss emissive LUT glow scale.
+
+### Combat Feel and Telegraph
+- Added anticipation/recovery with heavy attack telegraph markers for elite enemies in `HordeAISystem`, improving dodge readability.
+- Added differentiated melee hit feedback: light camera shake for normal hits, stronger shake for crit/boss, and short hit-stop for crit/elite/boss.
+- Retuned third-person camera feel and player turning smoothness (input smoothing, pivot damping, minimal look-ahead, reduced direction snapping).
+- Added unified rarity tint normalization for persistent relic visuals (`RelicVisualRarityTint`) and applied it to standard/circle style relic effects.
 
 ## 0.6.0 - 2026-02-23
 

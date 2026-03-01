@@ -17,12 +17,18 @@ public class PlayerControllerCC : MonoBehaviour
 
     [Header("Enemy Head Knockback")]
     [SerializeField] private bool enableHeadKnockback = true;
-    [SerializeField, Min(0.05f)] private float headKnockbackCooldown = 0.18f;
-    [SerializeField, Min(0.1f)] private float headKnockbackHorizontalForce = 8f;
-    [SerializeField, Min(0.1f)] private float headKnockbackVerticalSpeed = 6f;
-    [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 0.5f;
+    [SerializeField, Min(0.05f)] private float headKnockbackCooldown = 0.33f;
+    [SerializeField, Min(0.1f)] private float headKnockbackHorizontalForce = 16f;
+    [SerializeField, Min(0.1f)] private float headKnockbackVerticalSpeed = 10f;
+    [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 1f;
+    [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackHorizontal = 11f;
+    [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackVertical = 8f;
+    [SerializeField, Min(0f)] private float knockbackFallBoostScale = 0.4f;
+    [SerializeField, Min(0.1f)] private float knockbackDampingWhileActive = 6f;
+    [SerializeField, Min(0.01f)] private float knockbackStrongPhaseDuration = 0.18f;
     [SerializeField, Min(0f)] private float minFallSpeedForHeadKnockback = 0.2f;
     [SerializeField, Range(0.01f, 0.5f)] private float headTopTolerance = 0.16f;
+    [SerializeField, Range(0f, 1f)] private float headContactAboveCenterBias = 0.15f;
     [SerializeField, Range(0.05f, 0.95f)] private float dogTopSurfaceNormalMin = 0.12f;
     [SerializeField, Min(0.1f)] private float externalVelocityDamping = 12f;
 
@@ -33,6 +39,10 @@ public class PlayerControllerCC : MonoBehaviour
 
     [Header("Camera Reference")]
     public Transform cameraT;  // assign MainCamera transform here
+
+    [Header("Animation")]
+    [SerializeField, Min(0f)] private float speedDampTime = 0.08f;
+    [SerializeField, Min(0f)] private float speedAnimationResponse = 14f;
 
     private CharacterController controller;
     private PlayerControls controls;
@@ -50,6 +60,9 @@ public class PlayerControllerCC : MonoBehaviour
     private PlayerRelicController relics;
     private WeaponEnhancerSystem enhancerSystem;
     private float speed;
+    private float smoothedMoveMagnitude;
+    private bool wasGroundedBeforeGravity;
+    private float strongKnockbackUntil = -999f;
 
     void Awake()
     {
@@ -80,6 +93,7 @@ public class PlayerControllerCC : MonoBehaviour
 
     void Update()
     {
+        wasGroundedBeforeGravity = isGrounded;
         RefreshInputState();
         ApplyGravity();
         GroundCheck();
@@ -89,7 +103,10 @@ public class PlayerControllerCC : MonoBehaviour
         HandleJump();
 
         speed = moveInput.magnitude;
-        animator.SetFloat("Speed", speed);
+        float speedLerp = 1f - Mathf.Exp(-Mathf.Max(0f, speedAnimationResponse) * Time.deltaTime);
+        smoothedMoveMagnitude = Mathf.Lerp(smoothedMoveMagnitude, speed, speedLerp);
+        if (animator != null)
+            animator.SetFloat("Speed", smoothedMoveMagnitude, speedDampTime, Time.deltaTime);
     }
 
     void RefreshInputState()
@@ -202,10 +219,14 @@ public class PlayerControllerCC : MonoBehaviour
         }
 
         controller.Move(externalVelocity * Time.deltaTime);
+        float damping = externalVelocityDamping;
+        if (Time.time < strongKnockbackUntil)
+            damping = Mathf.Min(damping, Mathf.Max(0.1f, knockbackDampingWhileActive));
+
         externalVelocity = Vector3.MoveTowards(
             externalVelocity,
             Vector3.zero,
-            Mathf.Max(0.1f, externalVelocityDamping) * Time.deltaTime
+            Mathf.Max(0.1f, damping) * Time.deltaTime
         );
     }
 
@@ -248,9 +269,22 @@ public class PlayerControllerCC : MonoBehaviour
             away = -transform.forward;
 
         away.Normalize();
-        float knockbackMul = Mathf.Max(0.1f, headKnockbackMultiplier);
-        externalVelocity = away * headKnockbackHorizontalForce * knockbackMul;
-        velocity.y = Mathf.Max(velocity.y, headKnockbackVerticalSpeed * knockbackMul);
+        float knockbackMul = Mathf.Max(1f, headKnockbackMultiplier);
+        float horizontalImpulse = Mathf.Max(minEffectiveHeadKnockbackHorizontal, headKnockbackHorizontalForce) * knockbackMul;
+        float verticalImpulse = Mathf.Max(minEffectiveHeadKnockbackVertical, headKnockbackVerticalSpeed) * knockbackMul;
+
+        float requiredFallSpeed = Mathf.Max(0f, minFallSpeedForHeadKnockback);
+        float fallingSpeed = Mathf.Max(0f, -velocity.y - requiredFallSpeed);
+        if (fallingSpeed > 0f)
+        {
+            float fallBoost = Mathf.Clamp01(fallingSpeed / 8f) * Mathf.Max(0f, knockbackFallBoostScale);
+            horizontalImpulse *= 1f + fallBoost;
+            verticalImpulse *= 1f + fallBoost * 0.85f;
+        }
+
+        externalVelocity = away * horizontalImpulse;
+        velocity.y = Mathf.Max(velocity.y, verticalImpulse);
+        strongKnockbackUntil = Time.time + Mathf.Max(0.01f, knockbackStrongPhaseDuration);
         jumpRequested = false;
         nextHeadKnockbackAt = Time.time + Mathf.Max(0.05f, headKnockbackCooldown);
     }
@@ -265,9 +299,10 @@ public class PlayerControllerCC : MonoBehaviour
         if (enemyCombatant != null && enemyCombatant.IsDead)
             return false;
 
+        float requiredFallSpeed = Mathf.Max(0f, minFallSpeedForHeadKnockback);
         bool fallingOnTarget =
-            velocity.y <= -Mathf.Max(0f, minFallSpeedForHeadKnockback)
-            || hit.moveDirection.y < -0.1f;
+            !wasGroundedBeforeGravity
+            && (velocity.y <= -requiredFallSpeed || hit.moveDirection.y < -0.1f);
         if (!fallingOnTarget)
             return false;
 
@@ -276,12 +311,19 @@ public class PlayerControllerCC : MonoBehaviour
             return hit.normal.y >= Mathf.Clamp(dogTopSurfaceNormalMin, 0.05f, 0.95f);
         }
 
-        float enemyTopY = hit.collider.bounds.max.y;
-        float playerFeetY = controller.bounds.min.y;
-        if (playerFeetY < enemyTopY - Mathf.Clamp(headTopTolerance, 0.01f, 0.5f))
+        float topNormalMin = 0.18f;
+        if (hit.normal.y < topNormalMin)
             return false;
 
-        if (hit.normal.y < 0.35f)
+        float enemyTopY = hit.collider.bounds.max.y;
+        float enemyCenterY = hit.collider.bounds.center.y;
+        float playerFeetY = controller.bounds.min.y;
+        float topTolerance = Mathf.Clamp(headTopTolerance, 0.01f, 0.5f);
+        bool feetCloseToTop = playerFeetY >= enemyTopY - topTolerance;
+        bool contactClearlyAboveCenter =
+            hit.point.y >= enemyCenterY + Mathf.Clamp01(headContactAboveCenterBias) * hit.collider.bounds.extents.y;
+
+        if (!feetCloseToTop && !contactClearlyAboveCenter)
             return false;
 
         return true;
@@ -302,5 +344,17 @@ public class PlayerControllerCC : MonoBehaviour
         string enemyName = enemy.name;
         return !string.IsNullOrWhiteSpace(enemyName)
             && enemyName.IndexOf("dog", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void OnValidate()
+    {
+        speedDampTime = Mathf.Max(0f, speedDampTime);
+        speedAnimationResponse = Mathf.Max(0f, speedAnimationResponse);
+        headContactAboveCenterBias = Mathf.Clamp01(headContactAboveCenterBias);
+        minEffectiveHeadKnockbackHorizontal = Mathf.Max(0.1f, minEffectiveHeadKnockbackHorizontal);
+        minEffectiveHeadKnockbackVertical = Mathf.Max(0.1f, minEffectiveHeadKnockbackVertical);
+        knockbackFallBoostScale = Mathf.Max(0f, knockbackFallBoostScale);
+        knockbackDampingWhileActive = Mathf.Max(0.1f, knockbackDampingWhileActive);
+        knockbackStrongPhaseDuration = Mathf.Max(0.01f, knockbackStrongPhaseDuration);
     }
 }

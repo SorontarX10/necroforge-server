@@ -70,7 +70,8 @@ public class FloatingText : MonoBehaviour
 
         if (t >= fadeStart)
         {
-            float a = Mathf.Lerp(1f, 0f, (t - fadeStart) / (lifetime - fadeStart));
+            float fadeDuration = Mathf.Max(0.0001f, lifetime - fadeStart);
+            float a = Mathf.Lerp(1f, 0f, (t - fadeStart) / fadeDuration);
             text.color = new Color(baseColor.r, baseColor.g, baseColor.b, a);
         }
 

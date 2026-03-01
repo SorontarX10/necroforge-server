@@ -1,6 +1,7 @@
 using UnityEngine;
 using GrassSim.Combat;
 using GrassSim.Core;
+using GrassSim.Enemies;
 using GrassSim.Telemetry;
 using GrassSim.UI;
 
@@ -94,6 +95,10 @@ public class SwordDamage : MonoBehaviour
         if (wasAlive && target.IsDead)
             relics?.NotifyMeleeKill(target, damage, isCrit);
 
+        bool hitBoss = target.GetComponent<BossEnemyController>() != null;
+        bool hitElite = !hitBoss && target.TryGetComponent<EnemyCombatant>(out EnemyCombatant enemyCombatant) && enemyCombatant.IsElite;
+        CombatHitFeedback.TriggerPlayerMeleeHit(isCrit, hitElite, hitBoss);
+
         float lifeStealRequested = weapon.GetLifeStealRequested();
         float lifeStealEffective = weapon.GetLifeSteal();
         if (lifeStealEffective > 0f && progression != null)
@@ -166,5 +171,198 @@ public class SwordDamage : MonoBehaviour
         float allowed = Mathf.Min(heal, remaining);
         lifeStealWindowRecovered += allowed;
         return Mathf.Max(0f, allowed);
+    }
+}
+
+[DefaultExecutionOrder(900)]
+public sealed class CombatHitFeedback : MonoBehaviour
+{
+    [Header("Hit Stop")]
+    [SerializeField, Min(0f)] private float critHitStop = 0.045f;
+    [SerializeField, Min(0f)] private float eliteHitStop = 0.05f;
+    [SerializeField, Min(0f)] private float bossHitStop = 0.06f;
+    [SerializeField, Min(0f)] private float maxHitStop = 0.06f;
+
+    [Header("Camera Shake")]
+    [SerializeField, Min(0f)] private float meleeShakeStrength = 0.022f;
+    [SerializeField, Min(0f)] private float critShakeStrength = 0.04f;
+    [SerializeField, Min(0f)] private float bossShakeStrength = 0.052f;
+    [SerializeField, Min(0.01f)] private float meleeShakeDuration = 0.06f;
+    [SerializeField, Min(0.01f)] private float critShakeDuration = 0.08f;
+    [SerializeField, Min(0.01f)] private float bossShakeDuration = 0.1f;
+    [SerializeField, Min(0f)] private float shakeDecay = 16f;
+
+    private static CombatHitFeedback instance;
+
+    private Transform cameraTransform;
+    private Vector3 cameraBaseLocalPosition;
+    private bool cameraBaseCaptured;
+    private float activeShakeStrength;
+    private float shakeUntil;
+    private float hitStopUntil;
+    private bool hitStopActive;
+    private float preHitStopTimeScale = 1f;
+    private float baseFixedDeltaTime = 0.02f;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        instance = null;
+    }
+
+    public static void TriggerPlayerMeleeHit(bool isCrit, bool hitElite, bool hitBoss)
+    {
+        CombatHitFeedback feedback = EnsureInstance();
+        if (feedback == null)
+            return;
+
+        feedback.TriggerFeedback(isCrit, hitElite, hitBoss);
+    }
+
+    private static CombatHitFeedback EnsureInstance()
+    {
+        if (instance != null)
+            return instance;
+
+        instance = FindFirstObjectByType<CombatHitFeedback>();
+        if (instance != null)
+            return instance;
+
+        GameObject go = new("CombatHitFeedback");
+        DontDestroyOnLoad(go);
+        instance = go.AddComponent<CombatHitFeedback>();
+        return instance;
+    }
+
+    private void Awake()
+    {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+
+    private void LateUpdate()
+    {
+        ResolveCamera();
+        UpdateHitStop();
+        UpdateShake();
+    }
+
+    private void TriggerFeedback(bool isCrit, bool hitElite, bool hitBoss)
+    {
+        float now = Time.unscaledTime;
+
+        float targetShakeStrength = meleeShakeStrength;
+        float targetShakeDuration = meleeShakeDuration;
+
+        if (hitBoss)
+        {
+            targetShakeStrength = bossShakeStrength;
+            targetShakeDuration = bossShakeDuration;
+        }
+        else if (isCrit)
+        {
+            targetShakeStrength = critShakeStrength;
+            targetShakeDuration = critShakeDuration;
+        }
+
+        activeShakeStrength = Mathf.Max(activeShakeStrength, targetShakeStrength);
+        shakeUntil = Mathf.Max(shakeUntil, now + Mathf.Max(0.01f, targetShakeDuration));
+
+        float stop = 0f;
+        if (hitBoss)
+            stop = bossHitStop;
+        else if (hitElite)
+            stop = eliteHitStop;
+        else if (isCrit)
+            stop = critHitStop;
+
+        if (stop > 0f)
+            ApplyHitStop(Mathf.Min(stop, Mathf.Max(0f, maxHitStop)));
+    }
+
+    private void ResolveCamera()
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            cameraTransform = null;
+            cameraBaseCaptured = false;
+            return;
+        }
+
+        if (cameraTransform == cam.transform)
+            return;
+
+        cameraTransform = cam.transform;
+        cameraBaseLocalPosition = cameraTransform.localPosition;
+        cameraBaseCaptured = true;
+    }
+
+    private void UpdateShake()
+    {
+        if (cameraTransform == null || !cameraBaseCaptured)
+            return;
+
+        float now = Time.unscaledTime;
+        if (now >= shakeUntil || activeShakeStrength <= 0.0001f)
+        {
+            activeShakeStrength = 0f;
+            cameraTransform.localPosition = cameraBaseLocalPosition;
+            return;
+        }
+
+        Vector3 offset = Random.insideUnitSphere * activeShakeStrength;
+        offset.z *= 0.35f;
+        cameraTransform.localPosition = cameraBaseLocalPosition + offset;
+        activeShakeStrength = Mathf.MoveTowards(
+            activeShakeStrength,
+            0f,
+            Mathf.Max(0f, shakeDecay) * Time.unscaledDeltaTime
+        );
+    }
+
+    private void ApplyHitStop(float duration)
+    {
+        if (duration <= 0f)
+            return;
+
+        if (ChoiceUiQueue.IsShowing)
+            return;
+
+        if (PauseMenuController.Instance != null && PauseMenuController.Instance.IsPaused)
+            return;
+
+        if (Time.timeScale <= 0f)
+            return;
+
+        float now = Time.unscaledTime;
+        hitStopUntil = Mathf.Max(hitStopUntil, now + duration);
+        if (hitStopActive)
+            return;
+
+        preHitStopTimeScale = Mathf.Max(0.01f, Time.timeScale);
+        baseFixedDeltaTime = Time.fixedDeltaTime / preHitStopTimeScale;
+        Time.timeScale = 0f;
+        Time.fixedDeltaTime = 0f;
+        hitStopActive = true;
+    }
+
+    private void UpdateHitStop()
+    {
+        if (!hitStopActive)
+            return;
+
+        if (Time.unscaledTime < hitStopUntil)
+            return;
+
+        Time.timeScale = preHitStopTimeScale;
+        Time.fixedDeltaTime = baseFixedDeltaTime * preHitStopTimeScale;
+        hitStopActive = false;
     }
 }

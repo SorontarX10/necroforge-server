@@ -28,6 +28,16 @@ public class HordeAISystem : MonoBehaviour
     [SerializeField, Min(0f)] private float meleeRangePadding = 0.04f;
     [SerializeField, Min(0.05f)] private float defaultMeleeCooldown = 0.65f;
 
+    [Header("Enemy Attack Telegraph")]
+    [SerializeField] private bool enableHeavyAttackTelegraph = true;
+    [SerializeField, Min(0f)] private float eliteAttackAnticipation = 0.24f;
+    [SerializeField, Min(0f)] private float eliteAttackRecovery = 0.22f;
+    [SerializeField, Min(0f)] private float bossAttackAnticipation = 0.3f;
+    [SerializeField, Min(0f)] private float bossAttackRecovery = 0.28f;
+    [SerializeField, Min(0.5f)] private float heavyAttackTelegraphRadiusScale = 1.12f;
+    [SerializeField] private Color eliteAttackTelegraphColor = new(1f, 0.8f, 0.26f, 0.92f);
+    [SerializeField] private Color bossAttackTelegraphColor = new(1f, 0.28f, 0.24f, 0.95f);
+
     private static HordeAISystem instance;
     private static bool shuttingDown;
 
@@ -75,6 +85,9 @@ public class HordeAISystem : MonoBehaviour
         public float attackRange;
         public float attackCooldown;
         public float nextAttackAt;
+        public bool waitingForAttackRelease;
+        public float attackReleaseAt;
+        public float recoveryEndsAt;
         public bool systemMeleeEnabled;
         public int lastTickFrame;
     }
@@ -303,6 +316,9 @@ public class HordeAISystem : MonoBehaviour
             attackRange = attackRange,
             attackCooldown = attackCooldown,
             nextAttackAt = Time.time + Random.Range(0f, attackCooldown),
+            waitingForAttackRelease = false,
+            attackReleaseAt = 0f,
+            recoveryEndsAt = 0f,
             systemMeleeEnabled = meleeEnabled,
             lastTickFrame = -1
         };
@@ -363,6 +379,9 @@ public class HordeAISystem : MonoBehaviour
             attackRange = attackRange,
             attackCooldown = attackCooldown,
             nextAttackAt = Time.time + Random.Range(0f, attackCooldown),
+            waitingForAttackRelease = false,
+            attackReleaseAt = 0f,
+            recoveryEndsAt = 0f,
             systemMeleeEnabled = meleeEnabled,
             lastTickFrame = -1
         };
@@ -636,6 +655,7 @@ public class HordeAISystem : MonoBehaviour
         Vector3 moveDir = Vector3.zero;
         float speed = 0f;
         bool facePlayerOnly = false;
+        bool attackHold = IsInAttackHold(state);
 
         if (player != null && player.gameObject.activeInHierarchy)
         {
@@ -648,13 +668,20 @@ public class HordeAISystem : MonoBehaviour
 
             if (sqrToPlayer <= attackRadiusSqr)
             {
-                facePlayerOnly = sqrToPlayer > 0.0001f;
+                facePlayerOnly = sqrToPlayer > 0.0001f || attackHold;
             }
             else if (sqrToPlayer <= detectionRadiusSqr && sqrToPlayer > 0.0001f)
             {
                 moveDir = toPlayer * (1f / Mathf.Sqrt(sqrToPlayer));
                 speed = ai.chaseSpeed;
             }
+        }
+
+        if (attackHold)
+        {
+            moveDir = Vector3.zero;
+            speed = 0f;
+            facePlayerOnly = player != null && player.gameObject.activeInHierarchy;
         }
 
         if (moveDir == Vector3.zero && !facePlayerOnly)
@@ -708,6 +735,9 @@ public class HordeAISystem : MonoBehaviour
             }
         }
 
+        if (state.animator != null)
+            state.animator.SetFloat("Speed", new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude);
+
         EnforceSystemMeleeOwnership(state);
         TrySystemMeleeDamage(ref state);
     }
@@ -717,7 +747,19 @@ public class HordeAISystem : MonoBehaviour
         if (!state.systemMeleeEnabled || player == null || playerCombatant == null || playerCombatant.IsDead)
             return;
 
-        if (Time.time < state.nextAttackAt)
+        float now = Time.time;
+
+        if (state.waitingForAttackRelease)
+        {
+            if (now < state.attackReleaseAt)
+                return;
+
+            state.waitingForAttackRelease = false;
+            ApplySystemMeleeDamage(ref state, now);
+            return;
+        }
+
+        if (now < state.nextAttackAt || now < state.recoveryEndsAt)
             return;
 
         float range = Mathf.Max(0.2f, state.attackRange + meleeRangePadding);
@@ -727,31 +769,74 @@ public class HordeAISystem : MonoBehaviour
         Combatant owner = state.ownerCombatant;
         if (owner == null || owner.IsDead)
         {
-            state.nextAttackAt = Time.time + 0.2f;
+            state.nextAttackAt = now + 0.2f;
             return;
         }
 
         if (state.bossController != null && !state.bossController.CanDealDamage)
         {
-            state.nextAttackAt = Time.time + 0.1f;
+            state.nextAttackAt = now + 0.1f;
             return;
         }
 
-        float damage = ResolveAgentDamage(state);
-        if (damage <= 0f)
+        if (!enableHeavyAttackTelegraph || !ShouldUseHeavyAttackTelegraph(state))
         {
-            state.nextAttackAt = Time.time + Mathf.Max(0.05f, state.attackCooldown);
+            ApplySystemMeleeDamage(ref state, now);
             return;
         }
+
+        float anticipation = GetAttackAnticipation(state);
+        float recovery = GetAttackRecovery(state);
+
+        if (anticipation <= 0f)
+        {
+            if (recovery > 0f)
+                state.recoveryEndsAt = now + recovery;
+
+            ApplySystemMeleeDamage(ref state, now);
+            return;
+        }
+
+        state.waitingForAttackRelease = true;
+        state.attackReleaseAt = now + anticipation;
+        state.recoveryEndsAt = state.attackReleaseAt + recovery;
+        state.nextAttackAt = state.recoveryEndsAt + Mathf.Max(0.05f, state.attackCooldown);
+
+        float telegraphRadius = range * Mathf.Max(0.5f, heavyAttackTelegraphRadiusScale);
+        Color telegraphColor = state.bossController != null ? bossAttackTelegraphColor : eliteAttackTelegraphColor;
+        RelicGeneratedVfx.SpawnGroundCircle(
+            state.transform.position + Vector3.up * 0.05f,
+            telegraphRadius,
+            telegraphColor,
+            anticipation,
+            state.transform,
+            Vector3.up * 0.05f,
+            "EnemyHeavyAttackTelegraph"
+        );
+    }
+
+    private void ApplySystemMeleeDamage(ref AgentState state, float now)
+    {
+        Combatant owner = state.ownerCombatant;
+        if (owner == null || owner.IsDead)
+            return;
+
+        float range = Mathf.Max(0.2f, state.attackRange + meleeRangePadding);
+        if (HorizontalDistanceSqr(state.transform.position, player.position) > range * range)
+            return;
+
+        if (state.bossController != null && !state.bossController.CanDealDamage)
+            return;
+
+        float damage = ResolveAgentDamage(state);
+        if (damage <= 0f)
+            return;
 
         if (playerRelics != null)
             damage = playerRelics.ModifyIncomingDamage(owner, damage);
 
         if (damage <= 0f)
-        {
-            state.nextAttackAt = Time.time + Mathf.Max(0.05f, state.attackCooldown);
             return;
-        }
 
         playerCombatant.TakeDamage(damage, owner.transform);
 
@@ -759,7 +844,39 @@ public class HordeAISystem : MonoBehaviour
             state.bossEffects.ApplyOnHit(playerCombatant);
 
         PlaySlashAudio(state.primaryDamageDealer);
-        state.nextAttackAt = Time.time + Mathf.Max(0.05f, state.attackCooldown);
+        state.nextAttackAt = Mathf.Max(state.nextAttackAt, now + Mathf.Max(0.05f, state.attackCooldown));
+    }
+
+    private static bool ShouldUseHeavyAttackTelegraph(AgentState state)
+    {
+        if (state.bossController != null)
+            return true;
+
+        return state.enemyCombatant != null && state.enemyCombatant.IsElite;
+    }
+
+    private float GetAttackAnticipation(AgentState state)
+    {
+        if (state.bossController != null)
+            return Mathf.Max(0f, bossAttackAnticipation);
+
+        return Mathf.Max(0f, eliteAttackAnticipation);
+    }
+
+    private float GetAttackRecovery(AgentState state)
+    {
+        if (state.bossController != null)
+            return Mathf.Max(0f, bossAttackRecovery);
+
+        return Mathf.Max(0f, eliteAttackRecovery);
+    }
+
+    private static bool IsInAttackHold(AgentState state)
+    {
+        if (state.waitingForAttackRelease)
+            return true;
+
+        return Time.time < state.recoveryEndsAt;
     }
 
     private static float ResolveAgentDamage(AgentState state)
@@ -1027,5 +1144,14 @@ public class HordeAISystem : MonoBehaviour
 
         int dynamicBudget = minBudget + count / Mathf.Max(1, divider);
         return Mathf.Clamp(dynamicBudget, minBudget, maxBudget);
+    }
+
+    private void OnValidate()
+    {
+        eliteAttackAnticipation = Mathf.Max(0f, eliteAttackAnticipation);
+        eliteAttackRecovery = Mathf.Max(0f, eliteAttackRecovery);
+        bossAttackAnticipation = Mathf.Max(0f, bossAttackAnticipation);
+        bossAttackRecovery = Mathf.Max(0f, bossAttackRecovery);
+        heavyAttackTelegraphRadiusScale = Mathf.Max(0.5f, heavyAttackTelegraphRadiusScale);
     }
 }
