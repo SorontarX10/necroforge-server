@@ -18,14 +18,14 @@ public class PlayerControllerCC : MonoBehaviour
     [Header("Enemy Head Knockback")]
     [SerializeField] private bool enableHeadKnockback = true;
     [SerializeField, Min(0.05f)] private float headKnockbackCooldown = 0.25f;
-    [SerializeField, Min(0.1f)] private float headKnockbackHorizontalForce = 8f;
-    [SerializeField, Min(0.1f)] private float headKnockbackVerticalSpeed = 5f;
+    [SerializeField, Min(0.1f)] private float headKnockbackHorizontalForce = 1.6f;
+    [SerializeField, Min(0.1f)] private float headKnockbackVerticalSpeed = 1f;
     [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 1f;
-    [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackHorizontal = 6f;
-    [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackVertical = 4f;
-    [SerializeField, Min(0f)] private float knockbackFallBoostScale = 0.18f;
+    [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackHorizontal = 1.2f;
+    [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackVertical = 0.8f;
+    [SerializeField, Min(0f)] private float knockbackFallBoostScale = 0.036f;
     [SerializeField, Min(0.1f)] private float knockbackDampingWhileActive = 10f;
-    [SerializeField, Min(0.01f)] private float knockbackStrongPhaseDuration = 0.08f;
+    [SerializeField, Min(0.01f)] private float knockbackStrongPhaseDuration = 0.016f;
     [SerializeField, Min(0f)] private float minFallSpeedForHeadKnockback = 0.2f;
     [SerializeField, Range(0.01f, 0.5f)] private float headTopTolerance = 0.16f;
     [SerializeField, Range(0f, 1f)] private float headContactAboveCenterBias = 0.15f;
