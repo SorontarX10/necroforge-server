@@ -4,7 +4,7 @@ namespace GrassSim.Combat
 {
     public static class CombatBalanceCaps
     {
-        public const float MaxDodgeChance = 0.75f;
+        public const float MaxDodgeChance = 0.80f;
         public const float MaxDamageReduction = 0.85f;
         public const float CritSoftCapStart = 0.85f;
         public const float CritSoftCapStrength = 0.35f;

@@ -44,8 +44,6 @@ public class PauseMenuController : MonoBehaviour
             return;
 
         bool togglePressed = false;
-
-#if ENABLE_INPUT_SYSTEM
         if (Keyboard.current != null)
         {
 #if UNITY_EDITOR
@@ -56,18 +54,6 @@ public class PauseMenuController : MonoBehaviour
             togglePressed = Keyboard.current.escapeKey.wasPressedThisFrame;
 #endif
         }
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (!togglePressed)
-        {
-#if UNITY_EDITOR
-            togglePressed = Input.GetKeyDown(KeyCode.P) || Input.GetKeyDown(KeyCode.Escape);
-#else
-            togglePressed = Input.GetKeyDown(KeyCode.Escape);
-#endif
-        }
-#endif
 
         if (togglePressed)
         {

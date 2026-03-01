@@ -55,7 +55,7 @@ public static class GameSettings
     public static void SetFullscreen(bool value)
     {
         Fullscreen = value;
-        Screen.fullScreen = value;
+        ApplyFullscreenMode();
         Save();
     }
 
@@ -85,6 +85,19 @@ public static class GameSettings
 
     static void Apply()
     {
-        Screen.fullScreen = Fullscreen;
+        ApplyFullscreenMode();
+    }
+
+    static void ApplyFullscreenMode()
+    {
+        if (Fullscreen)
+        {
+            Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
+            Screen.fullScreen = true;
+            return;
+        }
+
+        Screen.fullScreen = false;
+        Screen.fullScreenMode = FullScreenMode.Windowed;
     }
 }

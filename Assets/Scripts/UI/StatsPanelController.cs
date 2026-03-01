@@ -8,9 +8,7 @@ using GrassSim.Combat;
 using GrassSim.Stats;
 using GrassSim.Enhancers;
 using GrassSim.AI;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
 public class StatsPanelController : MonoBehaviour
 {
@@ -245,7 +243,6 @@ public class StatsPanelController : MonoBehaviour
 
     private void HandleInput()
     {
-#if ENABLE_INPUT_SYSTEM
         var keyboard = Keyboard.current;
         if (keyboard == null) return;
 
@@ -254,13 +251,6 @@ public class StatsPanelController : MonoBehaviour
 
         if (keyboard.tabKey.wasReleasedThisFrame)
             Collapse();
-#else
-        if (Input.GetKeyDown(KeyCode.Tab))
-            Expand();
-
-        if (Input.GetKeyUp(KeyCode.Tab))
-            Collapse();
-#endif
     }
 
     private bool IsValidPlayerRef(PlayerProgressionController p)

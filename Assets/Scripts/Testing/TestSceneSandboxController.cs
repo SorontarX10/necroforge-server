@@ -10,9 +10,7 @@ using GrassSim.Stats;
 using GrassSim.Upgrades;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -166,7 +164,7 @@ namespace GrassSim.Testing
                 GetInstanceID(),
                 windowRect,
                 DrawWindow,
-                "0.6.0 Test Sandbox"
+                GetSandboxWindowTitle()
             );
         }
 
@@ -295,8 +293,8 @@ namespace GrassSim.Testing
 
             critChance = Mathf.Clamp01(critChance);
             lifeSteal = Mathf.Clamp01(lifeSteal);
-            damageReduction = Mathf.Clamp01(damageReduction);
-            dodgeChance = Mathf.Clamp01(dodgeChance);
+            damageReduction = CombatBalanceCaps.ClampDamageReduction(damageReduction);
+            dodgeChance = CombatBalanceCaps.ClampDodgeChance(dodgeChance);
             critMultiplier = CombatBalanceCaps.ClampCritMultiplier(critMultiplier);
 
             GUILayout.Label("Player Stats Snapshot");
@@ -1266,21 +1264,22 @@ namespace GrassSim.Testing
 
         private bool WasCursorToggleHotkeyPressed()
         {
-#if ENABLE_INPUT_SYSTEM
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null && IsInputSystemHotkeyPressed(keyboard, cursorToggleHotkey))
                 return true;
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetKeyDown(cursorToggleHotkey))
-                return true;
-#endif
 
             return false;
         }
 
-#if ENABLE_INPUT_SYSTEM
+        private static string GetSandboxWindowTitle()
+        {
+            string version = string.IsNullOrWhiteSpace(Application.version)
+                ? "0.6.1"
+                : Application.version;
+
+            return $"{version} Test Sandbox";
+        }
+
         private static bool IsInputSystemHotkeyPressed(Keyboard keyboard, KeyCode hotkey)
         {
             if (keyboard == null)
@@ -1303,7 +1302,6 @@ namespace GrassSim.Testing
                 _ => keyboard.f1Key.wasPressedThisFrame
             };
         }
-#endif
 
         private void SetSelectedRelicIndex(int index)
         {

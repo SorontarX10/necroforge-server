@@ -96,7 +96,6 @@ public class PlayerControllerCC : MonoBehaviour
     {
         moveInput = actionMoveInput;
 
-#if ENABLE_INPUT_SYSTEM
         Vector2 keyboardMove = ReadKeyboardMoveInput();
         if (keyboardMove.sqrMagnitude > 0.0001f)
             moveInput = keyboardMove;
@@ -104,24 +103,10 @@ public class PlayerControllerCC : MonoBehaviour
         var keyboard = Keyboard.current;
         if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
             jumpRequested = true;
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (moveInput.sqrMagnitude <= 0.0001f)
-        {
-            float horizontal = Mathf.Clamp(Input.GetAxisRaw("Horizontal"), -1f, 1f);
-            float vertical = Mathf.Clamp(Input.GetAxisRaw("Vertical"), -1f, 1f);
-            moveInput = new Vector2(horizontal, vertical);
-        }
-
-        if (Input.GetKeyDown(KeyCode.Space))
-            jumpRequested = true;
-#endif
 
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
     }
 
-#if ENABLE_INPUT_SYSTEM
     private static Vector2 ReadKeyboardMoveInput()
     {
         var keyboard = Keyboard.current;
@@ -142,7 +127,6 @@ public class PlayerControllerCC : MonoBehaviour
 
         return new Vector2(horizontal, vertical);
     }
-#endif
 
     void ApplyGravity()
     {

@@ -3,9 +3,7 @@ using GrassSim.Combat;
 using GrassSim.Core;
 using GrassSim.Stats;
 using GrassSim.Enhancers;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
 public class WeaponController : MonoBehaviour
 {
@@ -311,18 +309,9 @@ public class WeaponController : MonoBehaviour
 
     private bool WasResetPressedThisFrame()
     {
-#if ENABLE_INPUT_SYSTEM
-        if (WasResetPressedWithInputSystem())
-            return true;
-#endif
-#if ENABLE_LEGACY_INPUT_MANAGER
-        return Input.GetKeyDown(resetKey);
-#else
-        return false;
-#endif
+        return WasResetPressedWithInputSystem();
     }
 
-#if ENABLE_INPUT_SYSTEM
     private bool WasResetPressedWithInputSystem()
     {
         var mouse = Mouse.current;
@@ -371,7 +360,6 @@ public class WeaponController : MonoBehaviour
 
         return false;
     }
-#endif
 
     private bool TryDrainStamina(float dt)
     {

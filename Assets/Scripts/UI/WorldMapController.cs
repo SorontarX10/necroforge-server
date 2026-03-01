@@ -9,18 +9,11 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Scripting;
 using UnityEngine.UI;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
 [Preserve]
 public class WorldMapController : MonoBehaviour
 {
-    [Header("Input")]
-#if ENABLE_LEGACY_INPUT_MANAGER
-    [SerializeField] private KeyCode legacyToggleKey = KeyCode.M;
-#endif
-
     [Header("Map Bake")]
     [SerializeField, Min(256)] private int mapTextureSize = 1024;
     [SerializeField] private LayerMask mapCullingMask = ~0;
@@ -244,17 +237,9 @@ public class WorldMapController : MonoBehaviour
     private void HandleToggleInput()
     {
         bool toggleRequested = false;
-
-#if ENABLE_INPUT_SYSTEM
         var keyboard = Keyboard.current;
         if (keyboard != null)
             toggleRequested = keyboard.mKey.wasPressedThisFrame;
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (!toggleRequested)
-            toggleRequested = Input.GetKeyDown(legacyToggleKey);
-#endif
 
         if (toggleRequested)
             SetMapVisible(!mapVisible);

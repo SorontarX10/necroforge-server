@@ -240,14 +240,7 @@ public class ChoirOfShatteredSaintsRuntime : MonoBehaviour
         {
             go = TryInstantiateSkullPrefab(cfg.skullPrefab);
             if (go != null)
-            {
-                RelicDamageText.StyleSpawnedSkullVisual(
-                    go,
-                    RelicRarity.Mythic,
-                    cfg.skullPrefabScale,
-                    cfg.skullPrefabRotation
-                );
-            }
+                ApplyCustomSkullTransform(go);
         }
         else
         {
@@ -282,15 +275,7 @@ public class ChoirOfShatteredSaintsRuntime : MonoBehaviour
 
         try
         {
-            UnityEngine.Object spawned = Instantiate((UnityEngine.Object)prefab, transform.position, Quaternion.identity);
-            if (spawned is GameObject go)
-                return go;
-
-            if (spawned is Component component)
-                return component.gameObject;
-
-            if (spawned != null)
-                Destroy(spawned);
+            return Instantiate(prefab, transform.position, Quaternion.identity);
         }
         catch (System.Exception ex)
         {
@@ -298,6 +283,15 @@ public class ChoirOfShatteredSaintsRuntime : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void ApplyCustomSkullTransform(GameObject go)
+    {
+        if (go == null || cfg == null)
+            return;
+
+        go.transform.localScale = Vector3.one * Mathf.Max(0.01f, cfg.skullPrefabScale);
+        go.transform.localRotation = Quaternion.Euler(cfg.skullPrefabRotation);
     }
 
     private void ClearSkulls()

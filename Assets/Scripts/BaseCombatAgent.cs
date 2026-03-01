@@ -3,9 +3,7 @@ using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 using GrassSim.Combat;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
 public abstract class BaseCombatAgent : Agent
 {
@@ -101,7 +99,6 @@ public abstract class BaseCombatAgent : Agent
 
     private static Vector2 ReadMoveInput()
     {
-#if ENABLE_INPUT_SYSTEM
         var keyboard = Keyboard.current;
         if (keyboard == null)
             return Vector2.zero;
@@ -119,26 +116,15 @@ public abstract class BaseCombatAgent : Agent
             vertical += 1f;
 
         return new Vector2(Mathf.Clamp(horizontal, -1f, 1f), Mathf.Clamp(vertical, -1f, 1f));
-#elif ENABLE_LEGACY_INPUT_MANAGER
-        return new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
-#else
-        return Vector2.zero;
-#endif
     }
 
     private static Vector2 ReadLookInput()
     {
-#if ENABLE_INPUT_SYSTEM
         var mouse = Mouse.current;
         if (mouse == null)
             return Vector2.zero;
 
         return mouse.delta.ReadValue();
-#elif ENABLE_LEGACY_INPUT_MANAGER
-        return new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
-#else
-        return Vector2.zero;
-#endif
     }
 
     protected float GetDistanceToTarget()

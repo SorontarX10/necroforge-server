@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1 - 2026-03-01
+
+### Input and Controls
+- Switched the project to `Input System` only (`activeInputHandler: 1`) and removed gameplay/UI legacy `Input Manager` fallbacks.
+- Stabilized keyboard and mouse handling paths across player movement, combat, pause/menu toggles, world map, and test sandbox hotkeys.
+
+### Release
+- Bumped application version to `0.6.1`.
+- Updated test sandbox window title to use runtime `Application.version` (with a `0.6.1` fallback) to avoid hardcoded release strings.
+
+### Visual Planning
+- Added a new complete visual improvement roadmap with milestones, metrics, acceptance criteria, and risk mitigations (`Docs/PLAN_0.6.1_VISUAL.md`).
+
 ## 0.6.0 - 2026-02-23
 
 ### Test Scene Sandbox

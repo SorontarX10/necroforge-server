@@ -76,9 +76,6 @@ public class BoneforgeStandard : RelicEffect, ISwordLengthModifier, ICritMultipl
 
 public class BoneforgeStandardRuntime : MonoBehaviour, IRelicBatchedUpdate, IRelicBatchedCadence
 {
-    private static readonly Color BoneforgeBannerGold = new(0.98f, 0.83f, 0.26f, 0.84f);
-    private static readonly Color BoneforgeAuraEdgeGold = new(1f, 0.88f, 0.3f, 1f);
-
     private PlayerRelicController player;
     private BoneforgeStandard cfg;
     private int stacks;
@@ -243,9 +240,7 @@ public class BoneforgeStandardRuntime : MonoBehaviour, IRelicBatchedUpdate, IRel
             "BoneforgeStandard",
             cfg.radius,
             RelicRarity.Mythic,
-            withBanner: true,
-            bannerColorOverride: BoneforgeBannerGold,
-            auraEdgeColorOverride: BoneforgeAuraEdgeGold
+            withBanner: true
         );
 
         if (generatedStandardPrefab == null)

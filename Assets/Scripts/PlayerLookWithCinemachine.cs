@@ -1,7 +1,5 @@
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerLookSyncWithCinemachine : MonoBehaviour
@@ -65,7 +63,6 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
 
     private static Vector2 ReadMoveInput()
     {
-#if ENABLE_INPUT_SYSTEM
         var keyboard = Keyboard.current;
         if (keyboard == null)
             return Vector2.zero;
@@ -83,11 +80,6 @@ public class PlayerLookSyncWithCinemachine : MonoBehaviour
             vertical += 1f;
 
         return new Vector2(Mathf.Clamp(horizontal, -1f, 1f), Mathf.Clamp(vertical, -1f, 1f));
-#elif ENABLE_LEGACY_INPUT_MANAGER
-        return new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
-#else
-        return Vector2.zero;
-#endif
     }
 
     private static Transform ResolveCameraFollow()
