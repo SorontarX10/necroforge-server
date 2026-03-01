@@ -9,6 +9,8 @@ using GrassSim.Stats;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerControllerCC : MonoBehaviour
 {
+    private const float AdditionalHeadKnockbackScale = 5f;
+
     [Header("Movement Settings")]
     public float moveSpeed = 5f;
 
@@ -20,12 +22,16 @@ public class PlayerControllerCC : MonoBehaviour
     [SerializeField, Min(0.05f)] private float headKnockbackCooldown = 0.25f;
     [SerializeField, Min(0.1f)] private float headKnockbackHorizontalForce = 1.6f;
     [SerializeField, Min(0.1f)] private float headKnockbackVerticalSpeed = 1f;
-    [SerializeField, Min(0.1f)] private float headKnockbackMultiplier = 1f;
+    [SerializeField, Min(0.01f)] private float headKnockbackMultiplier = 0.1f;
     [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackHorizontal = 1.2f;
     [SerializeField, Min(0.1f)] private float minEffectiveHeadKnockbackVertical = 0.8f;
     [SerializeField, Min(0f)] private float knockbackFallBoostScale = 0.036f;
     [SerializeField, Min(0.1f)] private float knockbackDampingWhileActive = 10f;
     [SerializeField, Min(0.01f)] private float knockbackStrongPhaseDuration = 0.016f;
+    [SerializeField, Min(0f)] private float hardMaxHeadKnockbackHorizontalImpulse = 0.35f;
+    [SerializeField, Min(0f)] private float hardMaxHeadKnockbackVerticalImpulse = 0.2f;
+    [SerializeField, Min(0f)] private float hardMaxExternalKnockbackSpeed = 0.45f;
+    [SerializeField, Min(0.1f)] private float headKnockbackRuntimeScale = 10f;
     [SerializeField, Min(0f)] private float minFallSpeedForHeadKnockback = 0.2f;
     [SerializeField, Range(0.01f, 0.5f)] private float headTopTolerance = 0.16f;
     [SerializeField, Range(0f, 1f)] private float headContactAboveCenterBias = 0.15f;
@@ -218,6 +224,10 @@ public class PlayerControllerCC : MonoBehaviour
             return;
         }
 
+        float knockbackScale = GetHeadKnockbackScale();
+        if (hardMaxExternalKnockbackSpeed > 0f)
+            externalVelocity = Vector3.ClampMagnitude(externalVelocity, hardMaxExternalKnockbackSpeed * knockbackScale);
+
         controller.Move(externalVelocity * Time.deltaTime);
         float damping = externalVelocityDamping;
         if (Time.time < strongKnockbackUntil)
@@ -269,7 +279,7 @@ public class PlayerControllerCC : MonoBehaviour
             away = -transform.forward;
 
         away.Normalize();
-        float knockbackMul = Mathf.Max(1f, headKnockbackMultiplier);
+        float knockbackMul = Mathf.Clamp(headKnockbackMultiplier, 0.001f, 0.1f);
         float horizontalImpulse = Mathf.Max(minEffectiveHeadKnockbackHorizontal, headKnockbackHorizontalForce) * knockbackMul;
         float verticalImpulse = Mathf.Max(minEffectiveHeadKnockbackVertical, headKnockbackVerticalSpeed) * knockbackMul;
 
@@ -281,6 +291,13 @@ public class PlayerControllerCC : MonoBehaviour
             horizontalImpulse *= 1f + fallBoost;
             verticalImpulse *= 1f + fallBoost * 0.85f;
         }
+
+        float runtimeScale = GetHeadKnockbackScale();
+        horizontalImpulse *= runtimeScale;
+        verticalImpulse *= runtimeScale;
+
+        horizontalImpulse = Mathf.Min(horizontalImpulse, Mathf.Max(0f, hardMaxHeadKnockbackHorizontalImpulse) * runtimeScale);
+        verticalImpulse = Mathf.Min(verticalImpulse, Mathf.Max(0f, hardMaxHeadKnockbackVerticalImpulse) * runtimeScale);
 
         externalVelocity = away * horizontalImpulse;
         velocity.y = Mathf.Max(velocity.y, verticalImpulse);
@@ -346,15 +363,25 @@ public class PlayerControllerCC : MonoBehaviour
             && enemyName.IndexOf("dog", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    float GetHeadKnockbackScale()
+    {
+        return Mathf.Max(0.1f, headKnockbackRuntimeScale) * AdditionalHeadKnockbackScale;
+    }
+
     private void OnValidate()
     {
         speedDampTime = Mathf.Max(0f, speedDampTime);
         speedAnimationResponse = Mathf.Max(0f, speedAnimationResponse);
         headContactAboveCenterBias = Mathf.Clamp01(headContactAboveCenterBias);
+        headKnockbackMultiplier = Mathf.Max(0.01f, headKnockbackMultiplier);
         minEffectiveHeadKnockbackHorizontal = Mathf.Max(0.1f, minEffectiveHeadKnockbackHorizontal);
         minEffectiveHeadKnockbackVertical = Mathf.Max(0.1f, minEffectiveHeadKnockbackVertical);
         knockbackFallBoostScale = Mathf.Max(0f, knockbackFallBoostScale);
         knockbackDampingWhileActive = Mathf.Max(0.1f, knockbackDampingWhileActive);
         knockbackStrongPhaseDuration = Mathf.Max(0.01f, knockbackStrongPhaseDuration);
+        hardMaxHeadKnockbackHorizontalImpulse = Mathf.Max(0f, hardMaxHeadKnockbackHorizontalImpulse);
+        hardMaxHeadKnockbackVerticalImpulse = Mathf.Max(0f, hardMaxHeadKnockbackVerticalImpulse);
+        hardMaxExternalKnockbackSpeed = Mathf.Max(0f, hardMaxExternalKnockbackSpeed);
+        headKnockbackRuntimeScale = Mathf.Max(0.1f, headKnockbackRuntimeScale);
     }
 }
