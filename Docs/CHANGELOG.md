@@ -5,6 +5,15 @@
 ### Gameplay
 - Reduced enemy head knockback strength significantly to avoid over-punishing bounce responses while keeping anti-head-stomp behavior.
 
+### Visual Readability
+- Added environment readability guardrails (`RuntimeVisualReadabilityStabilizer`) for ambient intensity, reflection intensity, fog color luminance, and directional light/shadow strength to improve silhouette separation.
+
+### Combat Feedback
+- Synced melee hit feedback timing to damage popups by applying hit SFX after damage resolution and batching hit-stop/camera-shake in a frame-locked feedback queue.
+
+### Profiling
+- Added runtime performance summary capture (`RuntimePerformanceSummary`) with JSONL export for `avg FPS`, `1% low`, `p95/p99`, CPU main/render, GC alloc, draw calls, and setpass counts.
+
 ### Release
 - Bumped application version to `0.7.1`.
 - Updated test sandbox version fallback to `0.7.1`.

@@ -16,6 +16,18 @@ public sealed class RuntimeVisualReadabilityStabilizer : MonoBehaviour
     [SerializeField, Min(0f)] private float maxFogDensity = 0.03f;
     [SerializeField, Min(0f)] private float minimumFogStartDistance = 18f;
     [SerializeField, Min(0f)] private float minimumFogEndDistance = 44f;
+    [SerializeField, Range(0f, 1f)] private float minimumFogColorLuminance = 0.08f;
+    [SerializeField, Range(0f, 1f)] private float maximumFogColorLuminance = 0.38f;
+
+    [Header("Environment Lighting Guardrails")]
+    [SerializeField] private bool clampEnvironmentLighting = true;
+    [SerializeField, Min(0f)] private float minimumAmbientIntensity = 0.85f;
+    [SerializeField, Min(0f)] private float maximumAmbientIntensity = 1.35f;
+    [SerializeField, Min(0f)] private float minimumReflectionIntensity = 0.65f;
+    [SerializeField, Min(0f)] private float maximumReflectionIntensity = 1.25f;
+    [SerializeField, Min(0f)] private float minimumDirectionalLightIntensity = 0.75f;
+    [SerializeField, Min(0f)] private float maximumDirectionalLightIntensity = 1.6f;
+    [SerializeField, Range(0f, 1f)] private float maximumDirectionalShadowStrength = 0.78f;
 
     [Header("Post Process Guardrails")]
     [SerializeField] private Vector2 postExposureRange = new Vector2(-0.35f, 0.45f);
@@ -96,6 +108,7 @@ public sealed class RuntimeVisualReadabilityStabilizer : MonoBehaviour
 
     private void ApplyGuardrails()
     {
+        ClampEnvironmentLighting();
         ClampRenderSettingsFog();
 
         Volume[] volumes = Object.FindObjectsByType<Volume>(FindObjectsSortMode.None);
@@ -120,6 +133,12 @@ public sealed class RuntimeVisualReadabilityStabilizer : MonoBehaviour
             return;
 
         RenderSettings.fogDensity = Mathf.Min(Mathf.Max(0f, RenderSettings.fogDensity), Mathf.Max(0f, maxFogDensity));
+        RenderSettings.fogColor = ClampColorLuminance(
+            RenderSettings.fogColor,
+            minimumFogColorLuminance,
+            maximumFogColorLuminance
+        );
+
         if (RenderSettings.fogMode != FogMode.Linear)
             return;
 
@@ -127,6 +146,35 @@ public sealed class RuntimeVisualReadabilityStabilizer : MonoBehaviour
         float end = Mathf.Max(RenderSettings.fogEndDistance, minimumFogEndDistance, start + 8f);
         RenderSettings.fogStartDistance = start;
         RenderSettings.fogEndDistance = end;
+    }
+
+    private void ClampEnvironmentLighting()
+    {
+        if (!clampEnvironmentLighting)
+            return;
+
+        float minAmbient = Mathf.Min(minimumAmbientIntensity, maximumAmbientIntensity);
+        float maxAmbient = Mathf.Max(minimumAmbientIntensity, maximumAmbientIntensity);
+        RenderSettings.ambientIntensity = Mathf.Clamp(RenderSettings.ambientIntensity, minAmbient, maxAmbient);
+
+        float minReflection = Mathf.Min(minimumReflectionIntensity, maximumReflectionIntensity);
+        float maxReflection = Mathf.Max(minimumReflectionIntensity, maximumReflectionIntensity);
+        RenderSettings.reflectionIntensity = Mathf.Clamp(RenderSettings.reflectionIntensity, minReflection, maxReflection);
+
+        float minDirectional = Mathf.Min(minimumDirectionalLightIntensity, maximumDirectionalLightIntensity);
+        float maxDirectional = Mathf.Max(minimumDirectionalLightIntensity, maximumDirectionalLightIntensity);
+        float maxShadowStrength = Mathf.Clamp01(maximumDirectionalShadowStrength);
+
+        Light[] lights = Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+        for (int i = 0; i < lights.Length; i++)
+        {
+            Light light = lights[i];
+            if (light == null || !light.enabled || light.type != LightType.Directional)
+                continue;
+
+            light.intensity = Mathf.Clamp(light.intensity, minDirectional, maxDirectional);
+            light.shadowStrength = Mathf.Min(light.shadowStrength, maxShadowStrength);
+        }
     }
 
     private void ClampProfile(VolumeProfile profile)
@@ -158,5 +206,28 @@ public sealed class RuntimeVisualReadabilityStabilizer : MonoBehaviour
         float low = Mathf.Min(min, max);
         float high = Mathf.Max(min, max);
         parameter.value = Mathf.Clamp(parameter.value, low, high);
+    }
+
+    private static Color ClampColorLuminance(Color color, float minLuminance, float maxLuminance)
+    {
+        float low = Mathf.Clamp01(Mathf.Min(minLuminance, maxLuminance));
+        float high = Mathf.Clamp01(Mathf.Max(minLuminance, maxLuminance));
+        float luminance = color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f;
+
+        if (luminance <= 0.0001f)
+        {
+            float v = low;
+            return new Color(v, v, v, color.a);
+        }
+
+        float target = Mathf.Clamp(luminance, low, high);
+        float scale = target / luminance;
+
+        return new Color(
+            Mathf.Clamp01(color.r * scale),
+            Mathf.Clamp01(color.g * scale),
+            Mathf.Clamp01(color.b * scale),
+            color.a
+        );
     }
 }

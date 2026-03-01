@@ -46,41 +46,14 @@ Punkty milestone 0.6.2 zostaly wdrozone i usuniete z backlogu:
 - telegraph elit: anticipation/recovery w `HordeAISystem` z czytelnym markerem strefy zagrozenia.
 - spojnosc rarity: ujednolicone tintowanie prefabow aura/banner/circle (`RelicVisualRarityTint`) i podpiecie pod standardy/kregi relicow.
 
-## Milestone 0.7.0 (swiat + final polish + profiling)
+## Milestone 0.7.0 (zamkniety)
 
-## 1. Swiatlo srodowiskowe i art pass map
-- Opis: drugi pass srodowiska (kontrast planow, gradacja terenu, tlo i mgla).
-- Systemy/pliki:
-- chunk terrain materialy i oswietlenie scen.
-- DoD:
-- lepsza separacja planow (foreground/mid/background),
-- wyzsza czytelnosc nawigacji.
-- Test:
-- test eksploracji i orientacji przestrzennej.
-- Metryka sukcesu:
-- skrocenie czasu odnalezienia celow mapy w testach UX.
+Punkty milestone 0.7.0 zrealizowane i usuniete z backlogu:
+- swiatlo srodowiskowe i art pass map: runtime guardrails dla ambient/reflection/fog color/directional lights dla lepszej separacji sylwetek i planow.
+- final polish VFX + audio-visual sync: ramkowe kolejkowanie feedbacku trafien (hit-stop + shake) oraz synchronizacja hit SFX po aplikacji obrazen/floating text.
+- profiling pass CPU/GPU pod finalny budzet: dodany runtime recorder podsumowania wydajnosci (`avg FPS`, `1% low`, `p95/p99`, CPU main/render, GC, draw/setpass) z eksportem JSONL do `persistentDataPath` i `results/perf`.
 
-## 2. Final polish VFX + audio-visual sync
-- Opis: finalne domkniecie timingow i intensywnosci efektow (hit-stop, shake, trails, impact).
-- Systemy/pliki:
-- combat VFX/SFX i kontrolery kamery.
-- DoD:
-- kazdy ciezki hit ma czytelny, spojny feedback.
-- Test:
-- test regresji trafien normal/crit/elite/boss.
-- Metryka sukcesu:
-- brak krytycznych rozjazdow audio/VFX/hit event.
-
-## 3. Profiling pass CPU/GPU pod finalny budzet
-- Opis: koncowa optymalizacja pod KPI 60/45.
-- Systemy/pliki:
-- najdrozsze systemy wskazane profilerem.
-- DoD:
-- KPI wydajnosci spelnione na buildzie release candidate.
-- Test:
-- powtorzenie pelnej metodyki baseline.
-- Metryka sukcesu:
-- spelnione wszystkie KPI wydajnosciowe.
+Otwarte punkty milestone 0.7.0: brak.
 
 ## Testy akceptacyjne (globalne)
 

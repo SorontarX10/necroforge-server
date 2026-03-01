@@ -72,14 +72,6 @@ public class SwordDamage : MonoBehaviour
             float critMultiplier = weapon.GetCritMultiplier();
             damage *= critMultiplier;
             isCrit = true;
-
-            if (swordCritClip != null)
-                hitAudioSource.PlayOneShot(swordCritClip, hitVolume);
-        }
-        else
-        {
-            if (swordSlashClip != null)
-                hitAudioSource.PlayOneShot(swordSlashClip, hitVolume);
         }
 
         var incomingDamageDebuff = target.GetComponent<RelicIncomingDamageTakenDebuff>();
@@ -97,6 +89,7 @@ public class SwordDamage : MonoBehaviour
 
         bool hitBoss = target.GetComponent<BossEnemyController>() != null;
         bool hitElite = !hitBoss && target.TryGetComponent<EnemyCombatant>(out EnemyCombatant enemyCombatant) && enemyCombatant.IsElite;
+        PlayHitAudio(isCrit);
         CombatHitFeedback.TriggerPlayerMeleeHit(isCrit, hitElite, hitBoss);
 
         float lifeStealRequested = weapon.GetLifeStealRequested();
@@ -172,6 +165,18 @@ public class SwordDamage : MonoBehaviour
         lifeStealWindowRecovered += allowed;
         return Mathf.Max(0f, allowed);
     }
+
+    private void PlayHitAudio(bool isCrit)
+    {
+        if (hitAudioSource == null || !hitAudioSource.isActiveAndEnabled)
+            return;
+
+        AudioClip clip = isCrit ? swordCritClip : swordSlashClip;
+        if (clip == null)
+            return;
+
+        hitAudioSource.PlayOneShot(clip, hitVolume);
+    }
 }
 
 [DefaultExecutionOrder(900)]
@@ -192,6 +197,9 @@ public sealed class CombatHitFeedback : MonoBehaviour
     [SerializeField, Min(0.01f)] private float bossShakeDuration = 0.1f;
     [SerializeField, Min(0f)] private float shakeDecay = 16f;
 
+    [Header("Sync")]
+    [SerializeField, Min(0)] private int maxFeedbackFrameDelay = 1;
+
     private static CombatHitFeedback instance;
 
     private Transform cameraTransform;
@@ -203,6 +211,11 @@ public sealed class CombatHitFeedback : MonoBehaviour
     private bool hitStopActive;
     private float preHitStopTimeScale = 1f;
     private float baseFixedDeltaTime = 0.02f;
+    private bool hasPendingFeedback;
+    private bool pendingCrit;
+    private bool pendingElite;
+    private bool pendingBoss;
+    private int pendingFrame = -1;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
@@ -249,12 +262,38 @@ public sealed class CombatHitFeedback : MonoBehaviour
     private void LateUpdate()
     {
         ResolveCamera();
+        ProcessPendingFeedback();
         UpdateHitStop();
         UpdateShake();
     }
 
     private void TriggerFeedback(bool isCrit, bool hitElite, bool hitBoss)
     {
+        hasPendingFeedback = true;
+        pendingCrit |= isCrit;
+        pendingElite |= hitElite;
+        pendingBoss |= hitBoss;
+        if (pendingFrame < 0)
+            pendingFrame = Time.frameCount;
+    }
+
+    private void ProcessPendingFeedback()
+    {
+        if (!hasPendingFeedback)
+            return;
+
+        int frameDelay = Mathf.Max(0, Time.frameCount - pendingFrame);
+        if (frameDelay > Mathf.Max(0, maxFeedbackFrameDelay))
+        {
+            ClearPendingFeedback();
+            return;
+        }
+
+        bool isCrit = pendingCrit;
+        bool hitElite = pendingElite;
+        bool hitBoss = pendingBoss;
+        ClearPendingFeedback();
+
         float now = Time.unscaledTime;
 
         float targetShakeStrength = meleeShakeStrength;
@@ -284,6 +323,16 @@ public sealed class CombatHitFeedback : MonoBehaviour
 
         if (stop > 0f)
             ApplyHitStop(Mathf.Min(stop, Mathf.Max(0f, maxHitStop)));
+
+    }
+
+    private void ClearPendingFeedback()
+    {
+        hasPendingFeedback = false;
+        pendingCrit = false;
+        pendingElite = false;
+        pendingBoss = false;
+        pendingFrame = -1;
     }
 
     private void ResolveCamera()
