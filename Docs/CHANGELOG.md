@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 - 2026-03-01
+
+### Gameplay
+- Reduced enemy head knockback strength significantly to avoid over-punishing bounce responses while keeping anti-head-stomp behavior.
+
+### Release
+- Bumped application version to `0.7.1`.
+- Updated test sandbox version fallback to `0.7.1`.
+
 ## 0.7.0 - 2026-03-01
 
 ### Release
