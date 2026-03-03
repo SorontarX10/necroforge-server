@@ -155,7 +155,7 @@ namespace GrassSim.Testing
 
         private void OnGUI()
         {
-            if (!IsSandboxSceneActive())
+            if (!IsSandboxSceneActive() || !BuildProfileResolver.IsDevelopmentToolsEnabled)
                 return;
 
             DrawPlayerHudOverlay();
@@ -220,18 +220,21 @@ namespace GrassSim.Testing
                 BuildAllCatalogs();
             GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(GameSettings.GodMode ? "Godmode: ON" : "Godmode: OFF"))
+            if (BuildProfileResolver.IsDevelopmentToolsEnabled)
             {
-                bool enableGodMode = !GameSettings.GodMode;
-                GameSettings.SetGodMode(enableGodMode);
-                if (enableGodMode)
-                    RefillPlayerResources();
-            }
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(GameSettings.GodMode ? "Godmode: ON" : "Godmode: OFF"))
+                {
+                    bool enableGodMode = !GameSettings.GodMode;
+                    GameSettings.SetGodMode(enableGodMode);
+                    if (enableGodMode)
+                        RefillPlayerResources();
+                }
 
-            if (GUILayout.Button("Refill (Godmode Safety)"))
-                RefillPlayerResources();
-            GUILayout.EndHorizontal();
+                if (GUILayout.Button("Refill (Godmode Safety)"))
+                    RefillPlayerResources();
+                GUILayout.EndHorizontal();
+            }
 
             if (playerProgression != null)
             {
@@ -1274,7 +1277,7 @@ namespace GrassSim.Testing
         private static string GetSandboxWindowTitle()
         {
             string version = string.IsNullOrWhiteSpace(Application.version)
-                ? "0.7.1"
+                ? "0.7.2"
                 : Application.version;
 
             return $"{version} Test Sandbox";

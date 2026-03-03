@@ -37,6 +37,7 @@ namespace GrassSim.Telemetry
             public int schema_version;
             public string event_type;
             public string run_id;
+            public bool is_cheat_session;
             public string utc_timestamp;
             public string scene_name;
             public string app_version;
@@ -536,6 +537,7 @@ namespace GrassSim.Telemetry
 
         private bool runActive;
         private string runId;
+        private bool isCheatSession;
         private string persistentLogPath;
         private string projectLogPath;
         private int runSequence;
@@ -1351,11 +1353,15 @@ namespace GrassSim.Telemetry
 
         private TelemetryRecord CreateRecord(string eventType)
         {
+            if (GameSettings.GodMode)
+                isCheatSession = true;
+
             return new TelemetryRecord
             {
                 schema_version = TelemetrySchemaVersion,
                 event_type = eventType,
                 run_id = runId,
+                is_cheat_session = isCheatSession,
                 utc_timestamp = DateTime.UtcNow.ToString("O"),
                 scene_name = SceneManager.GetActiveScene().name,
                 app_version = Application.version,
@@ -2640,6 +2646,7 @@ namespace GrassSim.Telemetry
 
         private void ResetRunAccumulators()
         {
+            isCheatSession = GameSettings.GodMode;
             upgradeRolls = 0;
             upgradesApplied = 0;
             relicsApplied = 0;

@@ -17,6 +17,7 @@ namespace GrassSim.AI
         public int id;
         public int prefabIndex;
         public bool isElite;
+        public bool isApex;
         public float healthMultiplier = 1f;
         public float damageMultiplier = 1f;
         public float expMultiplier = 1f;

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.2 - 2026-03-03
+
+### Build Profiles
+- Added runtime build profile resolver + standalone build automation/prebuild validation for `Dev`, `Demo`, `InternalQA`, and `Release`.
+- Added profile smoke artifacts and setup docs in `Docs/BUILD_PROFILES.md`.
+
+### Cheat Security
+- Locked `GodMode` behind development profile checks in `GameSettings`.
+- `opt_godmode` from `PlayerPrefs` is now ignored and sanitized outside dev profiles, with a warning log.
+- Removed automatic `GodMode` toggle creation from options menu and limited debug cheat panel rendering to dev-tool profiles.
+- Added `is_cheat_session` marker to gameplay telemetry run payloads.
+
+### Tests
+- Added editor tests for build profile mapping/validation and demo-mode `GodMode` guards.
+
+### Release
+- Bumped application version to `0.7.2`.
+- Updated test sandbox version fallback to `0.7.2`.
+
 ## 0.7.1 - 2026-03-01
 
 ### Gameplay

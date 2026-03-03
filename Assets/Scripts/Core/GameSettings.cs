@@ -1,7 +1,15 @@
+using GrassSim.Core;
 using UnityEngine;
 
 public static class GameSettings
 {
+    private const string PrefMasterVolume = "opt_master";
+    private const string PrefMusicVolume = "opt_music";
+    private const string PrefSfxVolume = "opt_sfx";
+    private const string PrefMouseSensitivity = "opt_mouse";
+    private const string PrefGodMode = "opt_godmode";
+    private const string PrefFullscreen = "opt_fullscreen";
+
     // AUDIO
     public static float MasterVolume { get; private set; } = 1f;
     public static float MusicVolume  { get; private set; } = 0.8f;
@@ -15,6 +23,7 @@ public static class GameSettings
 
     // GRAPHICS
     public static bool Fullscreen { get; private set; } = true;
+    private static bool warnedAboutGodModeSanitization;
 
     // ===== AUDIO =====
     public static void SetMasterVolume(float v)
@@ -47,6 +56,16 @@ public static class GameSettings
 
     public static void SetGodMode(bool value)
     {
+        if (!BuildProfileResolver.IsDevelopmentToolsEnabled)
+        {
+            if (value || GodMode)
+                WarnAndSanitizeGodMode("Ignored SetGodMode request in non-dev build profile.");
+
+            GodMode = false;
+            Save();
+            return;
+        }
+
         GodMode = value;
         Save();
     }
@@ -62,24 +81,27 @@ public static class GameSettings
     // ===== SAVE / LOAD =====
     public static void Load()
     {
-        MasterVolume = PlayerPrefs.GetFloat("opt_master", 1f);
-        MusicVolume  = PlayerPrefs.GetFloat("opt_music", 0.8f);
-        SfxVolume    = PlayerPrefs.GetFloat("opt_sfx", 0.8f);
-        MouseSensitivity = PlayerPrefs.GetFloat("opt_mouse", 1f);
-        GodMode = PlayerPrefs.GetInt("opt_godmode", 0) == 1;
-        Fullscreen = PlayerPrefs.GetInt("opt_fullscreen", 1) == 1;
+        MasterVolume = PlayerPrefs.GetFloat(PrefMasterVolume, 1f);
+        MusicVolume  = PlayerPrefs.GetFloat(PrefMusicVolume, 0.8f);
+        SfxVolume    = PlayerPrefs.GetFloat(PrefSfxVolume, 0.8f);
+        MouseSensitivity = PlayerPrefs.GetFloat(PrefMouseSensitivity, 1f);
+        GodMode = PlayerPrefs.GetInt(PrefGodMode, 0) == 1;
+        Fullscreen = PlayerPrefs.GetInt(PrefFullscreen, 1) == 1;
+        SanitizeGodModeIfNeeded("Load");
 
         Apply();
     }
 
     static void Save()
     {
-        PlayerPrefs.SetFloat("opt_master", MasterVolume);
-        PlayerPrefs.SetFloat("opt_music", MusicVolume);
-        PlayerPrefs.SetFloat("opt_sfx", SfxVolume);
-        PlayerPrefs.SetFloat("opt_mouse", MouseSensitivity);
-        PlayerPrefs.SetInt("opt_godmode", GodMode ? 1 : 0);
-        PlayerPrefs.SetInt("opt_fullscreen", Fullscreen ? 1 : 0);
+        SanitizeGodModeIfNeeded("Save");
+
+        PlayerPrefs.SetFloat(PrefMasterVolume, MasterVolume);
+        PlayerPrefs.SetFloat(PrefMusicVolume, MusicVolume);
+        PlayerPrefs.SetFloat(PrefSfxVolume, SfxVolume);
+        PlayerPrefs.SetFloat(PrefMouseSensitivity, MouseSensitivity);
+        PlayerPrefs.SetInt(PrefGodMode, GodMode ? 1 : 0);
+        PlayerPrefs.SetInt(PrefFullscreen, Fullscreen ? 1 : 0);
         PlayerPrefs.Save();
     }
 
@@ -99,5 +121,23 @@ public static class GameSettings
 
         Screen.fullScreen = false;
         Screen.fullScreenMode = FullScreenMode.Windowed;
+    }
+
+    private static void SanitizeGodModeIfNeeded(string source)
+    {
+        if (BuildProfileResolver.IsDevelopmentToolsEnabled || !GodMode)
+            return;
+
+        WarnAndSanitizeGodMode($"Forced GodMode off in non-dev build profile during {source}.");
+    }
+
+    private static void WarnAndSanitizeGodMode(string message)
+    {
+        GodMode = false;
+        if (warnedAboutGodModeSanitization)
+            return;
+
+        warnedAboutGodModeSanitization = true;
+        Debug.LogWarning($"[GameSettings] {message}");
     }
 }

@@ -53,6 +53,7 @@ namespace GrassSim.AI
         [Header("Frame Budgets")]
         [Min(1)] public int maxActivationSpawnsPerTick = 2;
         [Min(1)] public int maxEliteSpawnsPerTick = 10;
+        [Min(1)] public int maxApexSpawnsPerTick = 6;
         [Min(1)] public int maxActivationDespawnsPerTick = 5;
         [Min(1)] public int maxActivationDespawnsPerTickHardCap = 2;
 
@@ -205,7 +206,9 @@ namespace GrassSim.AI
 
             int spawnBudget = Mathf.Max(1, maxActivationSpawnsPerTick);
             int eliteSpawnBudget = Mathf.Max(1, maxEliteSpawnsPerTick);
+            int apexSpawnBudget = Mathf.Max(1, maxApexSpawnsPerTick);
             int eliteSpawnedThisTick = 0;
+            int apexSpawnedThisTick = 0;
             for (int i = 0; i < selectedCount; i++)
             {
                 if (active.Count >= currentMaxEnemies)
@@ -215,9 +218,11 @@ namespace GrassSim.AI
                 if (state == null)
                     continue;
 
-                bool canSpawnRegular = !state.isElite && spawnedThisTick < spawnBudget;
+                bool isEliteLike = state.isElite || state.isApex;
+                bool canSpawnRegular = !isEliteLike && spawnedThisTick < spawnBudget;
                 bool canSpawnElite = state.isElite && eliteSpawnedThisTick < eliteSpawnBudget;
-                if (!canSpawnRegular && !canSpawnElite)
+                bool canSpawnApex = state.isApex && apexSpawnedThisTick < apexSpawnBudget;
+                if (!canSpawnRegular && !canSpawnElite && !canSpawnApex)
                     continue;
 
                 if (active.TryGetValue(state.id, out GameObject existing))
@@ -230,7 +235,9 @@ namespace GrassSim.AI
                 }
 
                 SpawnGO(state);
-                if (state.isElite)
+                if (state.isApex)
+                    apexSpawnedThisTick++;
+                else if (state.isElite)
                     eliteSpawnedThisTick++;
                 else
                     spawnedThisTick++;
@@ -364,6 +371,19 @@ namespace GrassSim.AI
             {
                 enemyCombatant.simId = state.id;
                 enemyCombatant.ApplySpawnVariant(state);
+            }
+
+            ApexSkeletonZombieController apexController = go.GetComponent<ApexSkeletonZombieController>();
+            if (state.isApex)
+            {
+                if (apexController == null)
+                    apexController = go.AddComponent<ApexSkeletonZombieController>();
+
+                apexController.EnableApexMode(enemyCombatant, combatant);
+            }
+            else if (apexController != null)
+            {
+                apexController.DisableApexMode();
             }
 
             if (combatant != null && enemyCombatant != null && enemyCombatant.stats != null)

@@ -42,6 +42,7 @@ namespace GrassSim.AI
 
         private float nextRecycleAt;
         private float nextEliteSpawnAt;
+        private float nextApexSpawnAt;
 
         [Header("Elite Spawns")]
         public bool enableEliteSpawns = true;
@@ -58,6 +59,18 @@ namespace GrassSim.AI
         [Min(1f)] public float eliteExpMultiplier = 2f;
         [Min(1f)] public float eliteMinimumMaxHealth = 260f;
 
+        [Header("Apex Skeleton Spawns")]
+        public bool enableApexSpawns = true;
+        [Min(20f)] public float apexSpawnInterval = 32f;
+        [Min(0f)] public float apexSpawnIntervalVariance = 6f;
+        [Min(1)] public int apexBatchSize = 3;
+        [Min(1)] public int apexHardCap = 18;
+        [Range(0f, 1f)] public float apexWaveSpawnChance = 1f;
+        [Min(1f)] public float apexHealthMultiplier = 4.2f;
+        [Min(1f)] public float apexDamageMultiplier = 1.5f;
+        [Min(1f)] public float apexExpMultiplier = 3.2f;
+        [Min(1f)] public float apexMinimumMaxHealth = 420f;
+
         private readonly Dictionary<int, EnemySimState> sim = new();
         private int nextId = 1;
         private RuntimeSnapshot lastRuntimeSnapshot;
@@ -71,6 +84,7 @@ namespace GrassSim.AI
             }
             Instance = this;
             nextEliteSpawnAt = Time.time + GetNextEliteSpawnDelay();
+            nextApexSpawnAt = Time.time + GetNextApexSpawnDelay();
         }
 
         public IEnumerable<EnemySimState> GetAll() => sim.Values;
@@ -104,12 +118,13 @@ namespace GrassSim.AI
         public void EnsurePopulation(Vector3 playerPosition)
         {
             bool spawnedEliteWave = TrySpawnEliteWave(playerPosition);
+            bool spawnedApexWave = TrySpawnApexWave(playerPosition);
 
             int normalCount = CountNonEliteEnemies();
             int missing = TargetCount - normalCount;
             if (missing <= 0)
             {
-                if (spawnedEliteWave)
+                if (spawnedEliteWave || spawnedApexWave)
                 {
                     lastRuntimeSnapshot.lastEnsureFrame = Time.frameCount;
                     lastRuntimeSnapshot.ensureMissingBefore = missing;
@@ -123,7 +138,7 @@ namespace GrassSim.AI
             int spawnBudget = Mathf.Min(missing, Mathf.Max(1, maxSimSpawnsPerTick));
             int beforeCount = sim.Count;
             for (int i = 0; i < spawnBudget; i++)
-                SpawnSimEnemy(playerPosition, isElite: false);
+                SpawnSimEnemy(playerPosition, isElite: false, isApex: false);
 
             int spawned = Mathf.Max(0, sim.Count - beforeCount);
             lastRuntimeSnapshot.lastEnsureFrame = Time.frameCount;
@@ -143,7 +158,7 @@ namespace GrassSim.AI
         // 🔥 CORE SPAWN LOGIC
         // ============================
 
-        private void SpawnSimEnemy(Vector3 playerPosition, bool isElite)
+        private void SpawnSimEnemy(Vector3 playerPosition, bool isElite, bool isApex)
         {
             if (enemyTypes == null || enemyTypes.Count == 0)
             {
@@ -151,18 +166,38 @@ namespace GrassSim.AI
                 return;
             }
 
-            int prefabIndex = PickEnemyTypeIndex();
+            int prefabIndex = isApex ? PickApexEnemyTypeIndex() : PickEnemyTypeIndex();
             Vector3 pos = FindSpawnPosition(playerPosition);
+            float healthMultiplier = 1f;
+            float damageMultiplier = 1f;
+            float expMultiplier = 1f;
+            float minHealth = 0f;
+
+            if (isApex)
+            {
+                healthMultiplier = Mathf.Max(1f, apexHealthMultiplier);
+                damageMultiplier = Mathf.Max(1f, apexDamageMultiplier);
+                expMultiplier = Mathf.Max(1f, apexExpMultiplier);
+                minHealth = Mathf.Max(1f, apexMinimumMaxHealth);
+            }
+            else if (isElite)
+            {
+                healthMultiplier = Mathf.Max(1f, eliteHealthMultiplier);
+                damageMultiplier = Mathf.Max(1f, eliteDamageMultiplier);
+                expMultiplier = Mathf.Max(1f, eliteExpMultiplier);
+                minHealth = Mathf.Max(1f, eliteMinimumMaxHealth);
+            }
 
             var state = new EnemySimState
             {
                 id = nextId++,
                 prefabIndex = prefabIndex,
                 isElite = isElite,
-                healthMultiplier = isElite ? Mathf.Max(1f, eliteHealthMultiplier) : 1f,
-                damageMultiplier = isElite ? Mathf.Max(1f, eliteDamageMultiplier) : 1f,
-                expMultiplier = isElite ? Mathf.Max(1f, eliteExpMultiplier) : 1f,
-                eliteMinHealth = isElite ? Mathf.Max(1f, eliteMinimumMaxHealth) : 0f,
+                isApex = isApex,
+                healthMultiplier = healthMultiplier,
+                damageMultiplier = damageMultiplier,
+                expMultiplier = expMultiplier,
+                eliteMinHealth = minHealth,
                 position = pos,
                 anchor = pos,
                 health = 100f,
@@ -181,7 +216,7 @@ namespace GrassSim.AI
             int count = 0;
             foreach (EnemySimState state in sim.Values)
             {
-                if (state != null && !state.isElite)
+                if (state != null && !state.isElite && !state.isApex)
                     count++;
             }
 
@@ -194,6 +229,18 @@ namespace GrassSim.AI
             foreach (EnemySimState state in sim.Values)
             {
                 if (state != null && state.isElite)
+                    count++;
+            }
+
+            return count;
+        }
+
+        private int CountApexEnemies()
+        {
+            int count = 0;
+            foreach (EnemySimState state in sim.Values)
+            {
+                if (state != null && state.isApex)
                     count++;
             }
 
@@ -220,9 +267,35 @@ namespace GrassSim.AI
                 return false;
 
             for (int i = 0; i < count; i++)
-                SpawnSimEnemy(playerPosition, isElite: true);
+                SpawnSimEnemy(playerPosition, isElite: true, isApex: false);
 
             return true;
+        }
+
+        private bool TrySpawnApexWave(Vector3 playerPosition)
+        {
+            if (!enableApexSpawns || enemyTypes == null || enemyTypes.Count == 0)
+                return false;
+
+            if (Time.time < nextApexSpawnAt)
+                return false;
+
+            nextApexSpawnAt = Time.time + GetNextApexSpawnDelay();
+
+            if (Random.value > Mathf.Clamp01(apexWaveSpawnChance))
+                return false;
+
+            int apexCount = CountApexEnemies();
+            int hardCap = Mathf.Max(1, apexHardCap);
+            if (apexCount >= hardCap)
+                return false;
+
+            int available = hardCap - apexCount;
+            int count = Mathf.Min(Mathf.Max(1, apexBatchSize), available);
+            for (int i = 0; i < count; i++)
+                SpawnSimEnemy(playerPosition, isElite: false, isApex: true);
+
+            return count > 0;
         }
 
         private int CalculateEliteWaveSpawnCount(int currentEliteCount, int hardCap)
@@ -261,6 +334,14 @@ namespace GrassSim.AI
             return Mathf.Max(10f, baseInterval + jitter);
         }
 
+        private float GetNextApexSpawnDelay()
+        {
+            float baseInterval = Mathf.Max(20f, apexSpawnInterval);
+            float variance = Mathf.Max(0f, apexSpawnIntervalVariance);
+            float jitter = variance > 0f ? Random.Range(-variance, variance) : 0f;
+            return Mathf.Max(20f, baseInterval + jitter);
+        }
+
         // ============================
         // 🎲 WEIGHTED RANDOM
         // ============================
@@ -283,6 +364,36 @@ namespace GrassSim.AI
             }
 
             return 0;
+        }
+
+        private int PickApexEnemyTypeIndex()
+        {
+            if (enemyTypes == null || enemyTypes.Count == 0)
+                return 0;
+
+            int fallback = PickEnemyTypeIndex();
+
+            for (int i = 0; i < enemyTypes.Count; i++)
+            {
+                EnemySpawnEntry entry = enemyTypes[i];
+                if (entry == null || entry.prefab == null)
+                    continue;
+
+                string name = entry.prefab.name;
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                string lower = name.ToLowerInvariant();
+                if (!lower.Contains("zombie"))
+                    continue;
+
+                if (lower.Contains("quick") || lower.Contains("tank") || lower.Contains("dog") || lower.Contains("boss"))
+                    continue;
+
+                return i;
+            }
+
+            return fallback;
         }
 
         private Vector3 FindSpawnPosition(Vector3 playerPosition)
@@ -317,6 +428,33 @@ namespace GrassSim.AI
                 0f,
                 Mathf.Sin(a) * r
             );
+        }
+
+        private void OnValidate()
+        {
+            maxSimSpawnsPerTick = Mathf.Max(1, maxSimSpawnsPerTick);
+            recycleInterval = Mathf.Max(0.02f, recycleInterval);
+
+            eliteSpawnInterval = Mathf.Max(10f, eliteSpawnInterval);
+            eliteSpawnIntervalEarlyVariance = Mathf.Max(0f, eliteSpawnIntervalEarlyVariance);
+            eliteSpawnIntervalLateVariance = Mathf.Max(0f, eliteSpawnIntervalLateVariance);
+            eliteBatchSize = Mathf.Max(1, eliteBatchSize);
+            eliteSoftCap = Mathf.Max(1, eliteSoftCap);
+            eliteHardCap = Mathf.Max(eliteSoftCap, eliteHardCap);
+            eliteHealthMultiplier = Mathf.Max(1f, eliteHealthMultiplier);
+            eliteDamageMultiplier = Mathf.Max(1f, eliteDamageMultiplier);
+            eliteExpMultiplier = Mathf.Max(1f, eliteExpMultiplier);
+            eliteMinimumMaxHealth = Mathf.Max(1f, eliteMinimumMaxHealth);
+
+            apexSpawnInterval = Mathf.Max(20f, apexSpawnInterval);
+            apexSpawnIntervalVariance = Mathf.Max(0f, apexSpawnIntervalVariance);
+            apexBatchSize = Mathf.Max(1, apexBatchSize);
+            apexHardCap = Mathf.Max(1, apexHardCap);
+            apexWaveSpawnChance = Mathf.Clamp01(apexWaveSpawnChance);
+            apexHealthMultiplier = Mathf.Max(1f, apexHealthMultiplier);
+            apexDamageMultiplier = Mathf.Max(1f, apexDamageMultiplier);
+            apexExpMultiplier = Mathf.Max(1f, apexExpMultiplier);
+            apexMinimumMaxHealth = Mathf.Max(1f, apexMinimumMaxHealth);
         }
 
         public void RecycleFarEnemies(Vector3 playerPosition)
