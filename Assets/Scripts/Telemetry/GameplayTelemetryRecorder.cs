@@ -30,6 +30,7 @@ namespace GrassSim.Telemetry
 
         private static GameplayTelemetryRecorder instance;
         private static bool shuttingDown;
+        private static bool telemetryModeReported;
 
         [Serializable]
         private sealed class TelemetryRecord
@@ -615,17 +616,25 @@ namespace GrassSim.Telemetry
         {
             instance = null;
             shuttingDown = false;
+            telemetryModeReported = false;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
+            if (!BuildProfileResolver.IsLocalTelemetryEnabled)
+            {
+                ReportTelemetryModeOnce("Bootstrap skipped", enabled: false);
+                return;
+            }
+
+            ReportTelemetryModeOnce("Bootstrap enabled", enabled: true);
             EnsureInstance();
         }
 
         private static GameplayTelemetryRecorder EnsureInstance()
         {
-            if (shuttingDown)
+            if (shuttingDown || !BuildProfileResolver.IsLocalTelemetryEnabled)
                 return null;
 
             if (instance != null)
@@ -643,6 +652,13 @@ namespace GrassSim.Telemetry
 
         private void Awake()
         {
+            if (!BuildProfileResolver.IsLocalTelemetryEnabled)
+            {
+                ReportTelemetryModeOnce("Instance disabled", enabled: false);
+                Destroy(gameObject);
+                return;
+            }
+
             if (instance != null && instance != this)
             {
                 Destroy(gameObject);
@@ -2632,15 +2648,22 @@ namespace GrassSim.Telemetry
 
         private void InitializeLogPaths()
         {
+            if (!LocalTelemetryFileOutput.CanWriteFiles)
+            {
+                persistentLogPath = null;
+                projectLogPath = null;
+                return;
+            }
+
             string fileName = $"gameplay_{runId}.jsonl";
             persistentLogPath = Path.Combine(Application.persistentDataPath, "telemetry", fileName);
-            EnsureDirectoryForPath(persistentLogPath);
+            LocalTelemetryFileOutput.TryEnsureDirectoryForFile(persistentLogPath, "GameplayTelemetry");
 
             projectLogPath = null;
             if (Application.isEditor && MirrorToProjectResultsInEditor)
             {
                 projectLogPath = Path.GetFullPath(Path.Combine("results", "telemetry", fileName));
-                EnsureDirectoryForPath(projectLogPath);
+                LocalTelemetryFileOutput.TryEnsureDirectoryForFile(projectLogPath, "GameplayTelemetry");
             }
         }
 
@@ -2761,29 +2784,21 @@ namespace GrassSim.Telemetry
 
         private static void AppendTextSafe(string path, string payload)
         {
-            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(payload))
+            if (string.IsNullOrWhiteSpace(payload))
                 return;
 
-            try
-            {
-                File.AppendAllText(path, payload);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[GameplayTelemetry] Failed to write '{path}': {ex.Message}");
-            }
+            LocalTelemetryFileOutput.TryAppendText(path, payload, "GameplayTelemetry");
         }
 
-        private static void EnsureDirectoryForPath(string path)
+        private static void ReportTelemetryModeOnce(string source, bool enabled)
         {
-            if (string.IsNullOrWhiteSpace(path))
+            if (telemetryModeReported)
                 return;
 
-            string directory = Path.GetDirectoryName(path);
-            if (string.IsNullOrWhiteSpace(directory))
-                return;
-
-            Directory.CreateDirectory(directory);
+            telemetryModeReported = true;
+            string modeLabel = BuildProfileResolver.ActiveTelemetryModeLabel;
+            string state = enabled ? "enabled" : "disabled";
+            Debug.Log($"[GameplayTelemetry] TelemetryMode={modeLabel}. {source}. Local diagnostics {state}.");
         }
 
         private static bool IsPlayerValid(PlayerProgressionController playerRef)

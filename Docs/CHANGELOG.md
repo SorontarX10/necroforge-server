@@ -12,8 +12,13 @@
 - Removed automatic `GodMode` toggle creation from options menu and limited debug cheat panel rendering to dev-tool profiles.
 - Added `is_cheat_session` marker to gameplay telemetry run payloads.
 
+### Telemetry Profiles
+- Added telemetry bootstrap gating for `GameplayTelemetryRecorder`, `RuntimePerformanceSummary`, and `RuntimeHitchDiagnostics` based on active `TelemetryMode`.
+- Added hard file-write guard (`LocalTelemetryFileOutput`) so telemetry/perf/hitch files are not created when `TelemetryMode=OFF`.
+- Added startup diagnostics logs with explicit `TelemetryMode=OFF|DEV_LOCAL`.
+
 ### Tests
-- Added editor tests for build profile mapping/validation and demo-mode `GodMode` guards.
+- Added editor tests for build profile mapping/validation, demo-mode `GodMode` guards, and telemetry file output gating.
 
 ### Release
 - Bumped application version to `0.7.2`.

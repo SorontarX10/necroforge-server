@@ -369,14 +369,7 @@ Zakonczone 2026-03-03.
 
 ### F-03 Telemetria tylko dev (P0)
 
-- [ ] T-030 Wprowadzic `TelemetryMode` (`OFF`, `DEV_LOCAL`) i mapowanie do profili builda.
-- [ ] T-031 Dodac gate bootstrapu w `GameplayTelemetryRecorder` (nie startuje w Demo/Release).
-- [ ] T-032 Dodac gate bootstrapu w `RuntimePerformanceSummary` (nie startuje w Demo/Release).
-- [ ] T-033 Dodac gate bootstrapu w `RuntimeHitchDiagnostics` (nie startuje w Demo/Release).
-- [ ] T-034 Dodac guard zapisu plikow telemetry/perf/hitch dla `TelemetryMode=OFF`.
-- [ ] T-035 Dodac test PlayMode: brak plikow telemetry po 10 min sesji Demo.
-- [ ] T-036 Dodac test regresji Dev: pliki telemetry nadal sa tworzone.
-- [ ] T-037 Dodac czytelny wpis do logu startup: `TelemetryMode=OFF|DEV_LOCAL`.
+Zakonczone 2026-03-03.
 
 ### F-04 Online Leaderboard (MVP) (P0)
 

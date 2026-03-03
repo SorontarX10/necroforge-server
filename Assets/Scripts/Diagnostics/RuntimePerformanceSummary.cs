@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using GrassSim.Core;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -50,6 +51,7 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
 
     private static RuntimePerformanceSummary instance;
     private static bool shuttingDown;
+    private static bool telemetryModeReported;
 
     private readonly List<float> frameTimesMs = new(16384);
     private float captureStartAt = -1f;
@@ -81,17 +83,25 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
     {
         instance = null;
         shuttingDown = false;
+        telemetryModeReported = false;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (!BuildProfileResolver.IsLocalTelemetryEnabled)
+        {
+            ReportTelemetryModeOnce("Bootstrap skipped", enabled: false);
+            return;
+        }
+
+        ReportTelemetryModeOnce("Bootstrap enabled", enabled: true);
         EnsureInstance();
     }
 
     private static RuntimePerformanceSummary EnsureInstance()
     {
-        if (shuttingDown)
+        if (shuttingDown || !BuildProfileResolver.IsLocalTelemetryEnabled)
             return null;
 
         if (instance != null)
@@ -109,6 +119,13 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
 
     private void Awake()
     {
+        if (!BuildProfileResolver.IsLocalTelemetryEnabled)
+        {
+            ReportTelemetryModeOnce("Instance disabled", enabled: false);
+            Destroy(gameObject);
+            return;
+        }
+
         if (instance != null && instance != this)
         {
             Destroy(gameObject);
@@ -326,7 +343,7 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
 
     private void PersistRecord(PerformanceSummaryRecord record)
     {
-        if (!writeJsonLog || record == null)
+        if (!writeJsonLog || record == null || !LocalTelemetryFileOutput.CanWriteFiles)
             return;
 
         string json = JsonUtility.ToJson(record);
@@ -370,13 +387,21 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
 
     private void InitializePaths()
     {
-        persistentLogPath = Path.Combine(Application.persistentDataPath, "perf_summary.jsonl");
-        EnsureDirectoryForPath(persistentLogPath);
+        if (!LocalTelemetryFileOutput.CanWriteFiles)
+        {
+            persistentLogPath = null;
+            projectLogPath = null;
+            return;
+        }
 
+        persistentLogPath = Path.Combine(Application.persistentDataPath, "perf_summary.jsonl");
+        LocalTelemetryFileOutput.TryEnsureDirectoryForFile(persistentLogPath, "PerfSummary");
+
+        projectLogPath = null;
         if (Application.isEditor && mirrorToProjectResultsInEditor)
         {
             projectLogPath = Path.GetFullPath(Path.Combine("results", "perf", "runtime_perf_summary.jsonl"));
-            EnsureDirectoryForPath(projectLogPath);
+            LocalTelemetryFileOutput.TryEnsureDirectoryForFile(projectLogPath, "PerfSummary");
         }
     }
 
@@ -486,28 +511,20 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
 
     private static void AppendLineSafe(string path, string line)
     {
-        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(line))
+        if (string.IsNullOrWhiteSpace(line))
             return;
 
-        try
-        {
-            File.AppendAllText(path, line + Environment.NewLine);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning($"[PerfSummary] Failed to append log '{path}': {ex.Message}");
-        }
+        LocalTelemetryFileOutput.TryAppendText(path, line + Environment.NewLine, "PerfSummary");
     }
 
-    private static void EnsureDirectoryForPath(string path)
+    private static void ReportTelemetryModeOnce(string source, bool enabled)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        if (telemetryModeReported)
             return;
 
-        string directory = Path.GetDirectoryName(path);
-        if (string.IsNullOrWhiteSpace(directory))
-            return;
-
-        Directory.CreateDirectory(directory);
+        telemetryModeReported = true;
+        string modeLabel = BuildProfileResolver.ActiveTelemetryModeLabel;
+        string state = enabled ? "enabled" : "disabled";
+        Debug.Log($"[PerfSummary] TelemetryMode={modeLabel}. {source}. Local diagnostics {state}.");
     }
 }

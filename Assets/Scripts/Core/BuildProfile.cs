@@ -207,6 +207,8 @@ namespace GrassSim.Core
 
         public static TelemetryMode ActiveTelemetryMode => ActiveFlags.telemetryMode;
 
+        public static string ActiveTelemetryModeLabel => GetTelemetryModeLabel(ActiveTelemetryMode);
+
         public static bool IsDevelopmentToolsEnabled => ActiveFlags.isDevelopmentToolsEnabled;
 
         public static bool IsLocalTelemetryEnabled => ActiveFlags.isLocalTelemetryEnabled;
@@ -220,6 +222,16 @@ namespace GrassSim.Core
             BuildProfileType profile = ActiveProfile;
             BuildRuntimeFlags flags = ActiveFlags;
             return $"profile={profile}, symbols=({ActiveSymbols}), flags=({flags})";
+        }
+
+        public static string GetTelemetryModeLabel(TelemetryMode mode)
+        {
+            return mode switch
+            {
+                TelemetryMode.Off => "OFF",
+                TelemetryMode.DevLocal => "DEV_LOCAL",
+                _ => mode.ToString().ToUpperInvariant()
+            };
         }
 
 #if UNITY_EDITOR
@@ -287,6 +299,7 @@ namespace GrassSim.Core
         private static void LogRuntimeProfile()
         {
             Debug.Log($"[BuildProfile] {BuildProfileResolver.GetSummaryLine()}");
+            Debug.Log($"[BuildProfile] TelemetryMode={BuildProfileResolver.ActiveTelemetryModeLabel}");
         }
     }
 }

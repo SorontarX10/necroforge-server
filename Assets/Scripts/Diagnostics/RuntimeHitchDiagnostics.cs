@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using GrassSim.AI;
+using GrassSim.Core;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -77,6 +78,7 @@ public sealed class RuntimeHitchDiagnostics : MonoBehaviour
 
     private static RuntimeHitchDiagnostics instance;
     private static bool shuttingDown;
+    private static bool telemetryModeReported;
 
     private ProfilerRecorder mainThreadRecorder;
     private ProfilerRecorder renderThreadRecorder;
@@ -99,17 +101,25 @@ public sealed class RuntimeHitchDiagnostics : MonoBehaviour
     {
         instance = null;
         shuttingDown = false;
+        telemetryModeReported = false;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (!BuildProfileResolver.IsLocalTelemetryEnabled)
+        {
+            ReportTelemetryModeOnce("Bootstrap skipped", enabled: false);
+            return;
+        }
+
+        ReportTelemetryModeOnce("Bootstrap enabled", enabled: true);
         EnsureInstance();
     }
 
     private static RuntimeHitchDiagnostics EnsureInstance()
     {
-        if (shuttingDown)
+        if (shuttingDown || !BuildProfileResolver.IsLocalTelemetryEnabled)
             return null;
 
         if (instance != null)
@@ -127,6 +137,13 @@ public sealed class RuntimeHitchDiagnostics : MonoBehaviour
 
     private void Awake()
     {
+        if (!BuildProfileResolver.IsLocalTelemetryEnabled)
+        {
+            ReportTelemetryModeOnce("Instance disabled", enabled: false);
+            Destroy(gameObject);
+            return;
+        }
+
         if (instance != null && instance != this)
         {
             Destroy(gameObject);
@@ -227,13 +244,21 @@ public sealed class RuntimeHitchDiagnostics : MonoBehaviour
 
     private void InitializePaths()
     {
-        persistentLogPath = Path.Combine(Application.persistentDataPath, "hitch_events.jsonl");
-        EnsureDirectoryForPath(persistentLogPath);
+        if (!LocalTelemetryFileOutput.CanWriteFiles)
+        {
+            persistentLogPath = null;
+            projectLogPath = null;
+            return;
+        }
 
+        persistentLogPath = Path.Combine(Application.persistentDataPath, "hitch_events.jsonl");
+        LocalTelemetryFileOutput.TryEnsureDirectoryForFile(persistentLogPath, "HitchDiag");
+
+        projectLogPath = null;
         if (Application.isEditor && mirrorToProjectResultsInEditor)
         {
             projectLogPath = Path.GetFullPath(Path.Combine("results", "perf", "hitch_events.jsonl"));
-            EnsureDirectoryForPath(projectLogPath);
+            LocalTelemetryFileOutput.TryEnsureDirectoryForFile(projectLogPath, "HitchDiag");
         }
 
         if (emitWarningLog)
@@ -437,7 +462,7 @@ public sealed class RuntimeHitchDiagnostics : MonoBehaviour
 
     private void PersistRecord(HitchEventRecord record)
     {
-        if (!writeJsonLog || record == null)
+        if (!writeJsonLog || record == null || !LocalTelemetryFileOutput.CanWriteFiles)
             return;
 
         string json = JsonUtility.ToJson(record);
@@ -449,29 +474,21 @@ public sealed class RuntimeHitchDiagnostics : MonoBehaviour
 
     private static void AppendLineSafe(string path, string line)
     {
-        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(line))
+        if (string.IsNullOrWhiteSpace(line))
             return;
 
-        try
-        {
-            File.AppendAllText(path, line + Environment.NewLine);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning($"[HitchDiag] Failed to append log '{path}': {ex.Message}");
-        }
+        LocalTelemetryFileOutput.TryAppendText(path, line + Environment.NewLine, "HitchDiag");
     }
 
-    private static void EnsureDirectoryForPath(string path)
+    private static void ReportTelemetryModeOnce(string source, bool enabled)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        if (telemetryModeReported)
             return;
 
-        string directory = Path.GetDirectoryName(path);
-        if (string.IsNullOrWhiteSpace(directory))
-            return;
-
-        Directory.CreateDirectory(directory);
+        telemetryModeReported = true;
+        string modeLabel = BuildProfileResolver.ActiveTelemetryModeLabel;
+        string state = enabled ? "enabled" : "disabled";
+        Debug.Log($"[HitchDiag] TelemetryMode={modeLabel}. {source}. Local diagnostics {state}.");
     }
 
     private void StartRecorders()
