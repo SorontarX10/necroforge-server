@@ -32,6 +32,10 @@
 - Added documented leaderboard threat model for Steam demo scope (`Docs/LEADERBOARD_THREAT_MODEL.md`).
 - Added per-player submit/start throttling in backend (in addition to per-IP API limits).
 
+### Operations
+- Reworked VPS setup guide for a fresh Oracle rebuild flow using DuckDNS free subdomain (`Docs/LEADERBOARD_VPS_SETUP_PL.md`).
+- Added helper script to install DuckDNS auto-update cron on Linux VPS (`Infra/leaderboard/scripts/install_duckdns_cron.sh`).
+
 ### Release
 - Bumped application version to `0.7.2`.
 - Updated test sandbox version fallback to `0.7.2`.
