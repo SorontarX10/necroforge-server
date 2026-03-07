@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - leaderboard_pgdata:/var/lib/postgresql/data
+    networks:
+      - leaderboard_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../../Backend/LeaderboardApi
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      LEADERBOARD_DB_CONNECTION: Host=db;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      LEADERBOARD_VERSION_LOCK: ${LEADERBOARD_VERSION_LOCK}
+      LEADERBOARD_SESSION_TTL_SECONDS: ${LEADERBOARD_SESSION_TTL_SECONDS}
+      LEADERBOARD_MAX_START_PER_MINUTE_PER_PLAYER: ${LEADERBOARD_MAX_START_PER_MINUTE_PER_PLAYER}
+      LEADERBOARD_MAX_SUBMIT_PER_MINUTE_PER_PLAYER: ${LEADERBOARD_MAX_SUBMIT_PER_MINUTE_PER_PLAYER}
+      LEADERBOARD_MIN_RUN_DURATION_SECONDS: ${LEADERBOARD_MIN_RUN_DURATION_SECONDS}
+      LEADERBOARD_MAX_SCORE_PER_MINUTE: ${LEADERBOARD_MAX_SCORE_PER_MINUTE}
+      LEADERBOARD_MAX_KILLS_PER_MINUTE: ${LEADERBOARD_MAX_KILLS_PER_MINUTE}
+      LEADERBOARD_MAX_PAGE_SIZE: ${LEADERBOARD_MAX_PAGE_SIZE}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - leaderboard_net
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      LEADERBOARD_DOMAIN: ${LEADERBOARD_DOMAIN}
+      LEADERBOARD_ADMIN_EMAIL: ${LEADERBOARD_ADMIN_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - leaderboard_net
+
+volumes:
+  leaderboard_pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  leaderboard_net:

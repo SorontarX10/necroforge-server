@@ -2,6 +2,7 @@
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
+[Bb]in/
 [Bb]uild/
 [Bb]uilds/
 [Ll]ogs/
@@ -25,6 +26,10 @@
 *.VC.db
 .vs/
 .vscode/
+
+# Allow backend service projects
+!Backend/**/*.csproj
+!Backend/**/*.sln
 
 # Python virtual environments and caches
 venv/

@@ -1,0 +1,21 @@
+{$LEADERBOARD_DOMAIN} {
+  encode gzip zstd
+  reverse_proxy api:8080
+
+  @preflight method OPTIONS
+  header @preflight Access-Control-Allow-Origin "*"
+  header @preflight Access-Control-Allow-Methods "GET,POST,OPTIONS"
+  header @preflight Access-Control-Allow-Headers "Content-Type,Authorization"
+  respond @preflight 204
+
+  header {
+    Access-Control-Allow-Origin "*"
+    Access-Control-Allow-Methods "GET,POST,OPTIONS"
+    Access-Control-Allow-Headers "Content-Type,Authorization"
+  }
+
+  log {
+    output stdout
+    format console
+  }
+}

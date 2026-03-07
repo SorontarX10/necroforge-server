@@ -1,0 +1,147 @@
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace LeaderboardApi;
+
+public sealed class StartRunRequest
+{
+    [JsonPropertyName("player_id")]
+    public string? PlayerId { get; init; }
+
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; init; }
+
+    [JsonPropertyName("season")]
+    public string? Season { get; init; }
+
+    [JsonPropertyName("build_version")]
+    public string? BuildVersion { get; init; }
+}
+
+public sealed class SubmitRunRequest
+{
+    [JsonPropertyName("run_id")]
+    public string? RunId { get; init; }
+
+    [JsonPropertyName("player_id")]
+    public string? PlayerId { get; init; }
+
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; init; }
+
+    [JsonPropertyName("score")]
+    public int Score { get; init; }
+
+    [JsonPropertyName("run_duration_sec")]
+    public float RunDurationSec { get; init; }
+
+    [JsonPropertyName("kills")]
+    public int Kills { get; init; }
+
+    [JsonPropertyName("build_version")]
+    public string? BuildVersion { get; init; }
+
+    [JsonPropertyName("is_cheat_session")]
+    public bool IsCheatSession { get; init; }
+
+    [JsonPropertyName("signature")]
+    public string? Signature { get; init; }
+}
+
+public sealed class GetLeaderboardQuery
+{
+    [FromQuery(Name = "season")]
+    public string? Season { get; init; }
+
+    [FromQuery(Name = "page")]
+    public int? Page { get; init; }
+
+    [FromQuery(Name = "page_size")]
+    public int? PageSize { get; init; }
+}
+
+public sealed class GetMyRankQuery
+{
+    [FromQuery(Name = "season")]
+    public string? Season { get; init; }
+
+    [FromQuery(Name = "player_id")]
+    public string? PlayerId { get; init; }
+}
+
+public sealed record StartRunResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("nonce")] string Nonce,
+    [property: JsonPropertyName("session_key")] string SessionKey,
+    [property: JsonPropertyName("expires_at_utc")] DateTimeOffset ExpiresAtUtc
+);
+
+public sealed record SubmitRunResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("validation_state")] string ValidationState,
+    [property: JsonPropertyName("validation_reason")] string ValidationReason
+);
+
+public sealed record LeaderboardEntryResponse(
+    [property: JsonPropertyName("rank")] int Rank,
+    [property: JsonPropertyName("player_id")] string PlayerId,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("score")] int Score,
+    [property: JsonPropertyName("run_duration_sec")] float RunDurationSec,
+    [property: JsonPropertyName("kills")] int Kills,
+    [property: JsonPropertyName("build_version")] string BuildVersion,
+    [property: JsonPropertyName("created_at_utc")] DateTime CreatedAtUtc
+);
+
+public sealed record GetLeaderboardResponse(
+    [property: JsonPropertyName("season")] string Season,
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_count")] int TotalCount,
+    [property: JsonPropertyName("entries")] IReadOnlyList<LeaderboardEntryResponse> Entries
+);
+
+public sealed record GetMyRankResponse(
+    [property: JsonPropertyName("season")] string Season,
+    [property: JsonPropertyName("found")] bool Found,
+    [property: JsonPropertyName("entry")] LeaderboardEntryResponse? Entry
+);
+
+public sealed record ErrorResponse(
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("message")] string Message
+);
+
+public sealed class ServiceResult<T>
+{
+    public bool Ok { get; }
+    public int StatusCode { get; }
+    public T? Payload { get; }
+    public ErrorResponse? Error { get; }
+
+    private ServiceResult(bool ok, int statusCode, T? payload, ErrorResponse? error)
+    {
+        Ok = ok;
+        StatusCode = statusCode;
+        Payload = payload;
+        Error = error;
+    }
+
+    public static ServiceResult<T> Success(T payload, int statusCode = StatusCodes.Status200OK)
+        => new(true, statusCode, payload, null);
+
+    public static ServiceResult<T> Failure(int statusCode, string code, string message)
+        => new(false, statusCode, default, new ErrorResponse(code, message));
+}
+
+public static class ServiceResultExtensions
+{
+    public static IResult ToIResult<T>(this ServiceResult<T> result)
+    {
+        if (result.Ok && result.Payload != null)
+            return Results.Json(result.Payload, statusCode: result.StatusCode);
+
+        ErrorResponse error = result.Error ?? new ErrorResponse("unknown_error", "Unknown error.");
+        return Results.Json(error, statusCode: result.StatusCode);
+    }
+}

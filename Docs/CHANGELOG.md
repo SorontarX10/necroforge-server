@@ -17,8 +17,20 @@
 - Added hard file-write guard (`LocalTelemetryFileOutput`) so telemetry/perf/hitch files are not created when `TelemetryMode=OFF`.
 - Added startup diagnostics logs with explicit `TelemetryMode=OFF|DEV_LOCAL`.
 
+### Online Leaderboard (MVP Foundation)
+- Added backend service scaffold (`Backend/LeaderboardApi`) with PostgreSQL schema for `players`, `runs`, `leaderboard_entries`, and `moderation_flags`.
+- Added API endpoints: `POST /runs/start`, `POST /runs/submit`, `GET /leaderboard`, `GET /leaderboard/me`, plus `/health` and `/metrics`.
+- Added Oracle/VPS deployment scaffold (`Infra/leaderboard`) with `docker-compose`, PostgreSQL, API container, and Caddy reverse proxy.
+- Added Unity online leaderboard client and submission flow from `GameOver` with local fallback to offline leaderboard.
+- Added leaderboard UI runtime states in menu/game over: loading, error fallback, retry button support, and "my rank" online lookup.
+
 ### Tests
 - Added editor tests for build profile mapping/validation, demo-mode `GodMode` guards, and telemetry file output gating.
+- Added leaderboard smoke scripts for API flow and security smoke checks (`invalid signature`, `duplicate submit`).
+
+### Security
+- Added documented leaderboard threat model for Steam demo scope (`Docs/LEADERBOARD_THREAT_MODEL.md`).
+- Added per-player submit/start throttling in backend (in addition to per-IP API limits).
 
 ### Release
 - Bumped application version to `0.7.2`.

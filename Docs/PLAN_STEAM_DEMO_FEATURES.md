@@ -373,33 +373,27 @@ Zakonczone 2026-03-03.
 
 ### F-04 Online Leaderboard (MVP) (P0)
 
-- [ ] T-040 Wybrac i zatwierdzic backend (stack + hosting) pod leaderboard MVP.
-- [ ] T-041 Zdefiniowac schema DB: `runs`, `leaderboard_entries`, `players`, `moderation_flags`.
-- [ ] T-042 Zaimplementowac endpoint `POST /runs/start` (tworzy sesje, zwraca `run_id`, nonce, expiry).
-- [ ] T-043 Zaimplementowac endpoint `POST /runs/submit` (przyjmuje wynik i dane walidacyjne).
-- [ ] T-044 Zaimplementowac endpoint `GET /leaderboard` z paginacja.
-- [ ] T-045 Zaimplementowac endpoint `GET /leaderboard/me`.
-- [ ] T-046 Dodac indeksy DB pod zapytania top N i pozycje gracza.
-- [ ] T-047 Dodac API client w Unity (`LeaderboardApiClient`) z timeout/retry/fallback.
-- [ ] T-048 Dodac submit wyniku po zakonczeniu runu (trigger z `GameOver`/run end).
-- [ ] T-049 Dodac UI rankingu: top N, moja pozycja, stan ladowania, stan bledu.
-- [ ] T-050 Dodac fallback UX offline: komunikat i przycisk "Sprobuj ponownie".
 - [ ] T-051 Dodac testy integracyjne API: start -> submit -> odczyt rankingu.
-- [ ] T-052 Dodac telemetry/metrics backendowe: czas odpowiedzi, error rate, liczba submitow.
+
+Zakonczone 2026-03-07:
+- T-049 Dodac UI rankingu: top N, moja pozycja, stan ladowania, stan bledu.
+- T-050 Dodac fallback UX offline: komunikat i przycisk "Sprobuj ponownie".
 
 ### F-05 Anticheat leaderboardu (MVP) (P0)
 
-- [ ] T-060 Spisac finalny threat model (score spoof, speedhack, replay, API abuse).
-- [ ] T-061 Dodac sesyjny nonce i TTL dla runu (wymagane do submitu).
 - [ ] T-062 Dodac hash-chain eventow runu po stronie klienta.
-- [ ] T-063 Dodac podpis payloadu runu (HMAC oparty o klucz sesji jednorazowej).
-- [ ] T-064 Dodac walidacje server-side: score/min, kill-rate, min runtime, build_version.
-- [ ] T-065 Dodac anti-replay: jeden `run_id` = max jeden accepted submit.
-- [ ] T-066 Dodac rate limiting per konto i per IP dla `runs/start` i `runs/submit`.
-- [ ] T-067 Dodac stany moderacji wyniku: `accepted`, `shadow_banned`, `rejected`, `manual_review`.
-- [ ] T-068 Dodac "soft quarantine" podejrzanych wynikow (nie trafiaja do publicznego topu).
 - [ ] T-069 Dodac testy security smoke: stale nonce, invalid signature, replay submit.
 - [ ] T-070 Dodac panel/komendy administracyjne do recznego review flagowanych runow.
+
+Zakonczone 2026-03-07:
+- T-060 Spisac finalny threat model (score spoof, speedhack, replay, API abuse).
+- T-061 Dodac sesyjny nonce i TTL dla runu (wymagane do submitu).
+- T-063 Dodac podpis payloadu runu (HMAC oparty o klucz sesji jednorazowej).
+- T-064 Dodac walidacje server-side: score/min, kill-rate, min runtime, build_version.
+- T-065 Dodac anti-replay: jeden `run_id` = max jeden accepted submit.
+- T-066 Dodac rate limiting per konto i per IP dla `runs/start` i `runs/submit`.
+- T-067 Dodac stany moderacji wyniku: `accepted`, `shadow_banned`, `rejected`, `manual_review`.
+- T-068 Dodac "soft quarantine" podejrzanych wynikow (nie trafiaja do publicznego topu).
 
 ### F-06 Naprawa lifecycle scen (Loading/Game) (P1)
 
