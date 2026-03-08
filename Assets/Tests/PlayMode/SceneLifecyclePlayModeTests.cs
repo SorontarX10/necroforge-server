@@ -51,16 +51,16 @@ namespace GrassSim.Tests.PlayMode
                 yield return LoadSceneSingle(LoadingScenePath);
                 yield return WaitForGameReady($"cycle_{cycle}");
 
-                AssertSingletonCountAtMostOne<RuntimePerformanceSummary>("RuntimePerformanceSummary");
-                AssertSingletonCountAtMostOne<RuntimeHitchDiagnostics>("RuntimeHitchDiagnostics");
-                AssertSingletonCountAtMostOne<RuntimeVisualReadabilityStabilizer>("RuntimeVisualReadabilityStabilizer");
+                AssertSingletonCountAtMostOneByTypeName("RuntimePerformanceSummary", "RuntimePerformanceSummary");
+                AssertSingletonCountAtMostOneByTypeName("RuntimeHitchDiagnostics", "RuntimeHitchDiagnostics");
+                AssertSingletonCountAtMostOneByTypeName("RuntimeVisualReadabilityStabilizer", "RuntimeVisualReadabilityStabilizer");
                 AssertSingletonCountAtMostOneByTypeName(
                     "GrassSim.Telemetry.GameplayTelemetryRecorder",
                     "GameplayTelemetryRecorder"
                 );
-                AssertSingletonCountAtMostOne<HordeAISystem>("HordeAISystem");
-                AssertSingletonCountAtMostOne<RelicBatchedTickSystem>("RelicBatchedTickSystem");
-                AssertSingletonCountAtMostOne<RelicVfxTickSystem>("RelicVfxTickSystem");
+                AssertSingletonCountAtMostOneByTypeName("HordeAISystem", "HordeAISystem");
+                AssertSingletonCountAtMostOneByTypeName("RelicBatchedTickSystem", "RelicBatchedTickSystem");
+                AssertSingletonCountAtMostOneByTypeName("RelicVfxTickSystem", "RelicVfxTickSystem");
 
                 AudioListener[] listeners = UnityEngine.Object.FindObjectsByType<AudioListener>(
                     FindObjectsInactive.Include,
@@ -85,7 +85,7 @@ namespace GrassSim.Tests.PlayMode
             yield return LoadSceneSingle(LoadingScenePath);
             yield return WaitForGameReady("runtime_summary_scene_context");
 
-            string resolvedScene = RuntimePerformanceSummary.ResolveSceneNameForDiagnostics();
+            string resolvedScene = ResolveSceneNameForDiagnosticsViaReflection();
             Assert.AreEqual(GameSceneName, resolvedScene, "RuntimePerformanceSummary should resolve scene as Game during gameplay.");
         }
 
@@ -121,7 +121,7 @@ namespace GrassSim.Tests.PlayMode
                     return gameScene.IsValid()
                            && gameScene.isLoaded
                            && string.Equals(SceneManager.GetActiveScene().name, GameSceneName, StringComparison.Ordinal)
-                           && ChunkedProceduralLevelGenerator.WorldReady;
+                           && IsWorldReady();
                 },
                 LoadTimeoutSeconds,
                 $"Timeout waiting for Game readiness ({context})."
@@ -158,18 +158,9 @@ namespace GrassSim.Tests.PlayMode
             Assert.Fail(timeoutMessage);
         }
 
-        private static void AssertSingletonCountAtMostOne<T>(string label) where T : UnityEngine.Object
-        {
-            T[] instances = UnityEngine.Object.FindObjectsByType<T>(
-                FindObjectsInactive.Include,
-                FindObjectsSortMode.None
-            );
-            Assert.LessOrEqual(instances.Length, 1, $"{label} duplicated: count={instances.Length}");
-        }
-
         private static void AssertSingletonCountAtMostOneByTypeName(string fullTypeName, string label)
         {
-            Type targetType = Type.GetType($"{fullTypeName}, Assembly-CSharp");
+            Type targetType = ResolveType(fullTypeName);
             Assert.NotNull(targetType, $"Type not found: {fullTypeName}");
 
             UnityEngine.Object[] instances = UnityEngine.Object.FindObjectsByType(
@@ -199,7 +190,7 @@ namespace GrassSim.Tests.PlayMode
 
         private static Transform GetPlayerTransform()
         {
-            Type locatorType = Type.GetType("GrassSim.Core.PlayerLocator, Assembly-CSharp");
+            Type locatorType = ResolveType("GrassSim.Core.PlayerLocator");
             if (locatorType == null)
                 return null;
 
@@ -211,6 +202,47 @@ namespace GrassSim.Tests.PlayMode
                 return null;
 
             return method.Invoke(null, null) as Transform;
+        }
+
+        private static bool IsWorldReady()
+        {
+            Type generatorType = ResolveType("ChunkedProceduralLevelGenerator");
+            if (generatorType == null)
+                return false;
+
+            System.Reflection.PropertyInfo worldReadyProperty = generatorType.GetProperty(
+                "WorldReady",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
+            );
+            if (worldReadyProperty == null || worldReadyProperty.PropertyType != typeof(bool))
+                return false;
+
+            object value = worldReadyProperty.GetValue(null);
+            return value is bool ready && ready;
+        }
+
+        private static string ResolveSceneNameForDiagnosticsViaReflection()
+        {
+            Type summaryType = ResolveType("RuntimePerformanceSummary");
+            Assert.NotNull(summaryType, "Type not found: RuntimePerformanceSummary");
+
+            System.Reflection.MethodInfo method = summaryType.GetMethod(
+                "ResolveSceneNameForDiagnostics",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
+            );
+            Assert.NotNull(method, "Method not found: RuntimePerformanceSummary.ResolveSceneNameForDiagnostics");
+
+            object value = method.Invoke(null, null);
+            return value as string;
+        }
+
+        private static Type ResolveType(string fullTypeName)
+        {
+            Type direct = Type.GetType($"{fullTypeName}, Assembly-CSharp");
+            if (direct != null)
+                return direct;
+
+            return Type.GetType(fullTypeName);
         }
     }
 }
