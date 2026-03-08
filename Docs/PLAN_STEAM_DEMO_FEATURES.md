@@ -449,6 +449,7 @@ Zakonczone 2026-03-07:
 - [x] T-096 Ustawic sensowne defaulty dla pierwszego startu.
 - [x] T-097 Ustawic `resizableWindow = true` dla targetu PC.
 - [ ] T-098 Dodac test manualny matrix (rozdzielczosc x window mode x quality).
+      Arkusz wykonania: `Docs/MANUAL_QA_T098_T125.md`.
 
 ### F-08 Integracja Steam (bootstrap) (P1)
 
@@ -479,6 +480,7 @@ Zakonczone 2026-03-07:
 - [x] T-123 Dodac linki Privacy/EULA w menu glownym.
 - [x] T-124 Dodac fallback otwierania lokalnego pliku lub URL w zaleznosci od platformy.
 - [ ] T-125 Zweryfikowac widocznosc i dzialanie linkow w buildzie demo.
+      Arkusz wykonania: `Docs/MANUAL_QA_T098_T125.md`.
 
 ### F-11 Domkniecie TODO gameplay/UI (P2)
 
