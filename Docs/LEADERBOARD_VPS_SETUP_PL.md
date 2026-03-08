@@ -58,11 +58,11 @@ Ty wykonujesz tylko kroki operacyjne.
 ssh -i /sciezka/do/klucza ubuntu@PUBLIC_IP_VPS
 ```
 
-## Krok 2: Zainstaluj Docker + Compose + cron
+## Krok 2: Zainstaluj Git + Docker + Compose + cron
 
 ```bash
 sudo apt update
-sudo apt install -y ca-certificates curl gnupg cron
+sudo apt install -y ca-certificates curl gnupg cron git openssh-client
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
@@ -78,6 +78,50 @@ sudo systemctl enable --now cron
 
 Wyloguj i zaloguj SSH ponownie (zeby grupa `docker` zaczela dzialac).
 
+## Krok 3: Skonfiguruj SSH do GitHub na VPS
+
+Wygeneruj nowy klucz tylko dla tego VPS:
+
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -C "necroforge-vps-2026-03-08" -f ~/.ssh/necroforge_github -N ""
+cat ~/.ssh/necroforge_github.pub
+```
+
+Skopiuj output `cat ~/.ssh/necroforge_github.pub`, potem dodaj go na GitHub:
+
+1. Wejdz w repo `SorontarX10/necroforge`.
+2. `Settings` -> `Deploy keys` -> `Add deploy key`.
+3. Title: np. `necroforge-vps`.
+4. Key: wklej caly public key.
+5. `Allow write access` wlacz tylko jesli chcesz robic `git push` z VPS.
+
+Dodaj konfiguracje SSH i zaufany host GitHuba:
+
+```bash
+cat > ~/.ssh/config <<'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/necroforge_github
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+chmod 644 ~/.ssh/known_hosts
+```
+
+Test polaczenia:
+
+```bash
+ssh -T git@github.com
+```
+
+Poprawny wynik bedzie w stylu:
+- `Hi USERNAME! You've successfully authenticated, but GitHub does not provide shell access.`
+- albo dla deploy key: `Hi USERNAME/REPO! You've successfully authenticated, but GitHub does not provide shell access.`
+
 ## 3. DuckDNS (darmowa subdomena)
 
 ## Krok 1: Utworz subdomene
@@ -92,7 +136,7 @@ Twoja domena bedzie: `necroforge-lb.duckdns.org`
 ## Krok 2: Skonfiguruj auto-update IP na VPS
 
 ```bash
-git clone https://github.com/SorontarX10/necroforge.git
+git clone git@github.com:SorontarX10/necroforge.git
 cd necroforge
 chmod +x Infra/leaderboard/scripts/install_duckdns_cron.sh
 ./Infra/leaderboard/scripts/install_duckdns_cron.sh necroforge-lb TWOJ_DUCKDNS_TOKEN
@@ -126,6 +170,11 @@ Ustaw minimum:
 - `LEADERBOARD_DOMAIN` -> `necroforge-lb.duckdns.org`
 - `LEADERBOARD_ADMIN_EMAIL` -> twoj email
 - `LEADERBOARD_VERSION_LOCK` -> wersja gry, np. `0.7.2`
+
+Uwaga:
+- Jesli haslo zawiera znaki specjalne typu `;`, obecny deploy juz to obsluguje poprawnie.
+- Jesli w `.env` haslo zawiera `$` albo `#`, wpisz je w pojedynczych cudzyslowach, np. `POSTGRES_PASSWORD='abc$123#xyz'`.
+- Jesli zmienisz `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` po pierwszym starcie, sam `.env` nie zaktualizuje danych w istniejacym wolumenie Postgresa.
 
 ## Krok 2: Start kontenerow
 
@@ -206,6 +255,22 @@ Sprawdz:
 docker compose logs -f api
 docker compose logs -f db
 ```
+
+## Problem: `password authentication failed for user "leaderboard"`
+
+Najczestsze przyczyny:
+1. Haslo w `.env` zostalo zmienione po pierwszym starcie DB, ale wolumen `leaderboard_pgdata` nadal trzyma stare konto/haslo.
+2. Wczesniejszy deploy skladal connection string z jednego stringa i mogl sie wysypac przy niektorych znakach specjalnych w hasle.
+
+Szybka naprawa przy swiezej instalacji:
+
+```bash
+cd ~/necroforge/Infra/leaderboard
+docker compose down -v
+docker compose up -d --build
+```
+
+Jesli chcesz zachowac dane, nie usuwaj wolumenu. Zamiast tego ustaw haslo wewnatrz Postgresa na wartosc z `.env`.
 
 ## Problem: DuckDNS nie aktualizuje IP
 

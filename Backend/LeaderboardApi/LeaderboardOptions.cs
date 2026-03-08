@@ -1,4 +1,5 @@
 using System.Globalization;
+using Npgsql;
 
 namespace LeaderboardApi;
 
@@ -18,12 +19,7 @@ public sealed record LeaderboardOptions(
     public static LeaderboardOptions FromConfiguration(IConfiguration configuration)
     {
         return new LeaderboardOptions(
-            DbConnectionString: GetString(
-                configuration,
-                "Leaderboard:DbConnectionString",
-                "LEADERBOARD_DB_CONNECTION",
-                "Host=localhost;Port=5432;Database=leaderboard;Username=leaderboard;Password=leaderboard"
-            ),
+            DbConnectionString: BuildDbConnectionString(configuration),
             VersionLock: GetString(
                 configuration,
                 "Leaderboard:VersionLock",
@@ -114,6 +110,68 @@ public sealed record LeaderboardOptions(
             return value;
 
         return defaultValue;
+    }
+
+    private static string BuildDbConnectionString(IConfiguration configuration)
+    {
+        string? explicitConnectionString = GetOptionalString(
+            configuration,
+            "Leaderboard:DbConnectionString",
+            "LEADERBOARD_DB_CONNECTION"
+        );
+        if (!string.IsNullOrWhiteSpace(explicitConnectionString))
+            return explicitConnectionString;
+
+        var builder = new NpgsqlConnectionStringBuilder
+        {
+            Host = GetString(configuration, "Leaderboard:DbHost", "LEADERBOARD_DB_HOST", "localhost"),
+            Port = GetInt(configuration, "Leaderboard:DbPort", "LEADERBOARD_DB_PORT", 5432, 1, 65535),
+            Database = GetFirstNonEmpty(
+                configuration["Leaderboard:DbName"],
+                Environment.GetEnvironmentVariable("LEADERBOARD_DB_NAME"),
+                Environment.GetEnvironmentVariable("POSTGRES_DB"),
+                "leaderboard"
+            ),
+            Username = GetFirstNonEmpty(
+                configuration["Leaderboard:DbUser"],
+                Environment.GetEnvironmentVariable("LEADERBOARD_DB_USER"),
+                Environment.GetEnvironmentVariable("POSTGRES_USER"),
+                "leaderboard"
+            ),
+            Password = GetFirstNonEmpty(
+                configuration["Leaderboard:DbPassword"],
+                Environment.GetEnvironmentVariable("LEADERBOARD_DB_PASSWORD"),
+                Environment.GetEnvironmentVariable("POSTGRES_PASSWORD"),
+                "leaderboard"
+            )
+        };
+
+        return builder.ConnectionString;
+    }
+
+    private static string? GetOptionalString(
+        IConfiguration configuration,
+        string configKey,
+        string envKey
+    )
+    {
+        string? value = configuration[configKey];
+        if (!string.IsNullOrWhiteSpace(value))
+            return value;
+
+        value = Environment.GetEnvironmentVariable(envKey);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string GetFirstNonEmpty(params string?[] values)
+    {
+        foreach (string? value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return string.Empty;
     }
 
     private static int GetInt(
