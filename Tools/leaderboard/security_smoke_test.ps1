@@ -1,5 +1,8 @@
 param(
-    [string]$BaseUrl = "http://localhost:8080"
+    [string]$BaseUrl = "http://localhost:8080",
+    [string]$BuildVersion = "smoke",
+    [int]$StaleNonceDelaySeconds = 0,
+    [switch]$RequireStaleNonce
 )
 
 $ErrorActionPreference = "Stop"
@@ -85,12 +88,26 @@ function Submit-Run {
     return Invoke-RestMethod -Uri "$BaseUrl/runs/submit" -Method Post -Body $body -ContentType "application/json"
 }
 
+function Parse-JsonOrNull {
+    param([string]$RawContent)
+    if ([string]::IsNullOrWhiteSpace($RawContent)) {
+        return $null
+    }
+
+    try {
+        return $RawContent | ConvertFrom-Json
+    }
+    catch {
+        return $null
+    }
+}
+
 Write-Host "Running security smoke tests against: $BaseUrl"
 
 # Case 1: invalid signature should be rejected (validation_state == rejected).
 $player1 = "sec-invalidsig-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
 $displayName = "SecuritySmoke"
-$buildVersion = "smoke"
+$buildVersion = $BuildVersion
 $score = 500
 $duration = 120.5
 $kills = 10
@@ -154,9 +171,55 @@ $duplicateResponse = Submit-Run `
 $duplicateOk = [int]$duplicateResponse.StatusCode -eq 409
 Write-Host "Case duplicate submit -> status: $([int]$duplicateResponse.StatusCode)"
 
-$allOk = $invalidSigOk -and $duplicateOk
+# Case 3: stale nonce / expired run session should return HTTP 400 run_expired.
+$staleNonceChecked = $false
+$staleNonceOk = $true
+if ($StaleNonceDelaySeconds -gt 0) {
+    $staleNonceChecked = $true
+    $player3 = "sec-stalenonce-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+    $start3 = Start-Run -BaseUrl $BaseUrl -PlayerId $player3 -DisplayName $displayName -BuildVersion $buildVersion
+    $canonical3 = New-CanonicalPayload `
+        -RunId $start3.run_id `
+        -PlayerId $player3 `
+        -Score $score `
+        -Duration $duration `
+        -Kills $kills `
+        -BuildVersion $buildVersion `
+        -IsCheatSession $isCheat
+    $signature3 = New-Signature -SessionKey $start3.session_key -CanonicalPayload $canonical3
+
+    Start-Sleep -Seconds $StaleNonceDelaySeconds
+
+    $staleResponse = Submit-Run `
+        -BaseUrl $BaseUrl `
+        -RunId $start3.run_id `
+        -PlayerId $player3 `
+        -DisplayName $displayName `
+        -Score $score `
+        -Duration $duration `
+        -Kills $kills `
+        -BuildVersion $buildVersion `
+        -IsCheatSession $isCheat `
+        -Signature $signature3 `
+        -RawResponse $true
+
+    $staleBody = Parse-JsonOrNull -RawContent $staleResponse.Content
+    $staleStatusOk = [int]$staleResponse.StatusCode -eq 400
+    $staleCodeOk = $staleBody -ne $null -and $staleBody.code -eq "run_expired"
+    $staleNonceOk = $staleStatusOk -and $staleCodeOk
+    Write-Host "Case stale nonce -> status: $([int]$staleResponse.StatusCode), code: $($staleBody.code)"
+}
+else {
+    Write-Host "Case stale nonce -> skipped (set -StaleNonceDelaySeconds > 0 and match backend session TTL)."
+}
+
+$allOk = $invalidSigOk -and $duplicateOk -and $staleNonceOk
+if ($RequireStaleNonce -and -not $staleNonceChecked) {
+    $allOk = $false
+}
+
 if (-not $allOk) {
-    Write-Error "Security smoke failed. invalid_signature_ok=$invalidSigOk duplicate_ok=$duplicateOk"
+    Write-Error "Security smoke failed. invalid_signature_ok=$invalidSigOk duplicate_ok=$duplicateOk stale_nonce_ok=$staleNonceOk stale_nonce_checked=$staleNonceChecked"
     exit 1
 }
 

@@ -238,6 +238,12 @@ pwsh Tools/leaderboard/smoke_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.or
 pwsh Tools/leaderboard/security_smoke_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.org"
 ```
 
+Rozszerzony security smoke (w tym stale nonce po przekroczeniu TTL sesji runu):
+
+```powershell
+.\Tools\leaderboard\security_smoke_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.org" -BuildVersion "0.7.2" -StaleNonceDelaySeconds 305 -RequireStaleNonce
+```
+
 Jesli masz ustawione `LEADERBOARD_VERSION_LOCK`, uruchom smoke test z pasujacym buildem:
 
 ```powershell
