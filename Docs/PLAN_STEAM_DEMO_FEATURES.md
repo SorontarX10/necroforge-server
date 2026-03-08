@@ -503,4 +503,5 @@ Zakonczone 2026-03-07:
 - [x] T-141 Dodac monitorowanie bledow HTTP leaderboardu w runtime logu (bez telemetry produkcyjnej).
 - [x] T-142 Dodac timeout policy i retry budget, zeby uniknac freeze UI przy slabym laczu.
 - [x] T-143 Dodac "graceful degradation": brak leaderboardu nie psuje core loop run-based.
-- [ ] T-144 Przeprowadzic finalny dry-run release z checklisty i zarchiwizowac wynik w Docs.
+- [x] T-144 Przeprowadzic finalny dry-run release z checklisty i zarchiwizowac wynik w Docs.
+- [ ] T-145 Naprawic compile blocker batch builda (DOTween + brak referencji UI/Audio/Physics/Physics2D), potem powtorzyc dry-run az do PASS.
