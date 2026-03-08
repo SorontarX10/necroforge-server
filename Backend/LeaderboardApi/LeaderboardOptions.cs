@@ -6,6 +6,7 @@ namespace LeaderboardApi;
 public sealed record LeaderboardOptions(
     string DbConnectionString,
     string VersionLock,
+    string AdminApiKey,
     int SessionTtlSeconds,
     int MaxStartPerMinutePerPlayer,
     int MaxSubmitPerMinutePerPlayer,
@@ -24,6 +25,12 @@ public sealed record LeaderboardOptions(
                 configuration,
                 "Leaderboard:VersionLock",
                 "LEADERBOARD_VERSION_LOCK",
+                string.Empty
+            ),
+            AdminApiKey: GetString(
+                configuration,
+                "Leaderboard:AdminApiKey",
+                "LEADERBOARD_ADMIN_API_KEY",
                 string.Empty
             ),
             SessionTtlSeconds: GetInt(

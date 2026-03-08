@@ -417,7 +417,7 @@ Zakonczone 2026-03-07:
 
 - [ ] T-062 Dodac hash-chain eventow runu po stronie klienta.
 - [x] T-069 Dodac testy security smoke: stale nonce, invalid signature, replay submit.
-- [ ] T-070 Dodac panel/komendy administracyjne do recznego review flagowanych runow.
+- [x] T-070 Dodac panel/komendy administracyjne do recznego review flagowanych runow.
 
 Zakonczone 2026-03-07:
 - T-060 Spisac finalny threat model (score spoof, speedhack, replay, API abuse).

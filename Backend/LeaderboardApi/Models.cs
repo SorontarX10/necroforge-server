@@ -69,6 +69,30 @@ public sealed class GetMyRankQuery
     public string? PlayerId { get; init; }
 }
 
+public sealed class AdminGetFlaggedRunsQuery
+{
+    [FromQuery(Name = "state")]
+    public string? State { get; init; }
+
+    [FromQuery(Name = "page")]
+    public int? Page { get; init; }
+
+    [FromQuery(Name = "page_size")]
+    public int? PageSize { get; init; }
+}
+
+public sealed class AdminReviewRunRequest
+{
+    [JsonPropertyName("run_id")]
+    public string? RunId { get; init; }
+
+    [JsonPropertyName("action")]
+    public string? Action { get; init; }
+
+    [JsonPropertyName("note")]
+    public string? Note { get; init; }
+}
+
 public sealed record StartRunResponse(
     [property: JsonPropertyName("run_id")] string RunId,
     [property: JsonPropertyName("nonce")] string Nonce,
@@ -105,6 +129,33 @@ public sealed record GetMyRankResponse(
     [property: JsonPropertyName("season")] string Season,
     [property: JsonPropertyName("found")] bool Found,
     [property: JsonPropertyName("entry")] LeaderboardEntryResponse? Entry
+);
+
+public sealed record AdminFlaggedRunResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("player_id")] string PlayerId,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("season")] string Season,
+    [property: JsonPropertyName("score")] int Score,
+    [property: JsonPropertyName("run_duration_sec")] float RunDurationSec,
+    [property: JsonPropertyName("kills")] int Kills,
+    [property: JsonPropertyName("build_version")] string BuildVersion,
+    [property: JsonPropertyName("validation_state")] string ValidationState,
+    [property: JsonPropertyName("validation_reason")] string ValidationReason,
+    [property: JsonPropertyName("submitted_at_utc")] DateTime SubmittedAtUtc
+);
+
+public sealed record AdminGetFlaggedRunsResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_count")] int TotalCount,
+    [property: JsonPropertyName("entries")] IReadOnlyList<AdminFlaggedRunResponse> Entries
+);
+
+public sealed record AdminReviewRunResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("validation_state")] string ValidationState,
+    [property: JsonPropertyName("validation_reason")] string ValidationReason
 );
 
 public sealed record ErrorResponse(

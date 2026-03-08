@@ -117,4 +117,47 @@ app.MapGet(
     }
 );
 
+RouteGroupBuilder admin = app.MapGroup("/admin");
+admin.AddEndpointFilter(async (context, next) =>
+{
+    HttpContext http = context.HttpContext;
+    LeaderboardOptions opts = http.RequestServices.GetRequiredService<LeaderboardOptions>();
+    if (string.IsNullOrWhiteSpace(opts.AdminApiKey))
+    {
+        return Results.Json(
+            new ErrorResponse("admin_not_configured", "Admin API key is not configured."),
+            statusCode: StatusCodes.Status503ServiceUnavailable
+        );
+    }
+
+    string provided = http.Request.Headers["X-Admin-Token"].ToString();
+    if (!string.Equals(provided, opts.AdminApiKey, StringComparison.Ordinal))
+    {
+        return Results.Json(
+            new ErrorResponse("admin_unauthorized", "Missing or invalid X-Admin-Token."),
+            statusCode: StatusCodes.Status401Unauthorized
+        );
+    }
+
+    return await next(context);
+});
+
+admin.MapGet(
+    "/runs/flagged",
+    async ([AsParameters] AdminGetFlaggedRunsQuery query, NpgsqlDataSource db, LeaderboardOptions opts) =>
+    {
+        ServiceResult<AdminGetFlaggedRunsResponse> result = await LeaderboardDb.GetFlaggedRunsAsync(db, opts, query);
+        return result.ToIResult();
+    }
+);
+
+admin.MapPost(
+    "/runs/review",
+    async (AdminReviewRunRequest request, NpgsqlDataSource db, LeaderboardOptions opts) =>
+    {
+        ServiceResult<AdminReviewRunResponse> result = await LeaderboardDb.ReviewRunAsync(db, opts, request);
+        return result.ToIResult();
+    }
+);
+
 app.Run();

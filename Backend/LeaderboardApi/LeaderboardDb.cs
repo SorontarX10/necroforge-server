@@ -444,6 +444,325 @@ public static class LeaderboardDb
         return ServiceResult<GetMyRankResponse>.Success(new GetMyRankResponse(season, Found: true, Entry: entry));
     }
 
+    public static async Task<ServiceResult<AdminGetFlaggedRunsResponse>> GetFlaggedRunsAsync(
+        NpgsqlDataSource db,
+        LeaderboardOptions opts,
+        AdminGetFlaggedRunsQuery query
+    )
+    {
+        string state = NormalizeAdminStateFilter(query.State);
+        if (state == "invalid")
+        {
+            return ServiceResult<AdminGetFlaggedRunsResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "invalid_state",
+                "Allowed state filters: manual_review, shadow_banned, rejected, accepted, all_flagged."
+            );
+        }
+
+        int page = Math.Max(1, query.Page ?? 1);
+        int pageSize = Math.Clamp(query.PageSize ?? 20, 1, opts.MaxPageSize);
+        int offset = (page - 1) * pageSize;
+        List<AdminFlaggedRunResponse> entries = [];
+
+        await using NpgsqlConnection conn = await db.OpenConnectionAsync();
+
+        int totalCount;
+        if (state == "all_flagged")
+        {
+            await using NpgsqlCommand countCmd = new(
+                """
+                SELECT COUNT(*) FROM runs
+                WHERE submitted_at IS NOT NULL
+                  AND validation_state <> 'accepted';
+                """,
+                conn
+            );
+            object? raw = await countCmd.ExecuteScalarAsync();
+            totalCount = raw is null ? 0 : Convert.ToInt32(raw, CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            await using NpgsqlCommand countCmd = new(
+                """
+                SELECT COUNT(*) FROM runs
+                WHERE submitted_at IS NOT NULL
+                  AND validation_state = @validation_state;
+                """,
+                conn
+            );
+            countCmd.Parameters.AddWithValue("validation_state", state);
+            object? raw = await countCmd.ExecuteScalarAsync();
+            totalCount = raw is null ? 0 : Convert.ToInt32(raw, CultureInfo.InvariantCulture);
+        }
+
+        if (state == "all_flagged")
+        {
+            await using NpgsqlCommand listCmd = new(
+                """
+                SELECT run_id, player_id, display_name, season,
+                       COALESCE(score, 0), COALESCE(run_duration_sec, 0), COALESCE(kills, 0),
+                       build_version, COALESCE(validation_state, ''), COALESCE(validation_reason, ''),
+                       submitted_at
+                FROM runs
+                WHERE submitted_at IS NOT NULL
+                  AND validation_state <> 'accepted'
+                ORDER BY submitted_at DESC
+                OFFSET @offset
+                LIMIT @limit;
+                """,
+                conn
+            );
+            listCmd.Parameters.AddWithValue("offset", offset);
+            listCmd.Parameters.AddWithValue("limit", pageSize);
+
+            await using NpgsqlDataReader reader = await listCmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                entries.Add(new AdminFlaggedRunResponse(
+                    RunId: reader.GetGuid(0).ToString("D"),
+                    PlayerId: reader.GetString(1),
+                    DisplayName: reader.GetString(2),
+                    Season: reader.GetString(3),
+                    Score: reader.GetInt32(4),
+                    RunDurationSec: reader.GetFloat(5),
+                    Kills: reader.GetInt32(6),
+                    BuildVersion: reader.GetString(7),
+                    ValidationState: reader.GetString(8),
+                    ValidationReason: reader.GetString(9),
+                    SubmittedAtUtc: DateTime.SpecifyKind(reader.GetDateTime(10), DateTimeKind.Utc)
+                ));
+            }
+        }
+        else
+        {
+            await using NpgsqlCommand listCmd = new(
+                """
+                SELECT run_id, player_id, display_name, season,
+                       COALESCE(score, 0), COALESCE(run_duration_sec, 0), COALESCE(kills, 0),
+                       build_version, COALESCE(validation_state, ''), COALESCE(validation_reason, ''),
+                       submitted_at
+                FROM runs
+                WHERE submitted_at IS NOT NULL
+                  AND validation_state = @validation_state
+                ORDER BY submitted_at DESC
+                OFFSET @offset
+                LIMIT @limit;
+                """,
+                conn
+            );
+            listCmd.Parameters.AddWithValue("validation_state", state);
+            listCmd.Parameters.AddWithValue("offset", offset);
+            listCmd.Parameters.AddWithValue("limit", pageSize);
+
+            await using NpgsqlDataReader reader = await listCmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                entries.Add(new AdminFlaggedRunResponse(
+                    RunId: reader.GetGuid(0).ToString("D"),
+                    PlayerId: reader.GetString(1),
+                    DisplayName: reader.GetString(2),
+                    Season: reader.GetString(3),
+                    Score: reader.GetInt32(4),
+                    RunDurationSec: reader.GetFloat(5),
+                    Kills: reader.GetInt32(6),
+                    BuildVersion: reader.GetString(7),
+                    ValidationState: reader.GetString(8),
+                    ValidationReason: reader.GetString(9),
+                    SubmittedAtUtc: DateTime.SpecifyKind(reader.GetDateTime(10), DateTimeKind.Utc)
+                ));
+            }
+        }
+
+        return ServiceResult<AdminGetFlaggedRunsResponse>.Success(
+            new AdminGetFlaggedRunsResponse(page, pageSize, totalCount, entries)
+        );
+    }
+
+    public static async Task<ServiceResult<AdminReviewRunResponse>> ReviewRunAsync(
+        NpgsqlDataSource db,
+        LeaderboardOptions opts,
+        AdminReviewRunRequest request
+    )
+    {
+        if (request is null)
+        {
+            return ServiceResult<AdminReviewRunResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "invalid_request",
+                "Body is required."
+            );
+        }
+
+        if (!Guid.TryParse(request.RunId, out Guid runId))
+        {
+            return ServiceResult<AdminReviewRunResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "invalid_run_id",
+                "run_id must be UUID."
+            );
+        }
+
+        string targetState = NormalizeAdminAction(request.Action);
+        if (targetState == "invalid")
+        {
+            return ServiceResult<AdminReviewRunResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "invalid_action",
+                "Allowed actions: accept, reject, shadow_ban, manual_review."
+            );
+        }
+
+        string note = NormalizeAdminNote(request.Note);
+        string validationReason = string.IsNullOrWhiteSpace(note)
+            ? $"admin_review:{targetState}"
+            : $"admin_review:{targetState}:{note}";
+
+        await using NpgsqlConnection conn = await db.OpenConnectionAsync();
+        await using NpgsqlTransaction tx = await conn.BeginTransactionAsync();
+        try
+        {
+            await using NpgsqlCommand loadCmd = new(
+                """
+                SELECT player_id, display_name, season,
+                       COALESCE(score, 0), COALESCE(run_duration_sec, 0), COALESCE(kills, 0),
+                       build_version, submitted_at
+                FROM runs
+                WHERE run_id = @run_id
+                FOR UPDATE;
+                """,
+                conn,
+                tx
+            );
+            loadCmd.Parameters.AddWithValue("run_id", runId);
+
+            string playerId;
+            string displayName;
+            string season;
+            int score;
+            float runDurationSec;
+            int kills;
+            string buildVersion;
+            DateTime? submittedAtUtc;
+
+            await using (NpgsqlDataReader reader = await loadCmd.ExecuteReaderAsync())
+            {
+                if (!await reader.ReadAsync())
+                {
+                    await tx.RollbackAsync();
+                    return ServiceResult<AdminReviewRunResponse>.Failure(
+                        StatusCodes.Status404NotFound,
+                        "run_not_found",
+                        "Run session not found."
+                    );
+                }
+
+                playerId = reader.GetString(0);
+                displayName = reader.GetString(1);
+                season = reader.GetString(2);
+                score = reader.GetInt32(3);
+                runDurationSec = reader.GetFloat(4);
+                kills = reader.GetInt32(5);
+                buildVersion = reader.GetString(6);
+                submittedAtUtc = reader.IsDBNull(7) ? null : DateTime.SpecifyKind(reader.GetDateTime(7), DateTimeKind.Utc);
+            }
+
+            if (!submittedAtUtc.HasValue)
+            {
+                await tx.RollbackAsync();
+                return ServiceResult<AdminReviewRunResponse>.Failure(
+                    StatusCodes.Status409Conflict,
+                    "run_not_submitted",
+                    "Run has not been submitted yet."
+                );
+            }
+
+            await using (NpgsqlCommand updateRun = new(
+                """
+                UPDATE runs
+                SET validation_state = @validation_state,
+                    validation_reason = @validation_reason
+                WHERE run_id = @run_id;
+                """,
+                conn,
+                tx
+            ))
+            {
+                updateRun.Parameters.AddWithValue("validation_state", targetState);
+                updateRun.Parameters.AddWithValue("validation_reason", validationReason);
+                updateRun.Parameters.AddWithValue("run_id", runId);
+                await updateRun.ExecuteNonQueryAsync();
+            }
+
+            if (string.Equals(targetState, "rejected", StringComparison.Ordinal))
+            {
+                await using NpgsqlCommand updateEntry = new(
+                    """
+                    UPDATE leaderboard_entries
+                    SET validation_state = 'rejected'
+                    WHERE run_id = @run_id;
+                    """,
+                    conn,
+                    tx
+                );
+                updateEntry.Parameters.AddWithValue("run_id", runId);
+                await updateEntry.ExecuteNonQueryAsync();
+            }
+            else
+            {
+                await using NpgsqlCommand upsertEntry = new(
+                    """
+                    INSERT INTO leaderboard_entries (
+                        run_id, player_id, display_name, season, score, run_duration_sec, kills, build_version, validation_state
+                    )
+                    VALUES (
+                        @run_id, @player_id, @display_name, @season, @score, @run_duration_sec, @kills, @build_version, @validation_state
+                    )
+                    ON CONFLICT (run_id) DO UPDATE
+                    SET display_name = EXCLUDED.display_name,
+                        score = EXCLUDED.score,
+                        run_duration_sec = EXCLUDED.run_duration_sec,
+                        kills = EXCLUDED.kills,
+                        build_version = EXCLUDED.build_version,
+                        validation_state = EXCLUDED.validation_state;
+                    """,
+                    conn,
+                    tx
+                );
+                upsertEntry.Parameters.AddWithValue("run_id", runId);
+                upsertEntry.Parameters.AddWithValue("player_id", playerId);
+                upsertEntry.Parameters.AddWithValue("display_name", displayName);
+                upsertEntry.Parameters.AddWithValue("season", season);
+                upsertEntry.Parameters.AddWithValue("score", score);
+                upsertEntry.Parameters.AddWithValue("run_duration_sec", runDurationSec);
+                upsertEntry.Parameters.AddWithValue("kills", kills);
+                upsertEntry.Parameters.AddWithValue("build_version", buildVersion);
+                upsertEntry.Parameters.AddWithValue("validation_state", targetState);
+                await upsertEntry.ExecuteNonQueryAsync();
+            }
+
+            await InsertModerationFlagAsync(conn, tx, runId, $"admin_action_{targetState}", note);
+            await tx.CommitAsync();
+
+            return ServiceResult<AdminReviewRunResponse>.Success(
+                new AdminReviewRunResponse(
+                    RunId: runId.ToString("D"),
+                    ValidationState: targetState,
+                    ValidationReason: validationReason
+                )
+            );
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            return ServiceResult<AdminReviewRunResponse>.Failure(
+                StatusCodes.Status500InternalServerError,
+                "db_error",
+                ex.Message
+            );
+        }
+    }
+
     private static async Task UpsertPlayerAsync(NpgsqlConnection conn, NpgsqlTransaction tx, string playerId, string displayName)
     {
         await using NpgsqlCommand cmd = new(
@@ -695,5 +1014,49 @@ public static class LeaderboardDb
             return "unknown";
         string trimmed = raw.Trim();
         return trimmed.Length <= 32 ? trimmed : trimmed[..32];
+    }
+
+    private static string NormalizeAdminStateFilter(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "manual_review";
+
+        string value = raw.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "manual_review" => "manual_review",
+            "shadow_banned" => "shadow_banned",
+            "rejected" => "rejected",
+            "accepted" => "accepted",
+            "all_flagged" => "all_flagged",
+            _ => "invalid"
+        };
+    }
+
+    private static string NormalizeAdminAction(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "invalid";
+
+        string value = raw.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "accept" => "accepted",
+            "accepted" => "accepted",
+            "reject" => "rejected",
+            "rejected" => "rejected",
+            "shadow_ban" => "shadow_banned",
+            "shadow_banned" => "shadow_banned",
+            "manual_review" => "manual_review",
+            _ => "invalid"
+        };
+    }
+
+    private static string NormalizeAdminNote(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+        string trimmed = raw.Trim();
+        return trimmed.Length <= 256 ? trimmed : trimmed[..256];
     }
 }

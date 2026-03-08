@@ -170,6 +170,7 @@ Ustaw minimum:
 - `LEADERBOARD_DOMAIN` -> `necroforge-lb.duckdns.org`
 - `LEADERBOARD_ADMIN_EMAIL` -> twoj email
 - `LEADERBOARD_VERSION_LOCK` -> wersja gry, np. `0.7.2`
+- `LEADERBOARD_ADMIN_API_KEY` -> dlugi losowy token do endpointow admin (`/admin/*`)
 
 Uwaga:
 - Jesli haslo zawiera znaki specjalne typu `;`, obecny deploy juz to obsluguje poprawnie.
@@ -259,6 +260,14 @@ Test integracyjny API (`start -> submit -> leaderboard/me -> leaderboard top`):
 ```
 
 Skrypt konczy sie bledem, jesli submit nie jest `accepted` albo ranking nie zwroci wpisu.
+
+Komendy admin do recznego review flagowanych runow:
+
+```powershell
+$token = "TU_WSTAW_LEADERBOARD_ADMIN_API_KEY"
+.\Tools\leaderboard\admin_review.ps1 -BaseUrl "https://necroforge-lb.duckdns.org" -AdminToken $token -Mode list -State all_flagged
+.\Tools\leaderboard\admin_review.ps1 -BaseUrl "https://necroforge-lb.duckdns.org" -AdminToken $token -Mode review -RunId "RUN_UUID" -Action accept -Note "manual review approved"
+```
 
 ## 7. Najczestsze problemy i szybkie naprawy
 
