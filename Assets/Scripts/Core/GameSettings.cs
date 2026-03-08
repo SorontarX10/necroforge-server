@@ -1,4 +1,5 @@
 using System;
+using GrassSim.Core;
 using UnityEngine;
 
 public static class GameSettings
@@ -201,10 +202,6 @@ public static class GameSettings
         ApplyWindowModeAndResolution();
         ApplyQualityPreset();
         ApplyFrameTiming();
-
-#if UNITY_STANDALONE || UNITY_EDITOR
-        Screen.resizableWindow = true;
-#endif
     }
 
     private static void ApplyWindowModeAndResolution()
@@ -217,7 +214,16 @@ public static class GameSettings
         int height = Mathf.Max(360, ResolutionHeight);
         int refreshHz = Mathf.Max(30, ResolutionRefreshHz);
 
+#if UNITY_2022_2_OR_NEWER
+        RefreshRate refreshRate = new RefreshRate
+        {
+            numerator = (uint)Mathf.Max(30, refreshHz),
+            denominator = 1u
+        };
+        Screen.SetResolution(width, height, mode, refreshRate);
+#else
         Screen.SetResolution(width, height, mode, refreshHz);
+#endif
         Screen.fullScreenMode = mode;
         Screen.fullScreen = mode != FullScreenMode.Windowed;
     }
