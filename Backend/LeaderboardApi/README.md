@@ -8,6 +8,11 @@
 - `GET /leaderboard/me?season=global_all_time&player_id=...`
 - `GET /health`
 - `GET /metrics`
+- `GET /auth/external/{provider}/start`
+- `GET /auth/external/{provider}/callback`
+- `POST /auth/external/exchange`
+- `POST /auth/external/refresh`
+- `POST /auth/external/logout`
 
 ## External Account Identity (optional fields)
 
@@ -31,3 +36,30 @@ API default URL: `http://localhost:8080`
 ## Docker Run
 
 Use compose from `Infra/leaderboard`.
+
+## External OAuth Broker Configuration
+
+Set these variables in `Infra/leaderboard/.env` when enabling social login:
+
+- `LEADERBOARD_AUTH_BROKER_ENABLED=true`
+- `LEADERBOARD_AUTH_PUBLIC_BASE_URL=https://<your-domain>`
+- `LEADERBOARD_AUTH_STATE_SECRET=<long-random-secret>`
+
+Then configure one or more providers:
+
+- Google:
+  - `LEADERBOARD_AUTH_GOOGLE_ENABLED=true`
+  - `LEADERBOARD_AUTH_GOOGLE_CLIENT_ID=...`
+  - `LEADERBOARD_AUTH_GOOGLE_CLIENT_SECRET=...`
+  - callback URL in provider console: `https://<your-domain>/auth/external/google/callback`
+- Microsoft:
+  - `LEADERBOARD_AUTH_MICROSOFT_ENABLED=true`
+  - `LEADERBOARD_AUTH_MICROSOFT_TENANT=common` (or tenant id)
+  - `LEADERBOARD_AUTH_MICROSOFT_CLIENT_ID=...`
+  - `LEADERBOARD_AUTH_MICROSOFT_CLIENT_SECRET=...`
+  - callback URL: `https://<your-domain>/auth/external/microsoft/callback`
+- Facebook:
+  - `LEADERBOARD_AUTH_FACEBOOK_ENABLED=true`
+  - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_ID=...`
+  - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_SECRET=...`
+  - callback URL: `https://<your-domain>/auth/external/facebook/callback`

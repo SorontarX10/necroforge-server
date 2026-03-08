@@ -177,6 +177,33 @@ Uwaga:
 - Jesli w `.env` haslo zawiera `$` albo `#`, wpisz je w pojedynczych cudzyslowach, np. `POSTGRES_PASSWORD='abc$123#xyz'`.
 - Jesli zmienisz `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` po pierwszym starcie, sam `.env` nie zaktualizuje danych w istniejacym wolumenie Postgresa.
 
+## Krok 1b: Konfiguracja brokera OAuth (Google/Microsoft/Facebook)
+
+W tym samym `Infra/leaderboard/.env` ustaw:
+
+- `LEADERBOARD_AUTH_BROKER_ENABLED=true`
+- `LEADERBOARD_AUTH_PUBLIC_BASE_URL=https://necroforge-lb.duckdns.org`
+- `LEADERBOARD_AUTH_STATE_SECRET=<dlugi_losowy_sekret>`
+
+Nastepnie wlacz i uzupelnij minimum jednego dostawce:
+
+- Google:
+  - `LEADERBOARD_AUTH_GOOGLE_ENABLED=true`
+  - `LEADERBOARD_AUTH_GOOGLE_CLIENT_ID=...`
+  - `LEADERBOARD_AUTH_GOOGLE_CLIENT_SECRET=...`
+  - callback w panelu Google: `https://necroforge-lb.duckdns.org/auth/external/google/callback`
+- Microsoft:
+  - `LEADERBOARD_AUTH_MICROSOFT_ENABLED=true`
+  - `LEADERBOARD_AUTH_MICROSOFT_TENANT=common` (albo tenant id)
+  - `LEADERBOARD_AUTH_MICROSOFT_CLIENT_ID=...`
+  - `LEADERBOARD_AUTH_MICROSOFT_CLIENT_SECRET=...`
+  - callback: `https://necroforge-lb.duckdns.org/auth/external/microsoft/callback`
+- Facebook:
+  - `LEADERBOARD_AUTH_FACEBOOK_ENABLED=true`
+  - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_ID=...`
+  - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_SECRET=...`
+  - callback: `https://necroforge-lb.duckdns.org/auth/external/facebook/callback`
+
 ## Krok 2: Start kontenerow
 
 ```bash
@@ -216,6 +243,24 @@ Wstaw:
 ```
 
 `version_lock` ustaw na te sama wartosc co `LEADERBOARD_VERSION_LOCK` w `.env` backendu.
+
+## Krok 1b: Ustaw URL brokera auth w grze
+
+Edytuj:
+- `Assets/StreamingAssets/auth_config.json`
+
+Ustaw:
+
+```json
+{
+  "enabled": true,
+  "broker_base_url": "https://necroforge-lb.duckdns.org",
+  "provider_start_path_template": "/auth/external/{provider}/start",
+  "exchange_path": "/auth/external/exchange",
+  "refresh_path": "/auth/external/refresh",
+  "logout_path": "/auth/external/logout"
+}
+```
 
 ## Krok 2: Podepnij nowe pola UI w Inspectorze
 

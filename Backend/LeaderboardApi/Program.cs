@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using LeaderboardApi;
+using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -43,14 +44,25 @@ builder.Services.AddRateLimiter(options =>
 });
 
 LeaderboardOptions options = LeaderboardOptions.FromConfiguration(builder.Configuration);
+ExternalAuthOptions authOptions = ExternalAuthOptions.FromConfiguration(builder.Configuration);
 NpgsqlDataSource dataSource = new NpgsqlDataSourceBuilder(options.DbConnectionString).Build();
 await LeaderboardDb.EnsureSchemaAsync(dataSource);
 
 builder.Services.AddSingleton(options);
+builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(dataSource);
 builder.Services.AddSingleton<ApiMetrics>();
+builder.Services.AddHttpClient(nameof(ExternalAuthBroker));
+builder.Services.AddSingleton<ExternalAuthBroker>();
+builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
+{
+    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    forwarded.KnownNetworks.Clear();
+    forwarded.KnownProxies.Clear();
+});
 
 var app = builder.Build();
+app.UseForwardedHeaders();
 app.UseCors("open");
 app.UseRateLimiter();
 app.Use(async (ctx, next) =>
@@ -74,6 +86,62 @@ app.MapGet("/health", () => Results.Ok(new
 }));
 
 app.MapGet("/metrics", (ApiMetrics metrics) => Results.Ok(metrics.GetSnapshot()));
+
+app.MapGet(
+    "/auth/external/{provider}/start",
+    (string provider, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        ServiceResult<string> result = broker.BuildStartRedirectUrl(provider, httpContext.Request);
+        if (!result.Ok || string.IsNullOrWhiteSpace(result.Payload))
+            return result.ToIResult();
+
+        return Results.Redirect(result.Payload);
+    }
+);
+
+app.MapGet(
+    "/auth/external/{provider}/callback",
+    (string provider, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        string html = broker.RenderCallbackPage(provider, httpContext.Request);
+        return Results.Content(html, "text/html; charset=utf-8");
+    }
+);
+
+app.MapPost(
+    "/auth/external/exchange",
+    async (ExchangeExternalAuthCodeRequest request, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        ServiceResult<ExternalAuthSessionResponse> result = await broker.ExchangeCodeAsync(
+            request,
+            httpContext.Request,
+            httpContext.RequestAborted
+        );
+        return result.ToIResult();
+    }
+);
+
+app.MapPost(
+    "/auth/external/refresh",
+    async (RefreshExternalAuthSessionRequest request, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        ServiceResult<ExternalAuthSessionResponse> result = await broker.RefreshAsync(
+            request,
+            httpContext.Request,
+            httpContext.RequestAborted
+        );
+        return result.ToIResult();
+    }
+);
+
+app.MapPost(
+    "/auth/external/logout",
+    async (LogoutExternalAuthSessionRequest request, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        await broker.RevokeAccessTokenAsync(request, httpContext.RequestAborted);
+        return Results.NoContent();
+    }
+);
 
 app.MapPost(
         "/runs/start",

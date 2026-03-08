@@ -120,6 +120,45 @@ public sealed class AdminReviewRunRequest
     public string? Note { get; init; }
 }
 
+public sealed class ExchangeExternalAuthCodeRequest
+{
+    [JsonPropertyName("provider")]
+    public string? Provider { get; init; }
+
+    [JsonPropertyName("code")]
+    public string? Code { get; init; }
+}
+
+public sealed class RefreshExternalAuthSessionRequest
+{
+    [JsonPropertyName("account_id")]
+    public string? AccountId { get; init; }
+
+    [JsonPropertyName("provider")]
+    public string? Provider { get; init; }
+
+    [JsonPropertyName("provider_user_id")]
+    public string? ProviderUserId { get; init; }
+
+    [JsonPropertyName("refresh_token")]
+    public string? RefreshToken { get; init; }
+}
+
+public sealed class LogoutExternalAuthSessionRequest
+{
+    [JsonPropertyName("account_id")]
+    public string? AccountId { get; init; }
+
+    [JsonPropertyName("provider")]
+    public string? Provider { get; init; }
+
+    [JsonPropertyName("provider_user_id")]
+    public string? ProviderUserId { get; init; }
+
+    [JsonPropertyName("access_token")]
+    public string? AccessToken { get; init; }
+}
+
 public sealed record StartRunResponse(
     [property: JsonPropertyName("run_id")] string RunId,
     [property: JsonPropertyName("nonce")] string Nonce,
@@ -183,6 +222,16 @@ public sealed record AdminReviewRunResponse(
     [property: JsonPropertyName("run_id")] string RunId,
     [property: JsonPropertyName("validation_state")] string ValidationState,
     [property: JsonPropertyName("validation_reason")] string ValidationReason
+);
+
+public sealed record ExternalAuthSessionResponse(
+    [property: JsonPropertyName("account_id")] string AccountId,
+    [property: JsonPropertyName("provider")] string Provider,
+    [property: JsonPropertyName("provider_user_id")] string ProviderUserId,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("access_token")] string AccessToken,
+    [property: JsonPropertyName("refresh_token")] string RefreshToken,
+    [property: JsonPropertyName("expires_at_unix")] long ExpiresAtUnix
 );
 
 public sealed record ErrorResponse(
