@@ -9,6 +9,7 @@ public static class LeaderboardDb
         Guid RunId,
         string PlayerId,
         string Season,
+        string Nonce,
         string SessionKey,
         DateTime ExpiresAtUtc,
         DateTime? SubmittedAtUtc
@@ -43,6 +44,9 @@ public static class LeaderboardDb
                 kills INTEGER NULL,
                 is_cheat_session BOOLEAN NULL,
                 signature TEXT NULL,
+                event_chain TEXT NULL,
+                event_chain_hash TEXT NULL,
+                event_chain_count INTEGER NULL,
                 validation_state TEXT NULL,
                 validation_reason TEXT NULL
             );
@@ -68,6 +72,10 @@ public static class LeaderboardDb
                 details TEXT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
+
+            ALTER TABLE runs ADD COLUMN IF NOT EXISTS event_chain TEXT NULL;
+            ALTER TABLE runs ADD COLUMN IF NOT EXISTS event_chain_hash TEXT NULL;
+            ALTER TABLE runs ADD COLUMN IF NOT EXISTS event_chain_count INTEGER NULL;
 
             CREATE INDEX IF NOT EXISTS idx_runs_player_created
                 ON runs (player_id, created_at DESC);
@@ -211,6 +219,16 @@ public static class LeaderboardDb
         int score = Math.Max(0, request.Score);
         int kills = Math.Max(0, request.Kills);
         float runDurationSec = MathF.Max(0f, request.RunDurationSec);
+        string eventChain = NormalizeEventChain(request.EventChain);
+        string eventChainHash = NormalizeEventChainHash(request.EventChainHash);
+        int eventCount = Math.Max(0, request.EventCount);
+        bool hasEventChainPayload = !string.IsNullOrWhiteSpace(eventChain)
+                                    && !string.IsNullOrWhiteSpace(eventChainHash)
+                                    && eventCount > 0;
+        bool hasPartialEventChainPayload = !hasEventChainPayload
+                                           && (!string.IsNullOrWhiteSpace(request.EventChain)
+                                               || !string.IsNullOrWhiteSpace(request.EventChainHash)
+                                               || request.EventCount > 0);
         string providedSignature = request.Signature?.Trim() ?? string.Empty;
 
         await using NpgsqlConnection conn = await db.OpenConnectionAsync();
@@ -258,19 +276,52 @@ public static class LeaderboardDb
                 return ServiceResult<SubmitRunResponse>.Failure(StatusCodes.Status400BadRequest, "run_expired", "Run session expired.");
             }
 
-            string canonicalPayload = LeaderboardSecurity.BuildCanonicalPayload(
-                runId,
-                playerId,
-                score,
-                runDurationSec,
-                kills,
-                buildVersion,
-                request.IsCheatSession
-            );
+            string canonicalPayload = hasEventChainPayload
+                ? LeaderboardSecurity.BuildCanonicalPayload(
+                    runId,
+                    playerId,
+                    score,
+                    runDurationSec,
+                    kills,
+                    buildVersion,
+                    request.IsCheatSession,
+                    eventChainHash,
+                    eventCount
+                )
+                : LeaderboardSecurity.BuildCanonicalPayload(
+                    runId,
+                    playerId,
+                    score,
+                    runDurationSec,
+                    kills,
+                    buildVersion,
+                    request.IsCheatSession
+                );
             string expectedSignature = LeaderboardSecurity.ComputeSignatureBase64(run.SessionKey, canonicalPayload);
             bool signatureValid = LeaderboardSecurity.FixedTimeEqualsBase64(providedSignature, expectedSignature);
 
             List<string> flags = [];
+            if (hasPartialEventChainPayload)
+                flags.Add("event_chain_partial");
+
+            if (hasEventChainPayload && !IsValidEventCount(eventCount))
+                flags.Add("event_chain_count_invalid");
+
+            if (hasEventChainPayload &&
+                !TryValidateEventChain(
+                    runId,
+                    run.Nonce,
+                    eventChain,
+                    eventChainHash,
+                    eventCount,
+                    score,
+                    kills,
+                    runDurationSec,
+                    out string chainValidationError))
+            {
+                flags.Add(chainValidationError);
+            }
+
             string validationState;
             if (!signatureValid)
             {
@@ -286,7 +337,23 @@ public static class LeaderboardDb
             string validationReason = flags.Count > 0 ? string.Join(",", flags) : "ok";
 
             await UpsertPlayerAsync(conn, tx, playerId, displayName);
-            await UpdateRunSubmissionAsync(conn, tx, runId, displayName, buildVersion, score, kills, runDurationSec, request.IsCheatSession, providedSignature, validationState, validationReason);
+            await UpdateRunSubmissionAsync(
+                conn,
+                tx,
+                runId,
+                displayName,
+                buildVersion,
+                score,
+                kills,
+                runDurationSec,
+                request.IsCheatSession,
+                providedSignature,
+                eventChain,
+                eventChainHash,
+                eventCount,
+                validationState,
+                validationReason
+            );
 
             if (!string.Equals(validationState, "rejected", StringComparison.Ordinal))
                 await InsertLeaderboardEntryAsync(conn, tx, runId, playerId, displayName, run.Season, score, kills, runDurationSec, buildVersion, validationState);
@@ -785,7 +852,7 @@ public static class LeaderboardDb
     {
         await using NpgsqlCommand cmd = new(
             """
-            SELECT run_id, player_id, season, session_key, expires_at, submitted_at
+            SELECT run_id, player_id, season, nonce, session_key, expires_at, submitted_at
             FROM runs
             WHERE run_id = @run_id
             FOR UPDATE;
@@ -803,9 +870,10 @@ public static class LeaderboardDb
             RunId: reader.GetGuid(0),
             PlayerId: reader.GetString(1),
             Season: reader.GetString(2),
-            SessionKey: reader.GetString(3),
-            ExpiresAtUtc: DateTime.SpecifyKind(reader.GetDateTime(4), DateTimeKind.Utc),
-            SubmittedAtUtc: reader.IsDBNull(5) ? null : DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc)
+            Nonce: reader.GetString(3),
+            SessionKey: reader.GetString(4),
+            ExpiresAtUtc: DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
+            SubmittedAtUtc: reader.IsDBNull(6) ? null : DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)
         );
     }
 
@@ -820,6 +888,9 @@ public static class LeaderboardDb
         float runDurationSec,
         bool isCheatSession,
         string signature,
+        string eventChain,
+        string eventChainHash,
+        int eventCount,
         string validationState,
         string validationReason
     )
@@ -836,6 +907,9 @@ public static class LeaderboardDb
                 kills = @kills,
                 is_cheat_session = @is_cheat_session,
                 signature = @signature,
+                event_chain = @event_chain,
+                event_chain_hash = @event_chain_hash,
+                event_chain_count = @event_chain_count,
                 validation_state = @validation_state,
                 validation_reason = @validation_reason
             WHERE run_id = @run_id;
@@ -850,6 +924,9 @@ public static class LeaderboardDb
         cmd.Parameters.AddWithValue("kills", kills);
         cmd.Parameters.AddWithValue("is_cheat_session", isCheatSession);
         cmd.Parameters.AddWithValue("signature", signature);
+        cmd.Parameters.AddWithValue("event_chain", eventChain);
+        cmd.Parameters.AddWithValue("event_chain_hash", eventChainHash);
+        cmd.Parameters.AddWithValue("event_chain_count", eventCount);
         cmd.Parameters.AddWithValue("validation_state", validationState);
         cmd.Parameters.AddWithValue("validation_reason", validationReason);
         cmd.Parameters.AddWithValue("run_id", runId);
@@ -948,6 +1025,127 @@ public static class LeaderboardDb
         return count >= limit;
     }
 
+    private static bool IsValidEventCount(int eventCount)
+    {
+        return eventCount >= 2 && eventCount <= 512;
+    }
+
+    private static bool TryValidateEventChain(
+        Guid runId,
+        string nonce,
+        string eventChain,
+        string eventChainHash,
+        int eventCount,
+        int expectedScore,
+        int expectedKills,
+        float expectedRunDurationSec,
+        out string errorCode
+    )
+    {
+        errorCode = "event_chain_invalid";
+
+        if (string.IsNullOrWhiteSpace(eventChain))
+        {
+            errorCode = "event_chain_missing";
+            return false;
+        }
+
+        string[] checkpoints = eventChain.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (checkpoints.Length != eventCount)
+        {
+            errorCode = "event_chain_count_mismatch";
+            return false;
+        }
+
+        if (!IsValidEventCount(checkpoints.Length))
+        {
+            errorCode = "event_chain_count_invalid";
+            return false;
+        }
+
+        int previousSecond = -1;
+        int previousKills = -1;
+        int previousScore = -1;
+        int finalSecond = 0;
+        int finalKills = 0;
+        int finalScore = 0;
+        string rollingHash = LeaderboardSecurity.ComputeSha256Hex($"seed|{runId:D}|{nonce}");
+
+        for (int i = 0; i < checkpoints.Length; i++)
+        {
+            if (!TryParseEventCheckpoint(checkpoints[i], out int second, out int kills, out int score))
+            {
+                errorCode = "event_chain_parse_failed";
+                return false;
+            }
+
+            if (second < previousSecond || kills < previousKills || score < previousScore)
+            {
+                errorCode = "event_chain_not_monotonic";
+                return false;
+            }
+
+            rollingHash = LeaderboardSecurity.ComputeSha256Hex($"{rollingHash}|{second}|{kills}|{score}");
+            previousSecond = second;
+            previousKills = kills;
+            previousScore = score;
+            finalSecond = second;
+            finalKills = kills;
+            finalScore = score;
+        }
+
+        if (!string.Equals(rollingHash, eventChainHash, StringComparison.OrdinalIgnoreCase))
+        {
+            errorCode = "event_chain_hash_mismatch";
+            return false;
+        }
+
+        int expectedFinalSecond = (int)MathF.Floor(MathF.Max(0f, expectedRunDurationSec));
+        if (Math.Abs(finalSecond - expectedFinalSecond) > 1)
+        {
+            errorCode = "event_chain_duration_mismatch";
+            return false;
+        }
+
+        if (finalKills != expectedKills)
+        {
+            errorCode = "event_chain_kills_mismatch";
+            return false;
+        }
+
+        if (finalScore != expectedScore)
+        {
+            errorCode = "event_chain_score_mismatch";
+            return false;
+        }
+
+        errorCode = string.Empty;
+        return true;
+    }
+
+    private static bool TryParseEventCheckpoint(string raw, out int second, out int kills, out int score)
+    {
+        second = 0;
+        kills = 0;
+        score = 0;
+
+        string[] parts = raw.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 3)
+            return false;
+
+        if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out second))
+            return false;
+        if (!int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out kills))
+            return false;
+        if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out score))
+            return false;
+
+        if (second < 0 || kills < 0 || score < 0)
+            return false;
+
+        return true;
+    }
+
     private static List<string> EvaluateValidationFlags(
         bool isCheatSession,
         int score,
@@ -1014,6 +1212,24 @@ public static class LeaderboardDb
             return "unknown";
         string trimmed = raw.Trim();
         return trimmed.Length <= 32 ? trimmed : trimmed[..32];
+    }
+
+    private static string NormalizeEventChain(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        string trimmed = raw.Trim();
+        return trimmed.Length <= 8192 ? trimmed : string.Empty;
+    }
+
+    private static string NormalizeEventChainHash(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        string trimmed = raw.Trim();
+        return trimmed.Length <= 128 ? trimmed : string.Empty;
     }
 
     private static string NormalizeAdminStateFilter(string? raw)

@@ -44,6 +44,15 @@ public sealed class SubmitRunRequest
     [JsonPropertyName("is_cheat_session")]
     public bool IsCheatSession { get; init; }
 
+    [JsonPropertyName("event_chain")]
+    public string? EventChain { get; init; }
+
+    [JsonPropertyName("event_chain_hash")]
+    public string? EventChainHash { get; init; }
+
+    [JsonPropertyName("event_count")]
+    public int EventCount { get; init; }
+
     [JsonPropertyName("signature")]
     public string? Signature { get; init; }
 }

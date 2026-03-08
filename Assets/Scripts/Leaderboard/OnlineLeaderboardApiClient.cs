@@ -37,6 +37,9 @@ public static class OnlineLeaderboardApiClient
         public int kills;
         public string build_version;
         public bool is_cheat_session;
+        public string event_chain;
+        public string event_chain_hash;
+        public int event_count;
         public string signature;
     }
 
@@ -304,6 +307,12 @@ public static class OnlineLeaderboardApiClient
             yield break;
         }
 
+        RunEventHashChain.Payload chainPayload = RunEventHashChain.BuildPayload(
+            startResponse.run_id,
+            startResponse.nonce,
+            stats
+        );
+
         string canonical = BuildCanonicalPayload(
             runId: startResponse.run_id,
             playerId: playerId,
@@ -311,7 +320,9 @@ public static class OnlineLeaderboardApiClient
             runDurationSec: stats.timeSurvived,
             kills: stats.kills,
             buildVersion: buildVersion,
-            isCheatSession: isCheatSession
+            isCheatSession: isCheatSession,
+            eventChainHash: chainPayload.eventChainHash,
+            eventCount: chainPayload.eventCount
         );
         string signature = ComputeSignature(startResponse.session_key, canonical);
 
@@ -326,6 +337,9 @@ public static class OnlineLeaderboardApiClient
             kills = Mathf.Max(0, stats.kills),
             build_version = buildVersion,
             is_cheat_session = isCheatSession,
+            event_chain = chainPayload.eventChain,
+            event_chain_hash = chainPayload.eventChainHash,
+            event_count = chainPayload.eventCount,
             signature = signature
         };
 
@@ -534,12 +548,16 @@ public static class OnlineLeaderboardApiClient
         float runDurationSec,
         int kills,
         string buildVersion,
-        bool isCheatSession
+        bool isCheatSession,
+        string eventChainHash,
+        int eventCount
     )
     {
         string duration = Mathf.Max(0f, runDurationSec).ToString("0.###", CultureInfo.InvariantCulture);
         string cheat = isCheatSession ? "1" : "0";
-        return $"{runId}|{playerId}|{score}|{duration}|{kills}|{buildVersion}|{cheat}";
+        int safeEventCount = Mathf.Max(0, eventCount);
+        string safeEventChainHash = string.IsNullOrWhiteSpace(eventChainHash) ? "none" : eventChainHash.Trim();
+        return $"{runId}|{playerId}|{score}|{duration}|{kills}|{buildVersion}|{cheat}|{safeEventCount}|{safeEventChainHash}";
     }
 
     private static string ComputeSignature(string sessionKey, string canonicalPayload)

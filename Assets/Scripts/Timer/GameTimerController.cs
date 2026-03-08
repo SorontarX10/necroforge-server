@@ -1,6 +1,7 @@
 using UnityEngine;
 using System;
 using GrassSim.Upgrades;
+using GrassSim.Stats;
 
 public class GameTimerController : MonoBehaviour
 {
@@ -44,6 +45,7 @@ public class GameTimerController : MonoBehaviour
         }
 
         Instance = this;
+        RunEventHashChain.ResetRun();
 
         if (GetComponent<BossEncounterController>() == null)
             gameObject.AddComponent<BossEncounterController>();
@@ -78,6 +80,7 @@ public class GameTimerController : MonoBehaviour
 
         elapsedTime += Time.deltaTime;
         OnTimerTick?.Invoke(elapsedTime);
+        RecordRunEventCheckpoint();
 
         
 
@@ -121,9 +124,20 @@ public class GameTimerController : MonoBehaviour
         elapsedTime = 0f;
         gameEnded = false;
         CurrentPhase = TimerPhase.PhaseA;
+        RunEventHashChain.ResetRun();
 
         // odśwież UI i muzykę od razu
         OnTimerTick?.Invoke(elapsedTime);
         OnPhaseChanged?.Invoke(CurrentPhase);
+    }
+
+    private void RecordRunEventCheckpoint()
+    {
+        int kills = 0;
+        if (WorldStats.Instance != null)
+            kills = Mathf.Max(0, WorldStats.Instance.enemiesKilled);
+
+        int score = Mathf.Max(0, kills * 100 + Mathf.FloorToInt(elapsedTime));
+        RunEventHashChain.RecordCheckpoint(elapsedTime, kills, score);
     }
 }

@@ -19,12 +19,19 @@ public static class LeaderboardSecurity
         float runDurationSec,
         int kills,
         string buildVersion,
-        bool isCheatSession
+        bool isCheatSession,
+        string? eventChainHash = null,
+        int eventCount = 0
     )
     {
         string normalizedDuration = MathF.Max(0f, runDurationSec).ToString("0.###", CultureInfo.InvariantCulture);
         string cheat = isCheatSession ? "1" : "0";
-        return $"{runId:D}|{playerId}|{score}|{normalizedDuration}|{kills}|{buildVersion}|{cheat}";
+        if (string.IsNullOrWhiteSpace(eventChainHash))
+            return $"{runId:D}|{playerId}|{score}|{normalizedDuration}|{kills}|{buildVersion}|{cheat}";
+
+        int safeEventCount = Math.Max(0, eventCount);
+        string safeEventChainHash = eventChainHash.Trim();
+        return $"{runId:D}|{playerId}|{score}|{normalizedDuration}|{kills}|{buildVersion}|{cheat}|{safeEventCount}|{safeEventChainHash}";
     }
 
     public static string ComputeSignatureBase64(string sessionKey, string canonicalPayload)
@@ -47,5 +54,16 @@ public static class LeaderboardSecurity
         {
             return false;
         }
+    }
+
+    public static string ComputeSha256Hex(string value)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+        byte[] hash = SHA256.HashData(bytes);
+        StringBuilder builder = new(hash.Length * 2);
+        for (int i = 0; i < hash.Length; i++)
+            builder.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+
+        return builder.ToString();
     }
 }

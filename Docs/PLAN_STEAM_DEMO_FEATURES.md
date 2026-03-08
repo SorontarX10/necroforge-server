@@ -415,7 +415,7 @@ Zakonczone 2026-03-07:
 
 ### F-05 Anticheat leaderboardu (MVP) (P0)
 
-- [ ] T-062 Dodac hash-chain eventow runu po stronie klienta.
+- [x] T-062 Dodac hash-chain eventow runu po stronie klienta.
 - [x] T-069 Dodac testy security smoke: stale nonce, invalid signature, replay submit.
 - [x] T-070 Dodac panel/komendy administracyjne do recznego review flagowanych runow.
 
