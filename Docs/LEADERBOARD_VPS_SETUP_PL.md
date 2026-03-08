@@ -246,6 +246,14 @@ Jesli masz ustawione `LEADERBOARD_VERSION_LOCK`, uruchom smoke test z pasujacym 
 
 Domyslne `BuildVersion = "smoke"` moze wpasc w `manual_review` przez `build_version_mismatch`, co jest oczekiwane zachowanie backendu.
 
+Test integracyjny API (`start -> submit -> leaderboard/me -> leaderboard top`):
+
+```powershell
+.\Tools\leaderboard\integration_api_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.org" -BuildVersion "0.7.2"
+```
+
+Skrypt konczy sie bledem, jesli submit nie jest `accepted` albo ranking nie zwroci wpisu.
+
 ## 7. Najczestsze problemy i szybkie naprawy
 
 ## Problem: HTTPS nie wstaje

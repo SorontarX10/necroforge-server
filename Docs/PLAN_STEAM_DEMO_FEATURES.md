@@ -407,7 +407,7 @@ Zakonczone 2026-03-03.
 
 ### F-04 Online Leaderboard (MVP) (P0)
 
-- [ ] T-051 Dodac testy integracyjne API: start -> submit -> odczyt rankingu.
+- [x] T-051 Dodac testy integracyjne API: start -> submit -> odczyt rankingu.
 
 Zakonczone 2026-03-07:
 - T-049 Dodac UI rankingu: top N, moja pozycja, stan ladowania, stan bledu.
