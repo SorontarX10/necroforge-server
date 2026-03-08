@@ -114,13 +114,16 @@ public sealed record LeaderboardOptions(
 
     private static string BuildDbConnectionString(IConfiguration configuration)
     {
-        string? explicitConnectionString = GetOptionalString(
-            configuration,
-            "Leaderboard:DbConnectionString",
-            "LEADERBOARD_DB_CONNECTION"
-        );
+        string? explicitConnectionString = Environment.GetEnvironmentVariable("LEADERBOARD_DB_CONNECTION");
         if (!string.IsNullOrWhiteSpace(explicitConnectionString))
             return explicitConnectionString;
+
+        if (!HasDbComponentOverrides())
+        {
+            explicitConnectionString = configuration["Leaderboard:DbConnectionString"];
+            if (!string.IsNullOrWhiteSpace(explicitConnectionString))
+                return explicitConnectionString;
+        }
 
         var builder = new NpgsqlConnectionStringBuilder
         {
@@ -149,18 +152,16 @@ public sealed record LeaderboardOptions(
         return builder.ConnectionString;
     }
 
-    private static string? GetOptionalString(
-        IConfiguration configuration,
-        string configKey,
-        string envKey
-    )
+    private static bool HasDbComponentOverrides()
     {
-        string? value = Environment.GetEnvironmentVariable(envKey);
-        if (!string.IsNullOrWhiteSpace(value))
-            return value;
-
-        value = configuration[configKey];
-        return string.IsNullOrWhiteSpace(value) ? null : value;
+        return HasEnvironmentVariable("LEADERBOARD_DB_HOST")
+            || HasEnvironmentVariable("LEADERBOARD_DB_PORT")
+            || HasEnvironmentVariable("LEADERBOARD_DB_NAME")
+            || HasEnvironmentVariable("LEADERBOARD_DB_USER")
+            || HasEnvironmentVariable("LEADERBOARD_DB_PASSWORD")
+            || HasEnvironmentVariable("POSTGRES_DB")
+            || HasEnvironmentVariable("POSTGRES_USER")
+            || HasEnvironmentVariable("POSTGRES_PASSWORD");
     }
 
     private static string GetFirstNonEmpty(params string?[] values)
@@ -172,6 +173,11 @@ public sealed record LeaderboardOptions(
         }
 
         return string.Empty;
+    }
+
+    private static bool HasEnvironmentVariable(string name)
+    {
+        return !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name));
     }
 
     private static int GetInt(
