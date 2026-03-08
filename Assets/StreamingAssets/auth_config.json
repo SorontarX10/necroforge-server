@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "broker_base_url": "",
+  "provider_start_path_template": "/auth/external/{provider}/start",
+  "exchange_path": "/auth/external/exchange",
+  "refresh_path": "/auth/external/refresh",
+  "logout_path": "/auth/external/logout",
+  "callback_code_query_key": "code",
+  "callback_provider_query_key": "provider",
+  "timeout_seconds": 8,
+  "refresh_lead_seconds": 90,
+  "clipboard_poll_interval_seconds": 0.5
+}

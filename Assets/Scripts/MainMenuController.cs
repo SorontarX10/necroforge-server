@@ -6,6 +6,7 @@ using System;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
+using GrassSim.Auth;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Networking;
 
@@ -40,6 +41,13 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private string eulaFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/EULA.md";
     [SerializeField] private string thirdPartyFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/THIRD_PARTY_LICENSES.md";
 
+    [Header("External Auth")]
+    public TMP_Text authStatusText;
+    public Button authLoginGoogleButton;
+    public Button authLoginMicrosoftButton;
+    public Button authLoginFacebookButton;
+    public Button authLogoutButton;
+
     public float clickDelay = 0.3f;
 
     void Awake()
@@ -53,6 +61,7 @@ public class MainMenuController : MonoBehaviour
         ApplyVersionLabel();
         SetupLeaderboardUiBindings();
         SetupLegalLinkBindings();
+        SetupAuthUiBindings();
     }
 
     private void OnDestroy()
@@ -67,6 +76,16 @@ public class MainMenuController : MonoBehaviour
             eulaButton.onClick.RemoveListener(OnEulaClicked);
         if (thirdPartyLicensesButton != null)
             thirdPartyLicensesButton.onClick.RemoveListener(OnThirdPartyLicensesClicked);
+        if (authLoginGoogleButton != null)
+            authLoginGoogleButton.onClick.RemoveListener(OnAuthGoogleClicked);
+        if (authLoginMicrosoftButton != null)
+            authLoginMicrosoftButton.onClick.RemoveListener(OnAuthMicrosoftClicked);
+        if (authLoginFacebookButton != null)
+            authLoginFacebookButton.onClick.RemoveListener(OnAuthFacebookClicked);
+        if (authLogoutButton != null)
+            authLogoutButton.onClick.RemoveListener(OnAuthLogoutClicked);
+
+        ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
     }
 
     // ======================
@@ -356,6 +375,64 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ======================
+    // AUTH
+    // ======================
+
+    public void OnAuthGoogleClicked()
+    {
+        ExternalAuthService.SignInWithProvider("google");
+    }
+
+    public void OnAuthMicrosoftClicked()
+    {
+        ExternalAuthService.SignInWithProvider("microsoft");
+    }
+
+    public void OnAuthFacebookClicked()
+    {
+        ExternalAuthService.SignInWithProvider("facebook");
+    }
+
+    public void OnAuthLogoutClicked()
+    {
+        ExternalAuthService.SignOut();
+    }
+
+    private void SetupAuthUiBindings()
+    {
+        EnsureRuntimeAuthControls();
+
+        BindAuthButton(authLoginGoogleButton, OnAuthGoogleClicked);
+        BindAuthButton(authLoginMicrosoftButton, OnAuthMicrosoftClicked);
+        BindAuthButton(authLoginFacebookButton, OnAuthFacebookClicked);
+        BindAuthButton(authLogoutButton, OnAuthLogoutClicked);
+
+        ExternalAuthService.Initialize();
+        ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
+        ExternalAuthService.StateChanged += RefreshAuthStatusLabel;
+        RefreshAuthStatusLabel();
+    }
+
+    private static void BindAuthButton(Button button, UnityEngine.Events.UnityAction handler)
+    {
+        if (button == null || handler == null)
+            return;
+
+        button.onClick.RemoveListener(handler);
+        button.onClick.AddListener(handler);
+    }
+
+    private void RefreshAuthStatusLabel()
+    {
+        if (authStatusText != null)
+            authStatusText.text = ExternalAuthService.StatusMessage;
+
+        bool hasSession = ExternalAuthService.IsSignedIn;
+        if (authLogoutButton != null)
+            authLogoutButton.interactable = hasSession;
+    }
+
+    // ======================
     // EXIT
     // ======================
 
@@ -453,6 +530,109 @@ public class MainMenuController : MonoBehaviour
             label.font = TMP_Settings.defaultFontAsset;
 
         return label;
+    }
+
+    private void EnsureRuntimeAuthControls()
+    {
+        if (authStatusText != null
+            && authLoginGoogleButton != null
+            && authLoginMicrosoftButton != null
+            && authLoginFacebookButton != null
+            && authLogoutButton != null)
+        {
+            return;
+        }
+
+        Canvas parentCanvas = null;
+        if (mainMenuRoot != null)
+            parentCanvas = mainMenuRoot.GetComponentInParent<Canvas>();
+        if (parentCanvas == null)
+            parentCanvas = FindFirstObjectByType<Canvas>();
+        if (parentCanvas == null)
+            return;
+
+        GameObject panelGo = new GameObject(
+            "AuthPanel",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter)
+        );
+        RectTransform panelRt = panelGo.GetComponent<RectTransform>();
+        panelRt.SetParent(parentCanvas.transform, false);
+        panelRt.anchorMin = new Vector2(0f, 0f);
+        panelRt.anchorMax = new Vector2(0f, 0f);
+        panelRt.pivot = new Vector2(0f, 0f);
+        panelRt.anchoredPosition = new Vector2(16f, 58f);
+        panelRt.sizeDelta = new Vector2(760f, 96f);
+
+        VerticalLayoutGroup panelLayout = panelGo.GetComponent<VerticalLayoutGroup>();
+        panelLayout.spacing = 6f;
+        panelLayout.childControlWidth = true;
+        panelLayout.childControlHeight = true;
+        panelLayout.childForceExpandWidth = false;
+        panelLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = panelGo.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        if (authStatusText == null)
+            authStatusText = CreateAuthStatusText(panelGo.transform);
+
+        GameObject rowGo = new GameObject(
+            "AuthButtonsRow",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(HorizontalLayoutGroup)
+        );
+        rowGo.transform.SetParent(panelGo.transform, false);
+
+        HorizontalLayoutGroup rowLayout = rowGo.GetComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = 8f;
+        rowLayout.childControlWidth = true;
+        rowLayout.childControlHeight = true;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = false;
+
+        if (authLoginGoogleButton == null)
+            authLoginGoogleButton = CreateLegalButton(rowGo.transform, "AuthGoogleButton", "Google");
+        if (authLoginMicrosoftButton == null)
+            authLoginMicrosoftButton = CreateLegalButton(rowGo.transform, "AuthMicrosoftButton", "Microsoft");
+        if (authLoginFacebookButton == null)
+            authLoginFacebookButton = CreateLegalButton(rowGo.transform, "AuthFacebookButton", "Facebook");
+        if (authLogoutButton == null)
+            authLogoutButton = CreateLegalButton(rowGo.transform, "AuthLogoutButton", "Logout");
+    }
+
+    private static TMP_Text CreateAuthStatusText(Transform parent)
+    {
+        GameObject textGo = new GameObject(
+            "AuthStatusText",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI),
+            typeof(LayoutElement)
+        );
+        textGo.transform.SetParent(parent, false);
+
+        LayoutElement layout = textGo.GetComponent<LayoutElement>();
+        layout.preferredWidth = 760f;
+        layout.preferredHeight = 28f;
+
+        TMP_Text text = textGo.GetComponent<TextMeshProUGUI>();
+        text.text = "External auth: not initialized.";
+        text.fontSize = 16f;
+        text.color = new Color(0.82f, 0.86f, 0.9f, 0.92f);
+        text.alignment = TextAlignmentOptions.Left;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Ellipsis;
+        text.raycastTarget = false;
+
+        if (TMP_Settings.defaultFontAsset != null)
+            text.font = TMP_Settings.defaultFontAsset;
+
+        return text;
     }
 
     private void EnsureRuntimeLegalButtons()
