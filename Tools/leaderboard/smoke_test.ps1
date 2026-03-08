@@ -1,5 +1,6 @@
 param(
-    [string]$BaseUrl = "http://localhost:8080"
+    [string]$BaseUrl = "http://localhost:8080",
+    [string]$BuildVersion = "smoke"
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,7 +25,7 @@ $startBody = @{
     player_id = $playerId
     display_name = $displayName
     season = "global_all_time"
-    build_version = "smoke"
+    build_version = $BuildVersion
 } | ConvertTo-Json
 
 $start = Invoke-RestMethod -Uri "$BaseUrl/runs/start" -Method Post -Body $startBody -ContentType "application/json"
@@ -34,7 +35,7 @@ $sessionKey = $start.session_key
 $score = 9999
 $duration = 120.5
 $kills = 42
-$buildVersion = "smoke"
+$buildVersion = $BuildVersion
 $isCheat = $false
 $cheatBit = if ($isCheat) { "1" } else { "0" }
 $durationNorm = $duration.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)
@@ -59,5 +60,6 @@ $me = Invoke-RestMethod -Uri "$BaseUrl/leaderboard/me?season=global_all_time&pla
 
 Write-Host "run_id: $runId"
 Write-Host "submit validation_state: $($submit.validation_state)"
+Write-Host "submit validation_reason: $($submit.validation_reason)"
 Write-Host "top count: $($top.entries.Count)"
 Write-Host "my rank found: $($me.found)"

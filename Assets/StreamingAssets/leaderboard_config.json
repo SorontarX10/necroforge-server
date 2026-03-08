@@ -1,5 +1,10 @@
 {
   "base_url": "",
   "season": "global_all_time",
-  "timeout_seconds": 8
+  "version_lock": "",
+  "timeout_seconds": 8,
+  "read_retry_count": 1,
+  "submit_retry_count": 0,
+  "retry_budget_seconds": 6,
+  "retry_backoff_seconds": 0.35
 }

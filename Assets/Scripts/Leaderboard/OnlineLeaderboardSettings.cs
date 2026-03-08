@@ -15,7 +15,12 @@ public static class OnlineLeaderboardSettings
     {
         public string base_url;
         public string season = "global_all_time";
+        public string version_lock = string.Empty;
         public float timeout_seconds = 8f;
+        public int read_retry_count = 1;
+        public int submit_retry_count = 0;
+        public float retry_budget_seconds = 6f;
+        public float retry_backoff_seconds = 0.35f;
     }
 
     private static LeaderboardConfigFile cachedConfig;
@@ -73,6 +78,44 @@ public static class OnlineLeaderboardSettings
 
         float value = PlayerPrefs.GetFloat(TimeoutSecondsKey, defaultTimeout);
         return Mathf.Clamp(value, 3f, 20f);
+    }
+
+    public static string GetBuildVersionForLeaderboard()
+    {
+        string lockedVersion = GetConfig().version_lock;
+        if (!string.IsNullOrWhiteSpace(lockedVersion))
+            return lockedVersion.Trim();
+
+        string appVersion = Application.version;
+        return string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion.Trim();
+    }
+
+    public static int GetReadRetryCount()
+    {
+        return Mathf.Clamp(GetConfig().read_retry_count, 0, 2);
+    }
+
+    public static int GetSubmitRetryCount()
+    {
+        return Mathf.Clamp(GetConfig().submit_retry_count, 0, 1);
+    }
+
+    public static float GetRetryBudgetSeconds()
+    {
+        float value = GetConfig().retry_budget_seconds;
+        if (value <= 0f)
+            value = 6f;
+
+        return Mathf.Clamp(value, 1f, 20f);
+    }
+
+    public static float GetRetryBackoffSeconds()
+    {
+        float value = GetConfig().retry_backoff_seconds;
+        if (value <= 0f)
+            value = 0.35f;
+
+        return Mathf.Clamp(value, 0.05f, 2f);
     }
 
     private static LeaderboardConfigFile GetConfig()

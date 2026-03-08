@@ -205,9 +205,16 @@ Wstaw:
 {
   "base_url": "https://necroforge-lb.duckdns.org",
   "season": "global_all_time",
-  "timeout_seconds": 8
+  "version_lock": "0.7.2",
+  "timeout_seconds": 8,
+  "read_retry_count": 1,
+  "submit_retry_count": 0,
+  "retry_budget_seconds": 6,
+  "retry_backoff_seconds": 0.35
 }
 ```
+
+`version_lock` ustaw na te sama wartosc co `LEADERBOARD_VERSION_LOCK` w `.env` backendu.
 
 ## Krok 2: Podepnij nowe pola UI w Inspectorze
 
@@ -230,6 +237,14 @@ Normalny build demo.
 pwsh Tools/leaderboard/smoke_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.org"
 pwsh Tools/leaderboard/security_smoke_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.org"
 ```
+
+Jesli masz ustawione `LEADERBOARD_VERSION_LOCK`, uruchom smoke test z pasujacym buildem:
+
+```powershell
+.\Tools\leaderboard\smoke_test.ps1 -BaseUrl "https://necroforge-lb.duckdns.org" -BuildVersion "0.7.2"
+```
+
+Domyslne `BuildVersion = "smoke"` moze wpasc w `manual_review` przez `build_version_mismatch`, co jest oczekiwane zachowanie backendu.
 
 ## 7. Najczestsze problemy i szybkie naprawy
 

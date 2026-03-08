@@ -34,6 +34,7 @@ Zakres: Demo + fundament pod pelna wersje (run-based loop)
 | F-09 | CI/CD + Release checklist | P1 | Mniej regresji i szybsze wydania | 2-3 dni |
 | F-10 | Legal + docs release | P1 | Gotowosc formalna strony i buildu | 1-2 dni |
 | F-11 | Domkniecie TODO gameplay/UI | P2 | Polerka i mniej "unfinished" sygnalow | 1-2 dni |
+| F-12 | Konta graczy przez external auth | P1 | Trwala tozsamosc gracza i sensowne dane usera w rankingu bez lokalnych kont | 3-5 dni |
 
 ## 4. Szczegolowy plan funkcji
 
@@ -289,6 +290,38 @@ Zakres:
 Kryteria akceptacji:
 - Brak runtime TODO-ow dotykajacych gracza w kluczowym loopie.
 
+## F-12 Konta graczy przez external auth (P1)
+
+Cel: miec stabilna tozsamosc gracza i sensowny model danych usera dla leaderboardu, ale bez lokalnego tworzenia kont.
+
+Zakres:
+- Oprzec konta tylko o autoryzacje zewnetrznych dostawcow:
+  - Google
+  - Microsoft
+  - Facebook
+  - inni dostawcy OIDC/OAuth, jesli beda potrzebni
+- Nie tworzyc lokalnego flow "zaloz konto / login haslem" w grze.
+- Zdefiniowac model tozsamosci oparty o:
+  - `account_id`
+  - `provider`
+  - `provider_user_id`
+  - `display_name`
+  - `created_at`
+  - `last_seen_at`
+- Dodac bootstrap sesji gracza:
+  - logowanie przez provider
+  - odswiezanie sesji
+  - odzyskanie profilu przy starcie klienta
+- Podlaczyc konto/profil do submitu leaderboardu i UI:
+  - leaderboard zapisuje stabilne `player_id/account_id`
+  - UI pokazuje aktualny `display_name` z providera lub profilu backendowego
+- Przygotowac backend pod przyszly `users/account profile`, oparty o external auth.
+
+Kryteria akceptacji:
+- Gracz loguje sie tylko przez zewnetrznego dostawce.
+- Leaderboard nie tworzy lokalnej tozsamosci konta poza flow external auth.
+- Dane wysylane do leaderboardu sa spojne z profilem konta z providera.
+
 ## 5. Kolejnosc wdrozenia (rekomendowana)
 
 1. F-01 Build Profiles + flags  
@@ -302,6 +335,7 @@ Kryteria akceptacji:
 9. F-09 CI/CD + checklist  
 10. F-10 Legal/docs  
 11. F-11 TODO polish
+12. F-12 Konta graczy przez external auth
 
 ## 6. Harmonogram (propozycja od 2026-03-02)
 
@@ -454,10 +488,19 @@ Zakonczone 2026-03-07:
 - [ ] T-133 Dodac test/regresje dla pickupow enhancerow po zmianie.
 - [ ] T-134 Usunac lub zamknac TODO komentarze powiazane z tymi elementami.
 
+### F-12 Konta graczy przez external auth (P1)
+
+- [ ] T-150 Zdefiniowac model `UserAccount/Profile` oparty o `provider` + `provider_user_id`, bez lokalnych kont.
+- [ ] T-151 Dodac klienta autoryzacji przez zewnetrznych dostawcow (Google/Microsoft/Facebook) lub warstwe pod OIDC/OAuth broker.
+- [ ] T-152 Dodac zapis i odswiezanie sesji external auth miedzy sesjami.
+- [ ] T-153 Podlaczyc `display_name` i stabilne `player_id/account_id` z konta providera do leaderboard submit.
+- [ ] T-154 Dodac ekran/flow login/logout oraz obsluge wygaslej sesji.
+- [ ] T-155 Przygotowac backendowy model `user/profile` i mapowanie provider identity pod przyszle rozszerzenia leaderboardu.
+
 ### Cross-cutting release hardening
 
-- [ ] T-140 Dodac globalny `VERSION_LOCK` dla demo (zgodnosc klient/backend leaderboard).
-- [ ] T-141 Dodac monitorowanie bledow HTTP leaderboardu w runtime logu (bez telemetry produkcyjnej).
-- [ ] T-142 Dodac timeout policy i retry budget, zeby uniknac freeze UI przy slabym laczu.
-- [ ] T-143 Dodac "graceful degradation": brak leaderboardu nie psuje core loop run-based.
+- [x] T-140 Dodac globalny `VERSION_LOCK` dla demo (zgodnosc klient/backend leaderboard).
+- [x] T-141 Dodac monitorowanie bledow HTTP leaderboardu w runtime logu (bez telemetry produkcyjnej).
+- [x] T-142 Dodac timeout policy i retry budget, zeby uniknac freeze UI przy slabym laczu.
+- [x] T-143 Dodac "graceful degradation": brak leaderboardu nie psuje core loop run-based.
 - [ ] T-144 Przeprowadzic finalny dry-run release z checklisty i zarchiwizowac wynik w Docs.

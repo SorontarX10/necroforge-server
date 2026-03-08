@@ -72,6 +72,29 @@ public static class OnlineLeaderboardApiClient
         public string created_at_utc;
     }
 
+    private readonly struct RequestPolicy
+    {
+        public readonly int maxRetries;
+        public readonly float retryBudgetSeconds;
+        public readonly float retryBackoffSeconds;
+
+        public RequestPolicy(int maxRetries, float retryBudgetSeconds, float retryBackoffSeconds)
+        {
+            this.maxRetries = maxRetries;
+            this.retryBudgetSeconds = retryBudgetSeconds;
+            this.retryBackoffSeconds = retryBackoffSeconds;
+        }
+    }
+
+    private sealed class HttpAttemptResult
+    {
+        public bool success;
+        public string text;
+        public string error;
+        public long responseCode;
+        public float durationSeconds;
+    }
+
     public sealed class LeaderboardEntry
     {
         public int rank;
@@ -86,6 +109,7 @@ public static class OnlineLeaderboardApiClient
     public sealed class FetchTopResult
     {
         public bool success;
+        public bool isStale;
         public string error;
         public List<LeaderboardEntry> entries = new();
     }
@@ -101,6 +125,7 @@ public static class OnlineLeaderboardApiClient
     public sealed class FetchMyRankResult
     {
         public bool success;
+        public bool isStale;
         public bool found;
         public string error;
         public LeaderboardEntry entry;
@@ -118,28 +143,48 @@ public static class OnlineLeaderboardApiClient
         }
 
         int pageSize = Mathf.Clamp(count, 1, 50);
-        string url = $"{OnlineLeaderboardSettings.GetBaseUrl()}/leaderboard?season={OnlineLeaderboardSettings.GetSeason()}&page=1&page_size={pageSize}";
-        yield return SendGet(url, json =>
-        {
-            LeaderboardResponseDto payload = JsonUtility.FromJson<LeaderboardResponseDto>(json);
-            if (payload?.entries == null)
+        string season = OnlineLeaderboardSettings.GetSeason();
+        string url = $"{OnlineLeaderboardSettings.GetBaseUrl()}/leaderboard?season={season}&page=1&page_size={pageSize}";
+
+        yield return SendGet(
+            operation: "fetch_top",
+            url: url,
+            retryCount: OnlineLeaderboardSettings.GetReadRetryCount(),
+            onSuccess: json =>
+            {
+                LeaderboardResponseDto payload = JsonUtility.FromJson<LeaderboardResponseDto>(json);
+                if (payload?.entries == null)
+                {
+                    result.success = false;
+                    result.error = "invalid_payload";
+                    return;
+                }
+
+                result.success = true;
+                for (int i = 0; i < payload.entries.Length; i++)
+                    result.entries.Add(ToEntry(payload.entries[i]));
+
+                OnlineLeaderboardCache.StoreTopEntries(season, result.entries);
+            },
+            onError: error =>
             {
                 result.success = false;
-                result.error = "invalid_payload";
-                return;
+                result.error = error;
             }
+        );
 
-            result.success = true;
-            for (int i = 0; i < payload.entries.Length; i++)
-            {
-                LeaderboardEntryDto src = payload.entries[i];
-                result.entries.Add(ToEntry(src));
-            }
-        }, error =>
+        if (!result.success
+            && OnlineLeaderboardCache.TryGetTopEntries(season, out List<LeaderboardEntry> cachedEntries, out _))
         {
-            result.success = false;
-            result.error = error;
-        });
+            result.success = true;
+            result.isStale = true;
+            result.entries = cachedEntries ?? new List<LeaderboardEntry>();
+            OnlineLeaderboardRuntimeDiagnostics.LogGracefulDegradation(
+                context: "fetch_top",
+                fallbackMode: "last_synced_leaderboard",
+                reason: result.error
+            );
+        }
 
         onComplete?.Invoke(result);
     }
@@ -155,28 +200,58 @@ public static class OnlineLeaderboardApiClient
             yield break;
         }
 
-        string escapedSeason = UnityWebRequest.EscapeURL(OnlineLeaderboardSettings.GetSeason());
-        string escapedPlayerId = UnityWebRequest.EscapeURL(PlayerIdentityService.GetPlayerId());
+        string season = OnlineLeaderboardSettings.GetSeason();
+        string playerId = PlayerIdentityService.GetPlayerId();
+        string escapedSeason = UnityWebRequest.EscapeURL(season);
+        string escapedPlayerId = UnityWebRequest.EscapeURL(playerId);
         string url = $"{OnlineLeaderboardSettings.GetBaseUrl()}/leaderboard/me?season={escapedSeason}&player_id={escapedPlayerId}";
-        yield return SendGet(url, json =>
-        {
-            MyRankResponseDto payload = JsonUtility.FromJson<MyRankResponseDto>(json);
-            if (payload == null)
+
+        yield return SendGet(
+            operation: "fetch_my_rank",
+            url: url,
+            retryCount: OnlineLeaderboardSettings.GetReadRetryCount(),
+            onSuccess: json =>
+            {
+                MyRankResponseDto payload = JsonUtility.FromJson<MyRankResponseDto>(json);
+                if (payload == null)
+                {
+                    result.success = false;
+                    result.error = "invalid_payload";
+                    return;
+                }
+
+                result.success = true;
+                result.found = payload.found;
+                if (payload.found && payload.entry != null)
+                    result.entry = ToEntry(payload.entry);
+
+                OnlineLeaderboardCache.StoreMyRank(season, playerId, result.found, result.entry);
+            },
+            onError: error =>
             {
                 result.success = false;
-                result.error = "invalid_payload";
-                return;
+                result.error = error;
             }
+        );
 
-            result.success = true;
-            result.found = payload.found;
-            if (payload.found && payload.entry != null)
-                result.entry = ToEntry(payload.entry);
-        }, error =>
+        if (!result.success
+            && OnlineLeaderboardCache.TryGetMyRank(
+                season,
+                playerId,
+                out bool cachedFound,
+                out LeaderboardEntry cachedEntry,
+                out _))
         {
-            result.success = false;
-            result.error = error;
-        });
+            result.success = true;
+            result.isStale = true;
+            result.found = cachedFound;
+            result.entry = cachedEntry;
+            OnlineLeaderboardRuntimeDiagnostics.LogGracefulDegradation(
+                context: "fetch_my_rank",
+                fallbackMode: "last_synced_rank",
+                reason: result.error
+            );
+        }
 
         onComplete?.Invoke(result);
     }
@@ -194,7 +269,7 @@ public static class OnlineLeaderboardApiClient
 
         string playerId = PlayerIdentityService.GetPlayerId();
         string displayName = PlayerIdentityService.GetDisplayName();
-        string buildVersion = Application.version;
+        string buildVersion = OnlineLeaderboardSettings.GetBuildVersionForLeaderboard();
         bool isCheatSession = GameSettings.GodMode;
 
         StartRunResponseDto startResponse = null;
@@ -207,17 +282,21 @@ public static class OnlineLeaderboardApiClient
         };
 
         yield return SendPostJson(
-            $"{OnlineLeaderboardSettings.GetBaseUrl()}/runs/start",
-            JsonUtility.ToJson(startRequest),
-            json => { startResponse = JsonUtility.FromJson<StartRunResponseDto>(json); },
-            error =>
+            operation: "start_run",
+            url: $"{OnlineLeaderboardSettings.GetBaseUrl()}/runs/start",
+            json: JsonUtility.ToJson(startRequest),
+            retryCount: OnlineLeaderboardSettings.GetReadRetryCount(),
+            onSuccess: json => { startResponse = JsonUtility.FromJson<StartRunResponseDto>(json); },
+            onError: error =>
             {
                 result.success = false;
                 result.error = error;
             }
         );
 
-        if (startResponse == null || string.IsNullOrWhiteSpace(startResponse.run_id) || string.IsNullOrWhiteSpace(startResponse.session_key))
+        if (startResponse == null
+            || string.IsNullOrWhiteSpace(startResponse.run_id)
+            || string.IsNullOrWhiteSpace(startResponse.session_key))
         {
             if (string.IsNullOrWhiteSpace(result.error))
                 result.error = "start_failed";
@@ -251,10 +330,12 @@ public static class OnlineLeaderboardApiClient
         };
 
         yield return SendPostJson(
-            $"{OnlineLeaderboardSettings.GetBaseUrl()}/runs/submit",
-            JsonUtility.ToJson(submitRequest),
-            json => { submitResponse = JsonUtility.FromJson<SubmitRunResponseDto>(json); },
-            error =>
+            operation: "submit_run",
+            url: $"{OnlineLeaderboardSettings.GetBaseUrl()}/runs/submit",
+            json: JsonUtility.ToJson(submitRequest),
+            retryCount: OnlineLeaderboardSettings.GetSubmitRetryCount(),
+            onSuccess: json => { submitResponse = JsonUtility.FromJson<SubmitRunResponseDto>(json); },
+            onError: error =>
             {
                 result.success = false;
                 result.error = error;
@@ -272,41 +353,178 @@ public static class OnlineLeaderboardApiClient
         result.success = true;
         result.validationState = submitResponse.validation_state;
         result.validationReason = submitResponse.validation_reason;
+        OnlineLeaderboardRuntimeDiagnostics.LogSubmitValidation(result.validationState, result.validationReason);
         onComplete?.Invoke(result);
     }
 
-    private static IEnumerator SendGet(string url, Action<string> onSuccess, Action<string> onError)
+    private static IEnumerator SendGet(
+        string operation,
+        string url,
+        int retryCount,
+        Action<string> onSuccess,
+        Action<string> onError
+    )
     {
-        using UnityWebRequest request = UnityWebRequest.Get(url);
-        request.timeout = Mathf.CeilToInt(OnlineLeaderboardSettings.GetTimeoutSeconds());
-        yield return request.SendWebRequest();
-
-        if (request.result != UnityWebRequest.Result.Success)
-        {
-            onError?.Invoke($"http_error:{request.responseCode}:{request.error}");
-            yield break;
-        }
-
-        onSuccess?.Invoke(request.downloadHandler.text);
+        yield return SendWithPolicy(
+            operation,
+            retryCount,
+            () =>
+            {
+                UnityWebRequest request = UnityWebRequest.Get(url);
+                request.timeout = Mathf.CeilToInt(OnlineLeaderboardSettings.GetTimeoutSeconds());
+                return request;
+            },
+            onSuccess,
+            onError
+        );
     }
 
-    private static IEnumerator SendPostJson(string url, string json, Action<string> onSuccess, Action<string> onError)
+    private static IEnumerator SendPostJson(
+        string operation,
+        string url,
+        string json,
+        int retryCount,
+        Action<string> onSuccess,
+        Action<string> onError
+    )
     {
         byte[] body = Encoding.UTF8.GetBytes(json);
-        using UnityWebRequest request = new(url, UnityWebRequest.kHttpVerbPOST);
-        request.uploadHandler = new UploadHandlerRaw(body);
-        request.downloadHandler = new DownloadHandlerBuffer();
-        request.timeout = Mathf.CeilToInt(OnlineLeaderboardSettings.GetTimeoutSeconds());
-        request.SetRequestHeader("Content-Type", "application/json");
+        yield return SendWithPolicy(
+            operation,
+            retryCount,
+            () =>
+            {
+                UnityWebRequest request = new(url, UnityWebRequest.kHttpVerbPOST);
+                request.uploadHandler = new UploadHandlerRaw(body);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.timeout = Mathf.CeilToInt(OnlineLeaderboardSettings.GetTimeoutSeconds());
+                request.SetRequestHeader("Content-Type", "application/json");
+                return request;
+            },
+            onSuccess,
+            onError
+        );
+    }
+
+    private static IEnumerator SendWithPolicy(
+        string operation,
+        int retryCount,
+        Func<UnityWebRequest> requestFactory,
+        Action<string> onSuccess,
+        Action<string> onError
+    )
+    {
+        RequestPolicy policy = BuildRequestPolicy(retryCount);
+        int maxAttempts = Mathf.Max(1, policy.maxRetries + 1);
+        float operationStartedAt = Time.realtimeSinceStartup;
+
+        for (int attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++)
+        {
+            HttpAttemptResult attemptResult = null;
+            yield return SendSingleRequest(requestFactory, outcome => { attemptResult = outcome; });
+
+            if (attemptResult != null && attemptResult.success)
+            {
+                onSuccess?.Invoke(attemptResult.text);
+                yield break;
+            }
+
+            string attemptError = attemptResult?.error ?? "request_failed";
+            long responseCode = attemptResult?.responseCode ?? 0L;
+            float durationSeconds = attemptResult?.durationSeconds ?? 0f;
+            float elapsedSeconds = Time.realtimeSinceStartup - operationStartedAt;
+            bool willRetry = OnlineLeaderboardRetryPolicy.ShouldRetry(
+                attemptNumber,
+                maxAttempts,
+                elapsedSeconds,
+                policy.retryBudgetSeconds,
+                responseCode,
+                attemptError
+            );
+
+            OnlineLeaderboardRuntimeDiagnostics.LogRequestFailure(
+                operation,
+                attemptNumber,
+                maxAttempts,
+                responseCode,
+                attemptError,
+                durationSeconds,
+                willRetry
+            );
+
+            if (!willRetry)
+            {
+                onError?.Invoke(attemptError);
+                yield break;
+            }
+
+            float delaySeconds = OnlineLeaderboardRetryPolicy.GetRetryDelaySeconds(
+                attemptNumber,
+                policy.retryBackoffSeconds,
+                elapsedSeconds,
+                policy.retryBudgetSeconds
+            );
+            if (delaySeconds <= 0f)
+            {
+                onError?.Invoke(attemptError);
+                yield break;
+            }
+
+            OnlineLeaderboardRuntimeDiagnostics.LogRetryScheduled(
+                operation,
+                attemptNumber + 1,
+                delaySeconds,
+                policy.retryBudgetSeconds
+            );
+
+            yield return new WaitForSecondsRealtime(delaySeconds);
+        }
+
+        onError?.Invoke("retry_budget_exhausted");
+    }
+
+    private static IEnumerator SendSingleRequest(
+        Func<UnityWebRequest> requestFactory,
+        Action<HttpAttemptResult> onComplete
+    )
+    {
+        HttpAttemptResult result = new();
+        float startedAt = Time.realtimeSinceStartup;
+
+        using UnityWebRequest request = requestFactory();
         yield return request.SendWebRequest();
+
+        result.durationSeconds = Time.realtimeSinceStartup - startedAt;
+        result.responseCode = request.responseCode;
 
         if (request.result != UnityWebRequest.Result.Success)
         {
-            onError?.Invoke($"http_error:{request.responseCode}:{request.error}");
+            result.success = false;
+            result.error = BuildRequestError(request);
+            onComplete?.Invoke(result);
             yield break;
         }
 
-        onSuccess?.Invoke(request.downloadHandler.text);
+        result.success = true;
+        result.text = request.downloadHandler?.text ?? string.Empty;
+        onComplete?.Invoke(result);
+    }
+
+    private static RequestPolicy BuildRequestPolicy(int retryCount)
+    {
+        return new RequestPolicy(
+            maxRetries: Mathf.Max(0, retryCount),
+            retryBudgetSeconds: OnlineLeaderboardSettings.GetRetryBudgetSeconds(),
+            retryBackoffSeconds: OnlineLeaderboardSettings.GetRetryBackoffSeconds()
+        );
+    }
+
+    private static string BuildRequestError(UnityWebRequest request)
+    {
+        string rawError = string.IsNullOrWhiteSpace(request.error)
+            ? request.result.ToString()
+            : request.error;
+        return $"http_error:{request.responseCode}:{rawError}";
     }
 
     private static string BuildCanonicalPayload(

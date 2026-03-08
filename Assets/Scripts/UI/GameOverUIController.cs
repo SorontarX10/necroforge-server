@@ -99,6 +99,7 @@ public class GameOverUIController : MonoBehaviour
             yield break;
         }
 
+        string submitStatus = string.Empty;
         if (hasPendingSubmit)
         {
             OnlineLeaderboardApiClient.SubmitRunResult submitResult = null;
@@ -106,39 +107,52 @@ public class GameOverUIController : MonoBehaviour
             if (submitResult != null && submitResult.success)
             {
                 hasPendingSubmit = false;
+                submitStatus = DescribeSubmitStatus(submitResult);
             }
             else
             {
                 string submitError = submitResult?.error ?? "unknown_error";
                 Debug.LogWarning($"[Leaderboard] Online submit failed: {submitError}");
-                SetStatus("Online submit failed. Local score saved.");
+                submitStatus = "Online submit failed. Local score saved.";
             }
         }
 
-        bool usedOnline = false;
-        string fetchError = string.Empty;
         OnlineLeaderboardApiClient.FetchTopResult fetchResult = null;
         yield return OnlineLeaderboardApiClient.FetchTopEntries(
             leaderboardEntries != null ? leaderboardEntries.Length : 10,
             result => { fetchResult = result; }
         );
 
-        if (fetchResult != null && fetchResult.success && fetchResult.entries.Count > 0)
+        if (fetchResult != null && fetchResult.success)
         {
             ApplyOnlineEntries(fetchResult.entries);
-            usedOnline = true;
-            SetStatus(hasPendingSubmit ? "Online synced, but submit is still pending." : "Online leaderboard synced.");
-            SetRetryVisible(hasPendingSubmit);
+            if (fetchResult.isStale)
+            {
+                SetStatus(ComposeStatus(
+                    submitStatus,
+                    $"Online unavailable ({SanitizeError(fetchResult.error)}). Showing last synced leaderboard."
+                ));
+                SetRetryVisible(true);
+            }
+            else
+            {
+                string syncStatus = hasPendingSubmit
+                    ? "Online synced, but submit is still pending."
+                    : fetchResult.entries.Count > 0
+                        ? "Online leaderboard synced."
+                        : "Online leaderboard synced. No online scores yet.";
+                SetStatus(ComposeStatus(submitStatus, syncStatus));
+                SetRetryVisible(hasPendingSubmit);
+            }
         }
         else
         {
-            fetchError = fetchResult?.error ?? "unknown_error";
-        }
-
-        if (!usedOnline)
-        {
+            string fetchError = fetchResult?.error ?? "unknown_error";
             ApplyLocalEntries();
-            SetStatus($"Online unavailable ({SanitizeError(fetchError)}). Showing local leaderboard.");
+            SetStatus(ComposeStatus(
+                submitStatus,
+                $"Online unavailable ({SanitizeError(fetchError)}). Showing local leaderboard."
+            ));
             SetMyRank("Your rank: offline");
             SetRetryVisible(true);
             yield break;
@@ -149,9 +163,13 @@ public class GameOverUIController : MonoBehaviour
         if (myRank != null && myRank.success)
         {
             if (myRank.found && myRank.entry != null)
-                SetMyRank($"Your rank: #{myRank.entry.rank}");
+                SetMyRank(
+                    myRank.isStale
+                        ? $"Your rank: #{myRank.entry.rank} (cached)"
+                        : $"Your rank: #{myRank.entry.rank}"
+                );
             else
-                SetMyRank("Your rank: no online run yet");
+                SetMyRank(myRank.isStale ? "Your rank: unavailable" : "Your rank: no online run yet");
         }
         else
         {
@@ -309,5 +327,36 @@ public class GameOverUIController : MonoBehaviour
         const int maxLength = 96;
         string trimmed = raw.Trim();
         return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
+    }
+
+    private static string ComposeStatus(string prefix, string suffix)
+    {
+        bool hasPrefix = !string.IsNullOrWhiteSpace(prefix);
+        bool hasSuffix = !string.IsNullOrWhiteSpace(suffix);
+        if (hasPrefix && hasSuffix)
+            return $"{prefix} {suffix}";
+        if (hasPrefix)
+            return prefix;
+        return hasSuffix ? suffix : string.Empty;
+    }
+
+    private static string DescribeSubmitStatus(OnlineLeaderboardApiClient.SubmitRunResult submitResult)
+    {
+        if (submitResult == null || !submitResult.success)
+            return string.Empty;
+
+        switch (submitResult.validationState)
+        {
+            case "accepted":
+                return string.Empty;
+            case "manual_review":
+                return "Run submitted for review.";
+            case "shadow_banned":
+                return "Run submitted but hidden from the public leaderboard.";
+            case "rejected":
+                return "Run rejected by leaderboard validation. Local score saved.";
+            default:
+                return $"Run submitted with state: {SanitizeError(submitResult.validationState)}.";
+        }
     }
 }

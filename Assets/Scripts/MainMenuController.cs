@@ -126,23 +126,31 @@ public class MainMenuController : MonoBehaviour
         }
 
         bool usedOnline = false;
-        string fetchError = string.Empty;
         OnlineLeaderboardApiClient.FetchTopResult fetchResult = null;
         yield return OnlineLeaderboardApiClient.FetchTopEntries(
             leaderboardEntries.Length,
             result => { fetchResult = result; }
         );
 
-        if (fetchResult != null && fetchResult.success && fetchResult.entries.Count > 0)
+        if (fetchResult != null && fetchResult.success)
         {
             ApplyOnlineEntries(fetchResult.entries);
             usedOnline = true;
-            SetStatus("Online leaderboard synced.");
-            SetRetryVisible(false);
-        }
-        else
-        {
-            fetchError = fetchResult?.error ?? "unknown_error";
+
+            if (fetchResult.isStale)
+            {
+                SetStatus($"Online unavailable ({SanitizeError(fetchResult.error)}). Showing last synced leaderboard.");
+                SetRetryVisible(true);
+            }
+            else
+            {
+                SetStatus(
+                    fetchResult.entries.Count > 0
+                        ? "Online leaderboard synced."
+                        : "Online leaderboard synced. No online scores yet."
+                );
+                SetRetryVisible(false);
+            }
         }
 
         if (usedOnline)
@@ -152,9 +160,13 @@ public class MainMenuController : MonoBehaviour
             if (myRank != null && myRank.success)
             {
                 if (myRank.found && myRank.entry != null)
-                    SetMyRank($"Your rank: #{myRank.entry.rank}");
+                    SetMyRank(
+                        myRank.isStale
+                            ? $"Your rank: #{myRank.entry.rank} (cached)"
+                            : $"Your rank: #{myRank.entry.rank}"
+                    );
                 else
-                    SetMyRank("Your rank: no online run yet");
+                    SetMyRank(myRank.isStale ? "Your rank: unavailable" : "Your rank: no online run yet");
             }
             else
             {
@@ -164,6 +176,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         ApplyLocalEntries();
+        string fetchError = fetchResult?.error ?? "unknown_error";
         SetStatus($"Online unavailable ({SanitizeError(fetchError)}). Showing local leaderboard.");
         SetMyRank("Your rank: offline");
         SetRetryVisible(true);
