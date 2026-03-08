@@ -5,6 +5,7 @@ using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Networking;
 
 public class MainMenuController : MonoBehaviour
 {
@@ -25,6 +26,7 @@ public class MainMenuController : MonoBehaviour
     public TMP_Text leaderboardStatusText;
     public TMP_Text leaderboardMyRankText;
     public Button leaderboardRetryButton;
+    public Button leaderboardOverlayButton;
     private Coroutine leaderboardRefreshRoutine;
 
     public float clickDelay = 0.3f;
@@ -45,6 +47,8 @@ public class MainMenuController : MonoBehaviour
     {
         if (leaderboardRetryButton != null)
             leaderboardRetryButton.onClick.RemoveListener(OnLeaderboardRetryClicked);
+        if (leaderboardOverlayButton != null)
+            leaderboardOverlayButton.onClick.RemoveListener(OnLeaderboardOverlayClicked);
     }
 
     // ======================
@@ -98,6 +102,17 @@ public class MainMenuController : MonoBehaviour
     public void OnLeaderboardRetryClicked()
     {
         RefreshLeaderboard();
+    }
+
+    public void OnLeaderboardOverlayClicked()
+    {
+        string baseUrl = OnlineLeaderboardSettings.GetBaseUrl().TrimEnd('/');
+        string season = UnityWebRequest.EscapeURL(OnlineLeaderboardSettings.GetSeason());
+        string url = $"{baseUrl}/leaderboard?season={season}&page=1&page_size=20";
+
+        bool openedInPlatformOverlay = PlatformServices.OpenLeaderboardOverlay(url);
+        if (!openedInPlatformOverlay)
+            Application.OpenURL(url);
     }
 
     void RefreshLeaderboard()
@@ -218,6 +233,12 @@ public class MainMenuController : MonoBehaviour
             leaderboardRetryButton.onClick.RemoveListener(OnLeaderboardRetryClicked);
             leaderboardRetryButton.onClick.AddListener(OnLeaderboardRetryClicked);
             leaderboardRetryButton.gameObject.SetActive(false);
+        }
+
+        if (leaderboardOverlayButton != null)
+        {
+            leaderboardOverlayButton.onClick.RemoveListener(OnLeaderboardOverlayClicked);
+            leaderboardOverlayButton.onClick.AddListener(OnLeaderboardOverlayClicked);
         }
 
         SetStatus(string.Empty);

@@ -452,13 +452,13 @@ Zakonczone 2026-03-07:
 
 ### F-08 Integracja Steam (bootstrap) (P1)
 
-- [ ] T-100 Dodac abstrakcje `IPlatformServices` do projektu.
-- [ ] T-101 Zaimplementowac `NullPlatformServices` (fallback bez Steam).
-- [ ] T-102 Dodac implementacje Steam (`SteamPlatformServices`) z init/shutdown.
-- [ ] T-103 Dodac bezpieczny fallback, gdy Steam init nie powiedzie sie.
-- [ ] T-104 Podlaczyc `GetPlayerId` i `GetPlayerName` do leaderboard submit.
-- [ ] T-105 Dodac `OpenOverlayToLeaderboard` i podpiac przycisk w UI.
-- [ ] T-106 Dodac smoke test uruchomienia z aktywnym i nieaktywnym klientem Steam.
+- [x] T-100 Dodac abstrakcje `IPlatformServices` do projektu.
+- [x] T-101 Zaimplementowac `NullPlatformServices` (fallback bez Steam).
+- [x] T-102 Dodac implementacje Steam (`SteamPlatformServices`) z init/shutdown.
+- [x] T-103 Dodac bezpieczny fallback, gdy Steam init nie powiedzie sie.
+- [x] T-104 Podlaczyc `GetPlayerId` i `GetPlayerName` do leaderboard submit.
+- [x] T-105 Dodac `OpenOverlayToLeaderboard` i podpiac przycisk w UI.
+- [x] T-106 Dodac smoke test uruchomienia z aktywnym i nieaktywnym klientem Steam.
 
 ### F-09 CI/CD + Release checklist (P1)
 

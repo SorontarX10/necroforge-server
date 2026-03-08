@@ -8,6 +8,10 @@ public static class PlayerIdentityService
 
     public static string GetPlayerId()
     {
+        string platformPlayerId = PlatformServices.GetPlayerId();
+        if (!string.IsNullOrWhiteSpace(platformPlayerId))
+            return platformPlayerId;
+
         string current = PlayerPrefs.GetString(PlayerIdKey, string.Empty);
         if (!string.IsNullOrWhiteSpace(current))
             return current;
@@ -20,9 +24,13 @@ public static class PlayerIdentityService
 
     public static string GetDisplayName()
     {
+        string platformName = PlatformServices.GetPlayerName();
+        if (!string.IsNullOrWhiteSpace(platformName))
+            return NormalizeDisplayName(platformName);
+
         string current = PlayerPrefs.GetString(DisplayNameKey, string.Empty);
         if (!string.IsNullOrWhiteSpace(current))
-            return current;
+            return NormalizeDisplayName(current);
 
         string playerId = GetPlayerId();
         string suffix = playerId.Length >= 4 ? playerId.Substring(playerId.Length - 4) : playerId;
@@ -37,11 +45,25 @@ public static class PlayerIdentityService
         if (string.IsNullOrWhiteSpace(value))
             return;
 
+        string platformPlayerId = PlatformServices.GetPlayerId();
+        if (!string.IsNullOrWhiteSpace(platformPlayerId))
+            return;
+
+        string normalized = NormalizeDisplayName(value);
+
+        PlayerPrefs.SetString(DisplayNameKey, normalized);
+        PlayerPrefs.Save();
+    }
+
+    private static string NormalizeDisplayName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Player";
+
         string normalized = value.Trim();
         if (normalized.Length > 48)
             normalized = normalized.Substring(0, 48);
 
-        PlayerPrefs.SetString(DisplayNameKey, normalized);
-        PlayerPrefs.Save();
+        return string.IsNullOrWhiteSpace(normalized) ? "Player" : normalized;
     }
 }
