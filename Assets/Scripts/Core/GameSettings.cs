@@ -210,9 +210,25 @@ public static class GameSettings
             ? FullScreenMode.FullScreenWindow
             : FullScreenMode.Windowed;
 
-        int width = Mathf.Max(640, ResolutionWidth);
-        int height = Mathf.Max(360, ResolutionHeight);
-        int refreshHz = Mathf.Max(30, ResolutionRefreshHz);
+        int width;
+        int height;
+        int refreshHz;
+
+        if (mode == FullScreenMode.FullScreenWindow)
+        {
+            Resolution desktop = Screen.currentResolution;
+            width = Mathf.Max(640, desktop.width > 0 ? desktop.width : ResolutionWidth);
+            height = Mathf.Max(360, desktop.height > 0 ? desktop.height : ResolutionHeight);
+            refreshHz = Mathf.Max(30, ResolveRefreshRateHz(desktop));
+        }
+        else
+        {
+            width = Mathf.Max(640, ResolutionWidth);
+            height = Mathf.Max(360, ResolutionHeight);
+            refreshHz = Mathf.Max(30, ResolutionRefreshHz);
+        }
+
+        Screen.fullScreenMode = mode;
 
 #if UNITY_2022_2_OR_NEWER
         RefreshRate refreshRate = new RefreshRate
@@ -224,8 +240,8 @@ public static class GameSettings
 #else
         Screen.SetResolution(width, height, mode, refreshHz);
 #endif
-        Screen.fullScreenMode = mode;
-        Screen.fullScreen = mode != FullScreenMode.Windowed;
+        if (mode == FullScreenMode.Windowed && Screen.fullScreen)
+            Screen.fullScreen = false;
     }
 
     private static void ApplyFrameTiming()

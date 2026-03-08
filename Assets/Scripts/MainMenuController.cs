@@ -47,6 +47,9 @@ public class MainMenuController : MonoBehaviour
     public Button authLoginMicrosoftButton;
     public Button authLoginFacebookButton;
     public Button authLogoutButton;
+    [SerializeField] private bool createAuthPanelAtRuntime = false;
+
+    private GameObject runtimeAuthPanel;
 
     public float clickDelay = 0.3f;
 
@@ -400,15 +403,36 @@ public class MainMenuController : MonoBehaviour
 
     private void SetupAuthUiBindings()
     {
-        EnsureRuntimeAuthControls();
+        ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
+
+        bool authConfigured = ExternalAuthSettings.IsEnabled
+            && !string.IsNullOrWhiteSpace(ExternalAuthSettings.BrokerBaseUrl);
+        if (!authConfigured)
+        {
+            SetAuthUiVisible(false);
+            return;
+        }
+
+        if (createAuthPanelAtRuntime)
+            EnsureRuntimeAuthControls();
+
+        if (authStatusText == null
+            && authLoginGoogleButton == null
+            && authLoginMicrosoftButton == null
+            && authLoginFacebookButton == null
+            && authLogoutButton == null)
+        {
+            SetAuthUiVisible(false);
+            return;
+        }
 
         BindAuthButton(authLoginGoogleButton, OnAuthGoogleClicked);
         BindAuthButton(authLoginMicrosoftButton, OnAuthMicrosoftClicked);
         BindAuthButton(authLoginFacebookButton, OnAuthFacebookClicked);
         BindAuthButton(authLogoutButton, OnAuthLogoutClicked);
 
+        SetAuthUiVisible(true);
         ExternalAuthService.Initialize();
-        ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
         ExternalAuthService.StateChanged += RefreshAuthStatusLabel;
         RefreshAuthStatusLabel();
     }
@@ -430,6 +454,23 @@ public class MainMenuController : MonoBehaviour
         bool hasSession = ExternalAuthService.IsSignedIn;
         if (authLogoutButton != null)
             authLogoutButton.interactable = hasSession;
+    }
+
+    private void SetAuthUiVisible(bool visible)
+    {
+        if (runtimeAuthPanel != null)
+            runtimeAuthPanel.SetActive(visible);
+
+        if (authStatusText != null)
+            authStatusText.gameObject.SetActive(visible);
+        if (authLoginGoogleButton != null)
+            authLoginGoogleButton.gameObject.SetActive(visible);
+        if (authLoginMicrosoftButton != null)
+            authLoginMicrosoftButton.gameObject.SetActive(visible);
+        if (authLoginFacebookButton != null)
+            authLoginFacebookButton.gameObject.SetActive(visible);
+        if (authLogoutButton != null)
+            authLogoutButton.gameObject.SetActive(visible);
     }
 
     // ======================
@@ -558,6 +599,7 @@ public class MainMenuController : MonoBehaviour
             typeof(VerticalLayoutGroup),
             typeof(ContentSizeFitter)
         );
+        runtimeAuthPanel = panelGo;
         RectTransform panelRt = panelGo.GetComponent<RectTransform>();
         panelRt.SetParent(parentCanvas.transform, false);
         panelRt.anchorMin = new Vector2(0f, 0f);

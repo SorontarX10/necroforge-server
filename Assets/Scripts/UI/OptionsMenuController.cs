@@ -18,6 +18,7 @@ public class OptionsMenuController : MonoBehaviour
     public Toggle godModeToggle;
 
     private bool isInitializing;
+    private bool bindingsConfigured;
     private readonly List<ResolutionOption> resolutionOptions = new();
     private int[] fpsCapOptions = { 30, 60, 120, -1 };
 
@@ -37,8 +38,14 @@ public class OptionsMenuController : MonoBehaviour
         public string Label => $"{width}x{height} ({refreshHz} Hz)";
     }
 
+    private void Awake()
+    {
+        ConfigureBindings();
+    }
+
     void OnEnable()
     {
+        ConfigureBindings();
         isInitializing = true;
 
         if (masterVolume != null)
@@ -60,6 +67,11 @@ public class OptionsMenuController : MonoBehaviour
         ConfigureGodModeToggleForProfile();
 
         isInitializing = false;
+    }
+
+    private void OnDisable()
+    {
+        RemoveBindings();
     }
 
     public void OnMasterVolume(float v)
@@ -386,5 +398,67 @@ public class OptionsMenuController : MonoBehaviour
 #else
         return resolution.refreshRate;
 #endif
+    }
+
+    private void ConfigureBindings()
+    {
+        if (bindingsConfigured)
+            RemoveBindings();
+
+        if (masterVolume != null)
+            masterVolume.onValueChanged.AddListener(OnMasterVolume);
+        if (musicVolume != null)
+            musicVolume.onValueChanged.AddListener(OnMusicVolume);
+        if (sfxVolume != null)
+            sfxVolume.onValueChanged.AddListener(OnSfxVolume);
+        if (mouseSensitivity != null)
+            mouseSensitivity.onValueChanged.AddListener(OnMouseSensitivity);
+        if (fullscreenToggle != null)
+            fullscreenToggle.onValueChanged.AddListener(OnFullscreen);
+        if (windowModeDropdown != null)
+            windowModeDropdown.onValueChanged.AddListener(OnWindowModeChanged);
+        if (resolutionDropdown != null)
+            resolutionDropdown.onValueChanged.AddListener(OnResolutionChanged);
+        if (vSyncToggle != null)
+            vSyncToggle.onValueChanged.AddListener(OnVSyncChanged);
+        if (fpsCapDropdown != null)
+            fpsCapDropdown.onValueChanged.AddListener(OnFpsCapChanged);
+        if (qualityPresetDropdown != null)
+            qualityPresetDropdown.onValueChanged.AddListener(OnQualityPresetChanged);
+        if (godModeToggle != null)
+            godModeToggle.onValueChanged.AddListener(OnGodMode);
+
+        bindingsConfigured = true;
+    }
+
+    private void RemoveBindings()
+    {
+        if (!bindingsConfigured)
+            return;
+
+        if (masterVolume != null)
+            masterVolume.onValueChanged.RemoveListener(OnMasterVolume);
+        if (musicVolume != null)
+            musicVolume.onValueChanged.RemoveListener(OnMusicVolume);
+        if (sfxVolume != null)
+            sfxVolume.onValueChanged.RemoveListener(OnSfxVolume);
+        if (mouseSensitivity != null)
+            mouseSensitivity.onValueChanged.RemoveListener(OnMouseSensitivity);
+        if (fullscreenToggle != null)
+            fullscreenToggle.onValueChanged.RemoveListener(OnFullscreen);
+        if (windowModeDropdown != null)
+            windowModeDropdown.onValueChanged.RemoveListener(OnWindowModeChanged);
+        if (resolutionDropdown != null)
+            resolutionDropdown.onValueChanged.RemoveListener(OnResolutionChanged);
+        if (vSyncToggle != null)
+            vSyncToggle.onValueChanged.RemoveListener(OnVSyncChanged);
+        if (fpsCapDropdown != null)
+            fpsCapDropdown.onValueChanged.RemoveListener(OnFpsCapChanged);
+        if (qualityPresetDropdown != null)
+            qualityPresetDropdown.onValueChanged.RemoveListener(OnQualityPresetChanged);
+        if (godModeToggle != null)
+            godModeToggle.onValueChanged.RemoveListener(OnGodMode);
+
+        bindingsConfigured = false;
     }
 }
