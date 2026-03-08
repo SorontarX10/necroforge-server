@@ -304,7 +304,7 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
         {
             utc_timestamp = DateTime.UtcNow.ToString("O"),
             version = Application.version,
-            scene = SceneManager.GetActiveScene().name,
+            scene = ResolveSceneNameForDiagnostics(),
             trigger_reason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason,
             warmup_seconds = Mathf.Max(0f, warmupSeconds),
             capture_seconds = Time.unscaledTime - captureStartAt,
@@ -339,6 +339,19 @@ public sealed class RuntimePerformanceSummary : MonoBehaviour
                 $"log: {persistentLogPath}"
             );
         }
+    }
+
+    public static string ResolveSceneNameForDiagnostics()
+    {
+        Scene gameScene = SceneManager.GetSceneByName("Game");
+        if (gameScene.IsValid() && gameScene.isLoaded)
+            return "Game";
+
+        Scene active = SceneManager.GetActiveScene();
+        if (active.IsValid() && !string.IsNullOrWhiteSpace(active.name))
+            return active.name;
+
+        return "unknown";
     }
 
     private void PersistRecord(PerformanceSummaryRecord record)

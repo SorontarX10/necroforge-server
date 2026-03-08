@@ -433,10 +433,10 @@ Zakonczone 2026-03-07:
 
 - [x] T-080 Ustawic `Game` jako scene aktywna po `LoadSceneAsync(..., Additive)`.
 - [x] T-081 Dodac unload `Loading` po zakonczeniu fade i gotowosci `Game`.
-- [ ] T-082 Zweryfikowac, ze singletony `DontDestroyOnLoad` nie duplikuja sie po restarcie runu.
-- [ ] T-083 Dodac test flow: MainMenu -> Loading -> Game -> MainMenu -> ponownie Game.
-- [ ] T-084 Dodac test 10 restartow runu bez leakow i bez utraty input/audio.
-- [ ] T-085 Potwierdzic, ze runtime summary raportuje scene `Game` podczas rozgrywki.
+- [x] T-082 Zweryfikowac, ze singletony `DontDestroyOnLoad` nie duplikuja sie po restarcie runu.
+- [x] T-083 Dodac test flow: MainMenu -> Loading -> Game -> MainMenu -> ponownie Game.
+- [x] T-084 Dodac test 10 restartow runu bez leakow i bez utraty input/audio.
+- [x] T-085 Potwierdzic, ze runtime summary raportuje scene `Game` podczas rozgrywki.
 
 ### F-07 Ustawienia PC minimum release (P1)
 
@@ -505,3 +505,50 @@ Zakonczone 2026-03-07:
 - [x] T-143 Dodac "graceful degradation": brak leaderboardu nie psuje core loop run-based.
 - [x] T-144 Przeprowadzic finalny dry-run release z checklisty i zarchiwizowac wynik w Docs.
 - [ ] T-145 Naprawic compile blocker batch builda (DOTween + brak referencji UI/Audio/Physics/Physics2D), potem powtorzyc dry-run az do PASS.
+
+### Finalny test reczny po wdrozeniu calego backlogu (owner-run)
+
+- [ ] T-199 Wykonac reczny test akceptacyjny end-to-end po wdrozeniu 100% backlogu i zatwierdzic wydanie.
+
+Procedura T-199 (krok po kroku):
+1. Zaktualizuj kod i uslugi na VPS:
+   - `cd ~/necroforge && git pull`
+   - `cd Infra/leaderboard`
+   - `docker compose up -d --build`
+2. Potwierdz zdrowie infra:
+   - `docker compose ps` (db/api/duckdns: Up/Healthy)
+   - `docker compose logs --tail=200 api` (brak restart loop i brak 5xx spamu)
+   - `docker compose logs --tail=200 db` (brak auth fail)
+3. Potwierdz konfiguracje produkcyjna:
+   - w `Infra/leaderboard/.env`: poprawne `LEADERBOARD_DB_*`, `LEADERBOARD_ADMIN_API_KEY`, `LEADERBOARD_VERSION_LOCK`
+   - poprawny DNS i cert (DuckDNS + reverse proxy/TLS)
+4. Uruchom testy API z Windows (PowerShell) przeciw produkcyjnemu URL:
+   - `.\Tools\leaderboard\integration_api_test.ps1 -BaseUrl "https://<twoj-host>"`
+   - `.\Tools\leaderboard\security_smoke_test.ps1 -BaseUrl "https://<twoj-host>"`
+   - `.\Tools\leaderboard\smoke_test.ps1 -BaseUrl "https://<twoj-host>"`
+5. Zweryfikuj recznie gameplay core loop:
+   - MainMenu -> Loading -> Game -> GameOver -> Restart x10
+   - brak utraty input/audio, brak zwiech, brak duplikacji singletonow
+6. Zweryfikuj recznie leaderboard online:
+   - zakoncz run bez cheatow, submit = `accepted`, wynik widoczny w top/me
+   - zakoncz run podejrzany (np. skrajne tempo), submit = `manual_review` lub `rejected`
+   - przy chwilowym braku sieci: gra dziala dalej, fallback UI i retry bez crasha
+7. Zweryfikuj recznie panel admin review:
+   - `.\Tools\leaderboard\admin_review.ps1 -Mode list -BaseUrl "https://<twoj-host>" -AdminToken "<token>"`
+   - zrob `review` dla 1 flagowanego runa (`accept` albo `reject`) i sprawdz efekt w rankingu
+8. Zweryfikuj recznie external auth (Google/Microsoft/Facebook):
+   - login, logout, ponowny login po restarcie gry
+   - po zalogowaniu submit idzie ze stabilnym `player_id/account_id`
+   - wygaszona sesja wymusza ponowne logowanie bez crasha
+9. Zweryfikuj recznie ustawienia PC:
+   - matrix: rozdzielczosc x window mode x quality x vsync x fps cap
+   - ustawienia utrzymuja sie po restarcie gry
+10. Zweryfikuj recznie integracje Steam:
+   - uruchomienie ze Steam i bez Steam (fallback)
+   - `GetPlayerId/GetPlayerName` i overlay leaderboard dzialaja
+11. Zweryfikuj legal/docs i linki w menu:
+   - Privacy, EULA, Third Party Licenses otwieraja sie poprawnie
+12. Zamkniecie testu i decyzja release:
+   - PASS: wszystkie kroki 1-11 zaliczone, brak blockerow
+   - FAIL: otworz bugi krytyczne + hotfix, powtorz T-199 od kroku 1
+   - wynik testu zapisz w `Docs/RELEASE_CHECKLIST_STEAM_DEMO.md` (data, commit SHA, kto testowal, PASS/FAIL)
