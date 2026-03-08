@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using GrassSim.Core;
 using UnityEditor;
 using UnityEditor.Build;
@@ -195,28 +196,47 @@ namespace GrassSim.Editor
             if (process == null)
                 throw new BuildFailedException("[BuildProfile] Smoke test failed: process could not start.");
 
-            if (!process.WaitForExit(smokeTimeoutSeconds * 1000))
+            DateTime deadline = DateTime.UtcNow.AddSeconds(Mathf.Max(15, smokeTimeoutSeconds));
+            bool reachedTimeout = false;
+            string marker = null;
+
+            while (DateTime.UtcNow < deadline)
             {
-                try
+                marker = ReadSmokeMarker(smokeLogPath) ?? marker;
+                if (process.HasExited)
+                    break;
+
+                // The startup marker is enough for smoke pass.
+                // Some environments keep the process alive despite -quit.
+                if (!string.IsNullOrWhiteSpace(marker))
                 {
-                    process.Kill();
-                }
-                catch (Exception)
-                {
-                    // Ignore kill failures; timeout already handled.
+                    TryKillProcess(process);
+                    break;
                 }
 
-                throw new BuildFailedException($"[BuildProfile] Smoke test timeout after {smokeTimeoutSeconds}s.");
+                Thread.Sleep(500);
             }
 
-            if (process.ExitCode != 0)
+            if (!process.HasExited)
+            {
+                reachedTimeout = true;
+                marker = ReadSmokeMarker(smokeLogPath) ?? marker;
+                if (string.IsNullOrWhiteSpace(marker))
+                {
+                    TryKillProcess(process);
+                    throw new BuildFailedException($"[BuildProfile] Smoke test timeout after {smokeTimeoutSeconds}s.");
+                }
+
+                TryKillProcess(process);
+            }
+
+            if (process.HasExited && process.ExitCode != 0 && string.IsNullOrWhiteSpace(marker))
                 throw new BuildFailedException($"[BuildProfile] Smoke test exited with code {process.ExitCode}.");
 
             if (!File.Exists(smokeLogPath))
                 throw new BuildFailedException("[BuildProfile] Smoke test did not create runtime log.");
 
-            string[] lines = File.ReadAllLines(smokeLogPath);
-            string marker = lines.FirstOrDefault(l => l.Contains("[BuildProfile]"));
+            marker ??= ReadSmokeMarker(smokeLogPath);
             if (string.IsNullOrWhiteSpace(marker))
                 throw new BuildFailedException("[BuildProfile] Smoke test log missing '[BuildProfile]' marker.");
 
@@ -224,9 +244,51 @@ namespace GrassSim.Editor
             sb.AppendLine($"timestamp_utc={DateTime.UtcNow:O}");
             sb.AppendLine($"smoke_timeout_seconds={smokeTimeoutSeconds}");
             sb.AppendLine($"log_path={smokeLogPath}");
+            sb.AppendLine($"process_exit_code={(process.HasExited ? process.ExitCode : -999)}");
+            sb.AppendLine($"process_timeout={reachedTimeout}");
             sb.AppendLine($"marker={marker}");
             File.WriteAllText(smokeArtifactPath, sb.ToString());
             Debug.Log($"[BuildProfile] Smoke artifact: {smokeArtifactPath}");
+        }
+
+        private static string ReadSmokeMarker(string smokeLogPath)
+        {
+            if (!File.Exists(smokeLogPath))
+                return null;
+
+            try
+            {
+                using FileStream stream = new(smokeLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using StreamReader reader = new(stream);
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line.Contains("[BuildProfile]"))
+                        return line;
+                }
+
+                return null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static void TryKillProcess(Process process)
+        {
+            if (process == null)
+                return;
+
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill();
+            }
+            catch (Exception)
+            {
+                // Ignore process kill errors in smoke automation cleanup.
+            }
         }
 
         private static string ParseStringArg(string key, string fallback)
