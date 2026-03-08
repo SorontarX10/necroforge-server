@@ -473,11 +473,11 @@ Zakonczone 2026-03-07:
 
 ### F-10 Legal + docs release (P1)
 
-- [ ] T-120 Przygotowac `Docs/PRIVACY.md` (stan faktyczny: telemetry dev-only).
-- [ ] T-121 Przygotowac `Docs/EULA.md`.
-- [ ] T-122 Przygotowac `Docs/THIRD_PARTY_LICENSES.md`.
-- [ ] T-123 Dodac linki Privacy/EULA w menu glownym.
-- [ ] T-124 Dodac fallback otwierania lokalnego pliku lub URL w zaleznosci od platformy.
+- [x] T-120 Przygotowac `Docs/PRIVACY.md` (stan faktyczny: telemetry dev-only).
+- [x] T-121 Przygotowac `Docs/EULA.md`.
+- [x] T-122 Przygotowac `Docs/THIRD_PARTY_LICENSES.md`.
+- [x] T-123 Dodac linki Privacy/EULA w menu glownym.
+- [x] T-124 Dodac fallback otwierania lokalnego pliku lub URL w zaleznosci od platformy.
 - [ ] T-125 Zweryfikowac widocznosc i dzialanie linkow w buildzie demo.
 
 ### F-11 Domkniecie TODO gameplay/UI (P2)

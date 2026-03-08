@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
+using System;
+using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Rendering.Universal;
@@ -29,6 +31,15 @@ public class MainMenuController : MonoBehaviour
     public Button leaderboardOverlayButton;
     private Coroutine leaderboardRefreshRoutine;
 
+    [Header("Legal Links")]
+    public Button privacyButton;
+    public Button eulaButton;
+    public Button thirdPartyLicensesButton;
+    [SerializeField] private string legalLocalFolder = "legal";
+    [SerializeField] private string privacyFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/PRIVACY.md";
+    [SerializeField] private string eulaFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/EULA.md";
+    [SerializeField] private string thirdPartyFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/THIRD_PARTY_LICENSES.md";
+
     public float clickDelay = 0.3f;
 
     void Awake()
@@ -41,6 +52,7 @@ public class MainMenuController : MonoBehaviour
         ResetMainMenuCameraStack();
         ApplyVersionLabel();
         SetupLeaderboardUiBindings();
+        SetupLegalLinkBindings();
     }
 
     private void OnDestroy()
@@ -49,6 +61,12 @@ public class MainMenuController : MonoBehaviour
             leaderboardRetryButton.onClick.RemoveListener(OnLeaderboardRetryClicked);
         if (leaderboardOverlayButton != null)
             leaderboardOverlayButton.onClick.RemoveListener(OnLeaderboardOverlayClicked);
+        if (privacyButton != null)
+            privacyButton.onClick.RemoveListener(OnPrivacyClicked);
+        if (eulaButton != null)
+            eulaButton.onClick.RemoveListener(OnEulaClicked);
+        if (thirdPartyLicensesButton != null)
+            thirdPartyLicensesButton.onClick.RemoveListener(OnThirdPartyLicensesClicked);
     }
 
     // ======================
@@ -273,6 +291,71 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ======================
+    // LEGAL
+    // ======================
+
+    public void OnPrivacyClicked()
+    {
+        OpenLegalDocument("PRIVACY.md", privacyFallbackUrl);
+    }
+
+    public void OnEulaClicked()
+    {
+        OpenLegalDocument("EULA.md", eulaFallbackUrl);
+    }
+
+    public void OnThirdPartyLicensesClicked()
+    {
+        OpenLegalDocument("THIRD_PARTY_LICENSES.md", thirdPartyFallbackUrl);
+    }
+
+    private void SetupLegalLinkBindings()
+    {
+        EnsureRuntimeLegalButtons();
+        BindLegalButton(privacyButton, OnPrivacyClicked);
+        BindLegalButton(eulaButton, OnEulaClicked);
+        BindLegalButton(thirdPartyLicensesButton, OnThirdPartyLicensesClicked);
+    }
+
+    private static void BindLegalButton(Button button, UnityEngine.Events.UnityAction handler)
+    {
+        if (button == null || handler == null)
+            return;
+
+        button.onClick.RemoveListener(handler);
+        button.onClick.AddListener(handler);
+    }
+
+    private void OpenLegalDocument(string fileName, string fallbackUrl)
+    {
+        if (TryOpenLocalLegalDocument(fileName))
+            return;
+
+        if (!string.IsNullOrWhiteSpace(fallbackUrl))
+        {
+            Application.OpenURL(fallbackUrl.Trim());
+            return;
+        }
+
+        Debug.LogWarning($"[Legal] Missing local document and fallback URL for {fileName}.");
+    }
+
+    private bool TryOpenLocalLegalDocument(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return false;
+
+        string folder = string.IsNullOrWhiteSpace(legalLocalFolder) ? "legal" : legalLocalFolder.Trim();
+        string localPath = Path.Combine(Application.streamingAssetsPath, folder, fileName);
+        if (!File.Exists(localPath))
+            return false;
+
+        string uri = new Uri(localPath).AbsoluteUri;
+        Application.OpenURL(uri);
+        return true;
+    }
+
+    // ======================
     // EXIT
     // ======================
 
@@ -370,5 +453,102 @@ public class MainMenuController : MonoBehaviour
             label.font = TMP_Settings.defaultFontAsset;
 
         return label;
+    }
+
+    private void EnsureRuntimeLegalButtons()
+    {
+        if (privacyButton != null && eulaButton != null && thirdPartyLicensesButton != null)
+            return;
+
+        Canvas parentCanvas = null;
+        if (mainMenuRoot != null)
+            parentCanvas = mainMenuRoot.GetComponentInParent<Canvas>();
+        if (parentCanvas == null)
+            parentCanvas = FindFirstObjectByType<Canvas>();
+        if (parentCanvas == null)
+            return;
+
+        GameObject panelGo = new GameObject(
+            "LegalLinksPanel",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(HorizontalLayoutGroup)
+        );
+        RectTransform panelRt = panelGo.GetComponent<RectTransform>();
+        panelRt.SetParent(parentCanvas.transform, false);
+        panelRt.anchorMin = new Vector2(0f, 0f);
+        panelRt.anchorMax = new Vector2(0f, 0f);
+        panelRt.pivot = new Vector2(0f, 0f);
+        panelRt.anchoredPosition = new Vector2(16f, 12f);
+        panelRt.sizeDelta = new Vector2(560f, 40f);
+
+        HorizontalLayoutGroup layout = panelGo.GetComponent<HorizontalLayoutGroup>();
+        layout.spacing = 8f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+
+        if (privacyButton == null)
+            privacyButton = CreateLegalButton(panelGo.transform, "Privacy", "Privacy");
+        if (eulaButton == null)
+            eulaButton = CreateLegalButton(panelGo.transform, "EULA", "EULA");
+        if (thirdPartyLicensesButton == null)
+            thirdPartyLicensesButton = CreateLegalButton(panelGo.transform, "ThirdPartyLicenses", "Licenses");
+    }
+
+    private static Button CreateLegalButton(Transform parent, string objectName, string label)
+    {
+        GameObject buttonGo = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image),
+            typeof(Button),
+            typeof(LayoutElement)
+        );
+        buttonGo.transform.SetParent(parent, false);
+
+        LayoutElement layout = buttonGo.GetComponent<LayoutElement>();
+        layout.preferredWidth = 150f;
+        layout.preferredHeight = 34f;
+
+        Image image = buttonGo.GetComponent<Image>();
+        image.color = new Color(0.08f, 0.1f, 0.14f, 0.82f);
+
+        Button button = buttonGo.GetComponent<Button>();
+        ColorBlock colors = button.colors;
+        colors.normalColor = image.color;
+        colors.highlightedColor = new Color(0.13f, 0.17f, 0.24f, 0.95f);
+        colors.pressedColor = new Color(0.06f, 0.08f, 0.12f, 1f);
+        colors.selectedColor = colors.highlightedColor;
+        button.colors = colors;
+
+        GameObject textGo = new GameObject(
+            "Label",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI)
+        );
+        textGo.transform.SetParent(buttonGo.transform, false);
+
+        RectTransform textRt = textGo.GetComponent<RectTransform>();
+        textRt.anchorMin = Vector2.zero;
+        textRt.anchorMax = Vector2.one;
+        textRt.offsetMin = Vector2.zero;
+        textRt.offsetMax = Vector2.zero;
+
+        TMP_Text text = textGo.GetComponent<TextMeshProUGUI>();
+        text.text = label;
+        text.fontSize = 16f;
+        text.color = new Color(0.88f, 0.9f, 0.93f, 0.96f);
+        text.alignment = TextAlignmentOptions.Center;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Truncate;
+
+        if (TMP_Settings.defaultFontAsset != null)
+            text.font = TMP_Settings.defaultFontAsset;
+
+        return button;
     }
 }
