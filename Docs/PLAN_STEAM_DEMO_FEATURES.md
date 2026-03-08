@@ -431,8 +431,8 @@ Zakonczone 2026-03-07:
 
 ### F-06 Naprawa lifecycle scen (Loading/Game) (P1)
 
-- [ ] T-080 Ustawic `Game` jako scene aktywna po `LoadSceneAsync(..., Additive)`.
-- [ ] T-081 Dodac unload `Loading` po zakonczeniu fade i gotowosci `Game`.
+- [x] T-080 Ustawic `Game` jako scene aktywna po `LoadSceneAsync(..., Additive)`.
+- [x] T-081 Dodac unload `Loading` po zakonczeniu fade i gotowosci `Game`.
 - [ ] T-082 Zweryfikowac, ze singletony `DontDestroyOnLoad` nie duplikuja sie po restarcie runu.
 - [ ] T-083 Dodac test flow: MainMenu -> Loading -> Game -> MainMenu -> ponownie Game.
 - [ ] T-084 Dodac test 10 restartow runu bez leakow i bez utraty input/audio.

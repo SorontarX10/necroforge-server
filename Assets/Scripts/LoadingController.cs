@@ -57,6 +57,7 @@ public class LoadingController : MonoBehaviour
 
         op.allowSceneActivation = true;
         yield return new WaitUntil(() => ChunkedProceduralLevelGenerator.WorldReady);
+        EnsureGameSceneIsActive();
 
         if (progressFill != null)
             progressFill.fillAmount = 1f;
@@ -65,5 +66,26 @@ public class LoadingController : MonoBehaviour
 
         loadingCanvas.gameObject.SetActive(false);
         loadingCamera.gameObject.SetActive(false);
+        yield return UnloadLoadingSceneIfNeeded();
+    }
+
+    private void EnsureGameSceneIsActive()
+    {
+        Scene gameScene = SceneManager.GetSceneByName("Game");
+        if (!gameScene.IsValid() || !gameScene.isLoaded)
+            return;
+
+        SceneManager.SetActiveScene(gameScene);
+    }
+
+    private IEnumerator UnloadLoadingSceneIfNeeded()
+    {
+        Scene loadingScene = gameObject.scene;
+        if (!loadingScene.IsValid() || !loadingScene.isLoaded)
+            yield break;
+
+        AsyncOperation unload = SceneManager.UnloadSceneAsync(loadingScene);
+        if (unload != null)
+            yield return unload;
     }
 }
