@@ -482,11 +482,11 @@ Zakonczone 2026-03-07:
 
 ### F-11 Domkniecie TODO gameplay/UI (P2)
 
-- [ ] T-130 Dokonczyc implementacje `HealthBarBinder` (realne powiazanie z UI fill/slider).
-- [ ] T-131 Dokonczyc implementacje `StaminaBarBinder` (realne powiazanie z UI fill/slider).
-- [ ] T-132 Dodac brakujace VFX/SFX w `EnhancerPickup`.
-- [ ] T-133 Dodac test/regresje dla pickupow enhancerow po zmianie.
-- [ ] T-134 Usunac lub zamknac TODO komentarze powiazane z tymi elementami.
+- [x] T-130 Dokonczyc implementacje `HealthBarBinder` (realne powiazanie z UI fill/slider).
+- [x] T-131 Dokonczyc implementacje `StaminaBarBinder` (realne powiazanie z UI fill/slider).
+- [x] T-132 Dodac brakujace VFX/SFX w `EnhancerPickup`.
+- [x] T-133 Dodac test/regresje dla pickupow enhancerow po zmianie.
+- [x] T-134 Usunac lub zamknac TODO komentarze powiazane z tymi elementami.
 
 ### F-12 Konta graczy przez external auth (P1)
 
