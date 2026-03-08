@@ -504,7 +504,8 @@ Zakonczone 2026-03-07:
 - [x] T-142 Dodac timeout policy i retry budget, zeby uniknac freeze UI przy slabym laczu.
 - [x] T-143 Dodac "graceful degradation": brak leaderboardu nie psuje core loop run-based.
 - [x] T-144 Przeprowadzic finalny dry-run release z checklisty i zarchiwizowac wynik w Docs.
-- [ ] T-145 Naprawic compile blocker batch builda (DOTween + brak referencji UI/Audio/Physics/Physics2D), potem powtorzyc dry-run az do PASS.
+- [ ] T-145 Naprawic compile blocker batch builda (DOTween + brak referencji UI/Audio/Physics/Physics2D), potem powtorzyc dry-run az do PASS.  
+      Status 2026-03-08: blokada lokalna na Unity licensing/headless (`Registered 0 packages`, `com.unity.editor.headless not found`) - patrz `Docs/RELEASE_DRY_RUN_2026-03-08_RERUN.md`.
 
 ### Finalny test reczny po wdrozeniu calego backlogu (owner-run)
 
