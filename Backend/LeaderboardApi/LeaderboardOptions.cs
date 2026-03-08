@@ -101,11 +101,11 @@ public sealed record LeaderboardOptions(
         string defaultValue
     )
     {
-        string? value = configuration[configKey];
+        string? value = Environment.GetEnvironmentVariable(envKey);
         if (!string.IsNullOrWhiteSpace(value))
             return value;
 
-        value = Environment.GetEnvironmentVariable(envKey);
+        value = configuration[configKey];
         if (!string.IsNullOrWhiteSpace(value))
             return value;
 
@@ -127,21 +127,21 @@ public sealed record LeaderboardOptions(
             Host = GetString(configuration, "Leaderboard:DbHost", "LEADERBOARD_DB_HOST", "localhost"),
             Port = GetInt(configuration, "Leaderboard:DbPort", "LEADERBOARD_DB_PORT", 5432, 1, 65535),
             Database = GetFirstNonEmpty(
-                configuration["Leaderboard:DbName"],
                 Environment.GetEnvironmentVariable("LEADERBOARD_DB_NAME"),
                 Environment.GetEnvironmentVariable("POSTGRES_DB"),
+                configuration["Leaderboard:DbName"],
                 "leaderboard"
             ),
             Username = GetFirstNonEmpty(
-                configuration["Leaderboard:DbUser"],
                 Environment.GetEnvironmentVariable("LEADERBOARD_DB_USER"),
                 Environment.GetEnvironmentVariable("POSTGRES_USER"),
+                configuration["Leaderboard:DbUser"],
                 "leaderboard"
             ),
             Password = GetFirstNonEmpty(
-                configuration["Leaderboard:DbPassword"],
                 Environment.GetEnvironmentVariable("LEADERBOARD_DB_PASSWORD"),
                 Environment.GetEnvironmentVariable("POSTGRES_PASSWORD"),
+                configuration["Leaderboard:DbPassword"],
                 "leaderboard"
             )
         };
@@ -155,11 +155,11 @@ public sealed record LeaderboardOptions(
         string envKey
     )
     {
-        string? value = configuration[configKey];
+        string? value = Environment.GetEnvironmentVariable(envKey);
         if (!string.IsNullOrWhiteSpace(value))
             return value;
 
-        value = Environment.GetEnvironmentVariable(envKey);
+        value = configuration[configKey];
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
