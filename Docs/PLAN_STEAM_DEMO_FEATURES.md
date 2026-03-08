@@ -440,14 +440,14 @@ Zakonczone 2026-03-07:
 
 ### F-07 Ustawienia PC minimum release (P1)
 
-- [ ] T-090 Dodac dropdown rozdzielczosci oparty o `Screen.resolutions`.
-- [ ] T-091 Dodac wybor `Windowed / Borderless Fullscreen`.
-- [ ] T-092 Dodac toggle VSync.
-- [ ] T-093 Dodac FPS cap (30/60/120/uncapped).
-- [ ] T-094 Dodac quality preset selector (Low/Medium/High).
-- [ ] T-095 Dodac trwale zapisywanie i ladowanie nowych opcji.
-- [ ] T-096 Ustawic sensowne defaulty dla pierwszego startu.
-- [ ] T-097 Ustawic `resizableWindow = true` dla targetu PC.
+- [x] T-090 Dodac dropdown rozdzielczosci oparty o `Screen.resolutions`.
+- [x] T-091 Dodac wybor `Windowed / Borderless Fullscreen`.
+- [x] T-092 Dodac toggle VSync.
+- [x] T-093 Dodac FPS cap (30/60/120/uncapped).
+- [x] T-094 Dodac quality preset selector (Low/Medium/High).
+- [x] T-095 Dodac trwale zapisywanie i ladowanie nowych opcji.
+- [x] T-096 Ustawic sensowne defaulty dla pierwszego startu.
+- [x] T-097 Ustawic `resizableWindow = true` dla targetu PC.
 - [ ] T-098 Dodac test manualny matrix (rozdzielczosc x window mode x quality).
 
 ### F-08 Integracja Steam (bootstrap) (P1)

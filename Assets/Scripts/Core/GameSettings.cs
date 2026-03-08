@@ -1,55 +1,79 @@
-using GrassSim.Core;
+using System;
 using UnityEngine;
 
 public static class GameSettings
 {
+    public enum DisplayWindowMode
+    {
+        Windowed = 0,
+        BorderlessFullscreen = 1
+    }
+
     private const string PrefMasterVolume = "opt_master";
     private const string PrefMusicVolume = "opt_music";
     private const string PrefSfxVolume = "opt_sfx";
     private const string PrefMouseSensitivity = "opt_mouse";
     private const string PrefGodMode = "opt_godmode";
-    private const string PrefFullscreen = "opt_fullscreen";
+    private const string PrefFullscreenLegacy = "opt_fullscreen";
+    private const string PrefWindowMode = "opt_window_mode";
+    private const string PrefResolutionWidth = "opt_resolution_width";
+    private const string PrefResolutionHeight = "opt_resolution_height";
+    private const string PrefResolutionRefreshHz = "opt_resolution_refresh_hz";
+    private const string PrefVSyncEnabled = "opt_vsync";
+    private const string PrefFpsCap = "opt_fps_cap";
+    private const string PrefQualityPreset = "opt_quality_preset";
+
+    private const int DefaultFpsCap = 120;
+    private const int UncappedFps = -1;
+
+    private static readonly int[] SupportedFpsCaps = { 30, 60, 120, UncappedFps };
+    private static bool warnedAboutGodModeSanitization;
 
     // AUDIO
     public static float MasterVolume { get; private set; } = 1f;
-    public static float MusicVolume  { get; private set; } = 0.8f;
-    public static float SfxVolume    { get; private set; } = 0.8f;
-
-    public static event System.Action OnMouseSensitivityChanged;
+    public static float MusicVolume { get; private set; } = 0.8f;
+    public static float SfxVolume { get; private set; } = 0.8f;
 
     // GAMEPLAY
     public static float MouseSensitivity { get; private set; } = 1f;
-    public static bool GodMode { get; private set; } = false;
+    public static bool GodMode { get; private set; }
 
     // GRAPHICS
-    public static bool Fullscreen { get; private set; } = true;
-    private static bool warnedAboutGodModeSanitization;
+    public static DisplayWindowMode WindowMode { get; private set; } = DisplayWindowMode.BorderlessFullscreen;
+    public static bool Fullscreen => WindowMode == DisplayWindowMode.BorderlessFullscreen;
+    public static int ResolutionWidth { get; private set; } = 1920;
+    public static int ResolutionHeight { get; private set; } = 1080;
+    public static int ResolutionRefreshHz { get; private set; } = 60;
+    public static bool VSyncEnabled { get; private set; } = true;
+    public static int FpsCap { get; private set; } = DefaultFpsCap;
+    public static int QualityPresetIndex { get; private set; }
+
+    public static event Action OnMouseSensitivityChanged;
 
     // ===== AUDIO =====
-    public static void SetMasterVolume(float v)
+    public static void SetMasterVolume(float value)
     {
-        MasterVolume = Mathf.Clamp01(v);
-        Debug.Log("Master Volume: " + v);
+        MasterVolume = Mathf.Clamp01(value);
         AudioListener.volume = MasterVolume;
         Save();
     }
 
-    public static void SetMusicVolume(float v)
+    public static void SetMusicVolume(float value)
     {
-        MusicVolume = Mathf.Clamp01(v);
+        MusicVolume = Mathf.Clamp01(value);
         Save();
     }
 
-    public static void SetSfxVolume(float v)
+    public static void SetSfxVolume(float value)
     {
-        SfxVolume = Mathf.Clamp01(v);
+        SfxVolume = Mathf.Clamp01(value);
         Save();
     }
 
     // ===== GAMEPLAY =====
-    public static void SetMouseSensitivity(float v)
+    public static void SetMouseSensitivity(float value)
     {
-        MouseSensitivity = Mathf.Clamp(v, 0.1f, 5f);
+        MouseSensitivity = Mathf.Clamp(value, 0.1f, 5f);
         Save();
         OnMouseSensitivityChanged?.Invoke();
     }
@@ -73,26 +97,80 @@ public static class GameSettings
     // ===== GRAPHICS =====
     public static void SetFullscreen(bool value)
     {
-        Fullscreen = value;
-        ApplyFullscreenMode();
+        SetWindowMode(value ? DisplayWindowMode.BorderlessFullscreen : DisplayWindowMode.Windowed);
+    }
+
+    public static void SetWindowMode(DisplayWindowMode mode)
+    {
+        WindowMode = mode;
+        ApplyGraphicsSettings();
         Save();
+    }
+
+    public static void SetResolution(int width, int height, int refreshHz = 0)
+    {
+        ResolutionWidth = Mathf.Max(640, width);
+        ResolutionHeight = Mathf.Max(360, height);
+        ResolutionRefreshHz = Mathf.Max(30, refreshHz > 0 ? refreshHz : ResolutionRefreshHz);
+        ApplyGraphicsSettings();
+        Save();
+    }
+
+    public static void SetVSyncEnabled(bool value)
+    {
+        VSyncEnabled = value;
+        ApplyGraphicsSettings();
+        Save();
+    }
+
+    public static void SetFpsCap(int value)
+    {
+        FpsCap = NormalizeFpsCap(value);
+        ApplyGraphicsSettings();
+        Save();
+    }
+
+    public static void SetQualityPresetIndex(int index)
+    {
+        QualityPresetIndex = NormalizeQualityPresetIndex(index);
+        ApplyGraphicsSettings();
+        Save();
+    }
+
+    public static int[] GetSupportedFpsCaps()
+    {
+        int[] copy = new int[SupportedFpsCaps.Length];
+        Array.Copy(SupportedFpsCaps, copy, SupportedFpsCaps.Length);
+        return copy;
     }
 
     // ===== SAVE / LOAD =====
     public static void Load()
     {
         MasterVolume = PlayerPrefs.GetFloat(PrefMasterVolume, 1f);
-        MusicVolume  = PlayerPrefs.GetFloat(PrefMusicVolume, 0.8f);
-        SfxVolume    = PlayerPrefs.GetFloat(PrefSfxVolume, 0.8f);
+        MusicVolume = PlayerPrefs.GetFloat(PrefMusicVolume, 0.8f);
+        SfxVolume = PlayerPrefs.GetFloat(PrefSfxVolume, 0.8f);
         MouseSensitivity = PlayerPrefs.GetFloat(PrefMouseSensitivity, 1f);
         GodMode = PlayerPrefs.GetInt(PrefGodMode, 0) == 1;
-        Fullscreen = PlayerPrefs.GetInt(PrefFullscreen, 1) == 1;
         SanitizeGodModeIfNeeded("Load");
+
+        WindowMode = LoadWindowMode();
+
+        Vector3Int defaultResolution = ResolveDefaultResolution();
+        ResolutionWidth = Mathf.Max(640, PlayerPrefs.GetInt(PrefResolutionWidth, defaultResolution.x));
+        ResolutionHeight = Mathf.Max(360, PlayerPrefs.GetInt(PrefResolutionHeight, defaultResolution.y));
+        ResolutionRefreshHz = Mathf.Max(30, PlayerPrefs.GetInt(PrefResolutionRefreshHz, defaultResolution.z));
+
+        VSyncEnabled = PlayerPrefs.GetInt(PrefVSyncEnabled, 1) == 1;
+        FpsCap = NormalizeFpsCap(PlayerPrefs.GetInt(PrefFpsCap, DefaultFpsCap));
+        QualityPresetIndex = NormalizeQualityPresetIndex(
+            PlayerPrefs.GetInt(PrefQualityPreset, ResolveDefaultQualityPreset())
+        );
 
         Apply();
     }
 
-    static void Save()
+    private static void Save()
     {
         SanitizeGodModeIfNeeded("Save");
 
@@ -101,26 +179,131 @@ public static class GameSettings
         PlayerPrefs.SetFloat(PrefSfxVolume, SfxVolume);
         PlayerPrefs.SetFloat(PrefMouseSensitivity, MouseSensitivity);
         PlayerPrefs.SetInt(PrefGodMode, GodMode ? 1 : 0);
-        PlayerPrefs.SetInt(PrefFullscreen, Fullscreen ? 1 : 0);
+        PlayerPrefs.SetInt(PrefFullscreenLegacy, Fullscreen ? 1 : 0);
+        PlayerPrefs.SetInt(PrefWindowMode, (int)WindowMode);
+        PlayerPrefs.SetInt(PrefResolutionWidth, ResolutionWidth);
+        PlayerPrefs.SetInt(PrefResolutionHeight, ResolutionHeight);
+        PlayerPrefs.SetInt(PrefResolutionRefreshHz, ResolutionRefreshHz);
+        PlayerPrefs.SetInt(PrefVSyncEnabled, VSyncEnabled ? 1 : 0);
+        PlayerPrefs.SetInt(PrefFpsCap, FpsCap);
+        PlayerPrefs.SetInt(PrefQualityPreset, QualityPresetIndex);
         PlayerPrefs.Save();
     }
 
-    static void Apply()
+    private static void Apply()
     {
-        ApplyFullscreenMode();
+        AudioListener.volume = Mathf.Clamp01(MasterVolume);
+        ApplyGraphicsSettings();
     }
 
-    static void ApplyFullscreenMode()
+    private static void ApplyGraphicsSettings()
     {
-        if (Fullscreen)
+        ApplyWindowModeAndResolution();
+        ApplyQualityPreset();
+        ApplyFrameTiming();
+
+#if UNITY_STANDALONE || UNITY_EDITOR
+        Screen.resizableWindow = true;
+#endif
+    }
+
+    private static void ApplyWindowModeAndResolution()
+    {
+        FullScreenMode mode = WindowMode == DisplayWindowMode.BorderlessFullscreen
+            ? FullScreenMode.FullScreenWindow
+            : FullScreenMode.Windowed;
+
+        int width = Mathf.Max(640, ResolutionWidth);
+        int height = Mathf.Max(360, ResolutionHeight);
+        int refreshHz = Mathf.Max(30, ResolutionRefreshHz);
+
+        Screen.SetResolution(width, height, mode, refreshHz);
+        Screen.fullScreenMode = mode;
+        Screen.fullScreen = mode != FullScreenMode.Windowed;
+    }
+
+    private static void ApplyFrameTiming()
+    {
+        QualitySettings.vSyncCount = VSyncEnabled ? 1 : 0;
+        if (VSyncEnabled)
         {
-            Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
-            Screen.fullScreen = true;
+            Application.targetFrameRate = -1;
             return;
         }
 
-        Screen.fullScreen = false;
-        Screen.fullScreenMode = FullScreenMode.Windowed;
+        Application.targetFrameRate = FpsCap > 0 ? FpsCap : -1;
+    }
+
+    private static void ApplyQualityPreset()
+    {
+        if (QualitySettings.names == null || QualitySettings.names.Length == 0)
+            return;
+
+        int clamped = NormalizeQualityPresetIndex(QualityPresetIndex);
+        QualityPresetIndex = clamped;
+
+        if (QualitySettings.GetQualityLevel() != clamped)
+            QualitySettings.SetQualityLevel(clamped, true);
+    }
+
+    private static DisplayWindowMode LoadWindowMode()
+    {
+        if (PlayerPrefs.HasKey(PrefWindowMode))
+        {
+            int storedMode = PlayerPrefs.GetInt(PrefWindowMode, (int)DisplayWindowMode.BorderlessFullscreen);
+            return storedMode == (int)DisplayWindowMode.Windowed
+                ? DisplayWindowMode.Windowed
+                : DisplayWindowMode.BorderlessFullscreen;
+        }
+
+        bool fullscreenLegacy = PlayerPrefs.GetInt(PrefFullscreenLegacy, 1) == 1;
+        return fullscreenLegacy ? DisplayWindowMode.BorderlessFullscreen : DisplayWindowMode.Windowed;
+    }
+
+    private static Vector3Int ResolveDefaultResolution()
+    {
+        Resolution current = Screen.currentResolution;
+        int width = Mathf.Max(640, current.width > 0 ? current.width : 1920);
+        int height = Mathf.Max(360, current.height > 0 ? current.height : 1080);
+        int refreshHz = Mathf.Max(30, ResolveRefreshRateHz(current));
+        return new Vector3Int(width, height, refreshHz);
+    }
+
+    private static int ResolveRefreshRateHz(Resolution resolution)
+    {
+#if UNITY_2022_2_OR_NEWER
+        return Mathf.RoundToInt((float)resolution.refreshRateRatio.value);
+#else
+        return resolution.refreshRate;
+#endif
+    }
+
+    private static int NormalizeFpsCap(int value)
+    {
+        for (int i = 0; i < SupportedFpsCaps.Length; i++)
+        {
+            if (SupportedFpsCaps[i] == value)
+                return value;
+        }
+
+        return DefaultFpsCap;
+    }
+
+    private static int ResolveDefaultQualityPreset()
+    {
+        if (QualitySettings.names == null || QualitySettings.names.Length == 0)
+            return 0;
+
+        int current = QualitySettings.GetQualityLevel();
+        return Mathf.Clamp(current, 0, QualitySettings.names.Length - 1);
+    }
+
+    private static int NormalizeQualityPresetIndex(int index)
+    {
+        if (QualitySettings.names == null || QualitySettings.names.Length == 0)
+            return 0;
+
+        return Mathf.Clamp(index, 0, QualitySettings.names.Length - 1);
     }
 
     private static void SanitizeGodModeIfNeeded(string source)
