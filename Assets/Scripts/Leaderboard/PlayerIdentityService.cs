@@ -1,4 +1,5 @@
 using System;
+using GrassSim.Auth;
 using UnityEngine;
 
 public static class PlayerIdentityService
@@ -8,6 +9,12 @@ public static class PlayerIdentityService
 
     public static string GetPlayerId()
     {
+        if (ExternalAuthSessionStore.TryGetActiveSession(out ExternalAuthSession sessionFromAuth)
+            && !string.IsNullOrWhiteSpace(sessionFromAuth.account_id))
+        {
+            return sessionFromAuth.account_id;
+        }
+
         string platformPlayerId = PlatformServices.GetPlayerId();
         if (!string.IsNullOrWhiteSpace(platformPlayerId))
             return platformPlayerId;
@@ -24,6 +31,12 @@ public static class PlayerIdentityService
 
     public static string GetDisplayName()
     {
+        if (ExternalAuthSessionStore.TryGetActiveSession(out ExternalAuthSession sessionFromAuth)
+            && !string.IsNullOrWhiteSpace(sessionFromAuth.display_name))
+        {
+            return NormalizeDisplayName(sessionFromAuth.display_name);
+        }
+
         string platformName = PlatformServices.GetPlayerName();
         if (!string.IsNullOrWhiteSpace(platformName))
             return NormalizeDisplayName(platformName);
@@ -43,6 +56,9 @@ public static class PlayerIdentityService
     public static void SetDisplayName(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        if (ExternalAuthSessionStore.TryGetActiveSession(out _))
             return;
 
         string platformPlayerId = PlatformServices.GetPlayerId();

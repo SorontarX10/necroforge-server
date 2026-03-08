@@ -5,6 +5,12 @@ namespace LeaderboardApi;
 
 public static class LeaderboardDb
 {
+    private sealed record ExternalAccountIdentity(
+        string AccountId,
+        string Provider,
+        string ProviderUserId
+    );
+
     private sealed record RunRow(
         Guid RunId,
         string PlayerId,
@@ -23,8 +29,21 @@ public static class LeaderboardDb
             CREATE TABLE IF NOT EXISTS players (
                 player_id TEXT PRIMARY KEY,
                 display_name TEXT NOT NULL,
+                account_id TEXT NULL,
+                auth_provider TEXT NULL,
+                provider_user_id TEXT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS user_accounts (
+                account_id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                provider_user_id TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (provider, provider_user_id)
             );
 
             CREATE TABLE IF NOT EXISTS runs (
@@ -76,6 +95,9 @@ public static class LeaderboardDb
             ALTER TABLE runs ADD COLUMN IF NOT EXISTS event_chain TEXT NULL;
             ALTER TABLE runs ADD COLUMN IF NOT EXISTS event_chain_hash TEXT NULL;
             ALTER TABLE runs ADD COLUMN IF NOT EXISTS event_chain_count INTEGER NULL;
+            ALTER TABLE players ADD COLUMN IF NOT EXISTS account_id TEXT NULL;
+            ALTER TABLE players ADD COLUMN IF NOT EXISTS auth_provider TEXT NULL;
+            ALTER TABLE players ADD COLUMN IF NOT EXISTS provider_user_id TEXT NULL;
 
             CREATE INDEX IF NOT EXISTS idx_runs_player_created
                 ON runs (player_id, created_at DESC);
@@ -91,6 +113,12 @@ public static class LeaderboardDb
 
             CREATE INDEX IF NOT EXISTS idx_moderation_flags_run_id
                 ON moderation_flags (run_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_players_account_id
+                ON players (account_id);
+
+            CREATE INDEX IF NOT EXISTS idx_user_accounts_provider_user
+                ON user_accounts (provider, provider_user_id);
             """,
             conn
         );
@@ -116,6 +144,11 @@ public static class LeaderboardDb
 
         string displayName = NormalizeDisplayName(request.DisplayName, playerId);
         string buildVersion = NormalizeBuildVersion(request.BuildVersion);
+        ExternalAccountIdentity? externalAccount = NormalizeExternalAccountIdentity(
+            request.AccountId,
+            request.AccountProvider,
+            request.AccountProviderUserId
+        );
         Guid runId = Guid.NewGuid();
         string nonce = LeaderboardSecurity.CreateRandomToken();
         string sessionKey = LeaderboardSecurity.CreateRandomToken();
@@ -141,7 +174,10 @@ public static class LeaderboardDb
                 );
             }
 
-            await UpsertPlayerAsync(conn, tx, playerId, displayName);
+            if (externalAccount != null)
+                await UpsertUserAccountAsync(conn, tx, externalAccount, displayName);
+
+            await UpsertPlayerAsync(conn, tx, playerId, displayName, externalAccount);
 
             await using NpgsqlCommand insertRun = new(
                 """
@@ -216,6 +252,11 @@ public static class LeaderboardDb
 
         string displayName = NormalizeDisplayName(request.DisplayName, playerId);
         string buildVersion = NormalizeBuildVersion(request.BuildVersion);
+        ExternalAccountIdentity? externalAccount = NormalizeExternalAccountIdentity(
+            request.AccountId,
+            request.AccountProvider,
+            request.AccountProviderUserId
+        );
         int score = Math.Max(0, request.Score);
         int kills = Math.Max(0, request.Kills);
         float runDurationSec = MathF.Max(0f, request.RunDurationSec);
@@ -336,7 +377,10 @@ public static class LeaderboardDb
 
             string validationReason = flags.Count > 0 ? string.Join(",", flags) : "ok";
 
-            await UpsertPlayerAsync(conn, tx, playerId, displayName);
+            if (externalAccount != null)
+                await UpsertUserAccountAsync(conn, tx, externalAccount, displayName);
+
+            await UpsertPlayerAsync(conn, tx, playerId, displayName, externalAccount);
             await UpdateRunSubmissionAsync(
                 conn,
                 tx,
@@ -830,20 +874,59 @@ public static class LeaderboardDb
         }
     }
 
-    private static async Task UpsertPlayerAsync(NpgsqlConnection conn, NpgsqlTransaction tx, string playerId, string displayName)
+    private static async Task UpsertPlayerAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        string playerId,
+        string displayName,
+        ExternalAccountIdentity? externalAccount
+    )
     {
         await using NpgsqlCommand cmd = new(
             """
-            INSERT INTO players (player_id, display_name)
-            VALUES (@player_id, @display_name)
+            INSERT INTO players (player_id, display_name, account_id, auth_provider, provider_user_id)
+            VALUES (@player_id, @display_name, @account_id, @auth_provider, @provider_user_id)
             ON CONFLICT (player_id) DO UPDATE
             SET display_name = EXCLUDED.display_name,
+                account_id = COALESCE(EXCLUDED.account_id, players.account_id),
+                auth_provider = COALESCE(EXCLUDED.auth_provider, players.auth_provider),
+                provider_user_id = COALESCE(EXCLUDED.provider_user_id, players.provider_user_id),
                 updated_at = NOW();
             """,
             conn,
             tx
         );
         cmd.Parameters.AddWithValue("player_id", playerId);
+        cmd.Parameters.AddWithValue("display_name", displayName);
+        cmd.Parameters.AddWithValue("account_id", (object?)externalAccount?.AccountId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("auth_provider", (object?)externalAccount?.Provider ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("provider_user_id", (object?)externalAccount?.ProviderUserId ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task UpsertUserAccountAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        ExternalAccountIdentity identity,
+        string displayName
+    )
+    {
+        await using NpgsqlCommand cmd = new(
+            """
+            INSERT INTO user_accounts (account_id, provider, provider_user_id, display_name)
+            VALUES (@account_id, @provider, @provider_user_id, @display_name)
+            ON CONFLICT (account_id) DO UPDATE
+            SET provider = EXCLUDED.provider,
+                provider_user_id = EXCLUDED.provider_user_id,
+                display_name = EXCLUDED.display_name,
+                last_seen_at = NOW();
+            """,
+            conn,
+            tx
+        );
+        cmd.Parameters.AddWithValue("account_id", identity.AccountId);
+        cmd.Parameters.AddWithValue("provider", identity.Provider);
+        cmd.Parameters.AddWithValue("provider_user_id", identity.ProviderUserId);
         cmd.Parameters.AddWithValue("display_name", displayName);
         await cmd.ExecuteNonQueryAsync();
     }
@@ -1193,6 +1276,54 @@ public static class LeaderboardDb
             return string.Empty;
         string trimmed = raw.Trim();
         return trimmed.Length <= 128 ? trimmed : trimmed[..128];
+    }
+
+    private static ExternalAccountIdentity? NormalizeExternalAccountIdentity(
+        string? rawAccountId,
+        string? rawProvider,
+        string? rawProviderUserId
+    )
+    {
+        string provider = NormalizeExternalProvider(rawProvider);
+        string providerUserId = NormalizeExternalProviderUserId(rawProviderUserId);
+
+        if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(providerUserId))
+            return null;
+
+        string accountId = NormalizeExternalAccountId(rawAccountId, provider, providerUserId);
+        if (string.IsNullOrWhiteSpace(accountId))
+            return null;
+
+        return new ExternalAccountIdentity(accountId, provider, providerUserId);
+    }
+
+    private static string NormalizeExternalProvider(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        string trimmed = raw.Trim().ToLowerInvariant();
+        return trimmed.Length <= 32 ? trimmed : trimmed[..32];
+    }
+
+    private static string NormalizeExternalProviderUserId(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        string trimmed = raw.Trim();
+        return trimmed.Length <= 128 ? trimmed : trimmed[..128];
+    }
+
+    private static string NormalizeExternalAccountId(string? raw, string provider, string providerUserId)
+    {
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+            string trimmed = raw.Trim();
+            return trimmed.Length <= 128 ? trimmed : trimmed[..128];
+        }
+
+        return $"{provider}:{providerUserId}";
     }
 
     private static string NormalizeDisplayName(string? raw, string playerId)

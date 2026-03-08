@@ -9,6 +9,16 @@
 - `GET /health`
 - `GET /metrics`
 
+## External Account Identity (optional fields)
+
+`POST /runs/start` and `POST /runs/submit` accept optional account identity fields:
+
+- `account_id`
+- `account_provider` (for example `google`, `microsoft`, `facebook`, `oidc`)
+- `account_provider_user_id`
+
+When provided, backend upserts `user_accounts` and links identity metadata to `players`.
+
 ## Local Run
 
 ```bash

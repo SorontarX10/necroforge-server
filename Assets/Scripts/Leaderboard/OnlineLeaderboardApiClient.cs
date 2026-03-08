@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using GrassSim.Auth;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -16,6 +17,9 @@ public static class OnlineLeaderboardApiClient
         public string display_name;
         public string season;
         public string build_version;
+        public string account_id;
+        public string account_provider;
+        public string account_provider_user_id;
     }
 
     [Serializable]
@@ -41,6 +45,9 @@ public static class OnlineLeaderboardApiClient
         public string event_chain_hash;
         public int event_count;
         public string signature;
+        public string account_id;
+        public string account_provider;
+        public string account_provider_user_id;
     }
 
     [Serializable]
@@ -275,13 +282,26 @@ public static class OnlineLeaderboardApiClient
         string buildVersion = OnlineLeaderboardSettings.GetBuildVersionForLeaderboard();
         bool isCheatSession = GameSettings.GodMode;
 
+        string accountId = string.Empty;
+        string accountProvider = string.Empty;
+        string accountProviderUserId = string.Empty;
+        if (ExternalAuthSessionStore.TryGetActiveSession(out ExternalAuthSession authSession))
+        {
+            accountId = authSession.account_id ?? string.Empty;
+            accountProvider = authSession.provider ?? string.Empty;
+            accountProviderUserId = authSession.provider_user_id ?? string.Empty;
+        }
+
         StartRunResponseDto startResponse = null;
         StartRunRequestDto startRequest = new()
         {
             player_id = playerId,
             display_name = displayName,
             season = OnlineLeaderboardSettings.GetSeason(),
-            build_version = buildVersion
+            build_version = buildVersion,
+            account_id = accountId,
+            account_provider = accountProvider,
+            account_provider_user_id = accountProviderUserId
         };
 
         yield return SendPostJson(
@@ -340,7 +360,10 @@ public static class OnlineLeaderboardApiClient
             event_chain = chainPayload.eventChain,
             event_chain_hash = chainPayload.eventChainHash,
             event_count = chainPayload.eventCount,
-            signature = signature
+            signature = signature,
+            account_id = accountId,
+            account_provider = accountProvider,
+            account_provider_user_id = accountProviderUserId
         };
 
         yield return SendPostJson(

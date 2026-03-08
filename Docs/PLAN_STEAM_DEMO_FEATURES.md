@@ -490,12 +490,12 @@ Zakonczone 2026-03-07:
 
 ### F-12 Konta graczy przez external auth (P1)
 
-- [ ] T-150 Zdefiniowac model `UserAccount/Profile` oparty o `provider` + `provider_user_id`, bez lokalnych kont.
+- [x] T-150 Zdefiniowac model `UserAccount/Profile` oparty o `provider` + `provider_user_id`, bez lokalnych kont.
 - [ ] T-151 Dodac klienta autoryzacji przez zewnetrznych dostawcow (Google/Microsoft/Facebook) lub warstwe pod OIDC/OAuth broker.
 - [ ] T-152 Dodac zapis i odswiezanie sesji external auth miedzy sesjami.
-- [ ] T-153 Podlaczyc `display_name` i stabilne `player_id/account_id` z konta providera do leaderboard submit.
+- [x] T-153 Podlaczyc `display_name` i stabilne `player_id/account_id` z konta providera do leaderboard submit.
 - [ ] T-154 Dodac ekran/flow login/logout oraz obsluge wygaslej sesji.
-- [ ] T-155 Przygotowac backendowy model `user/profile` i mapowanie provider identity pod przyszle rozszerzenia leaderboardu.
+- [x] T-155 Przygotowac backendowy model `user/profile` i mapowanie provider identity pod przyszle rozszerzenia leaderboardu.
 
 ### Cross-cutting release hardening
 

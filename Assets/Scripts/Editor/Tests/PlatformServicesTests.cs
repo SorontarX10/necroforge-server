@@ -1,3 +1,4 @@
+using GrassSim.Auth;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -60,6 +61,7 @@ namespace GrassSim.Editor.Tests
         {
             PlayerPrefs.DeleteKey("leaderboard_player_id");
             PlayerPrefs.DeleteKey("leaderboard_display_name");
+            ExternalAuthSessionStore.Clear();
             PlayerPrefs.Save();
             PlatformServices.ResetForTests();
         }
@@ -70,6 +72,7 @@ namespace GrassSim.Editor.Tests
             PlatformServices.ResetForTests();
             PlayerPrefs.DeleteKey("leaderboard_player_id");
             PlayerPrefs.DeleteKey("leaderboard_display_name");
+            ExternalAuthSessionStore.Clear();
             PlayerPrefs.Save();
         }
 

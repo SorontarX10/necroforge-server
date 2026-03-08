@@ -16,6 +16,15 @@ public sealed class StartRunRequest
 
     [JsonPropertyName("build_version")]
     public string? BuildVersion { get; init; }
+
+    [JsonPropertyName("account_id")]
+    public string? AccountId { get; init; }
+
+    [JsonPropertyName("account_provider")]
+    public string? AccountProvider { get; init; }
+
+    [JsonPropertyName("account_provider_user_id")]
+    public string? AccountProviderUserId { get; init; }
 }
 
 public sealed class SubmitRunRequest
@@ -55,6 +64,15 @@ public sealed class SubmitRunRequest
 
     [JsonPropertyName("signature")]
     public string? Signature { get; init; }
+
+    [JsonPropertyName("account_id")]
+    public string? AccountId { get; init; }
+
+    [JsonPropertyName("account_provider")]
+    public string? AccountProvider { get; init; }
+
+    [JsonPropertyName("account_provider_user_id")]
+    public string? AccountProviderUserId { get; init; }
 }
 
 public sealed class GetLeaderboardQuery
