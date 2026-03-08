@@ -462,14 +462,14 @@ Zakonczone 2026-03-07:
 
 ### F-09 CI/CD + Release checklist (P1)
 
-- [ ] T-110 Dodac workflow CI: build demo artefaktu.
-- [ ] T-111 Dodac workflow CI: smoke test uruchomieniowy scen.
-- [ ] T-112 Dodac workflow CI: gate "demo build cannot include devtools".
-- [ ] T-113 Dodac workflow CI: gate "telemetry mode must be OFF in demo".
-- [ ] T-114 Zintegrowac obecny perf gate jako krok wymagany przed release.
-- [ ] T-115 Dodac upload artefaktow build + logow testowych.
-- [ ] T-116 Przygotowac `Docs/RELEASE_CHECKLIST_STEAM_DEMO.md`.
-- [ ] T-117 Dodac sekcje rollback procedure i hotfix checklist do release checklist.
+- [x] T-110 Dodac workflow CI: build demo artefaktu.
+- [x] T-111 Dodac workflow CI: smoke test uruchomieniowy scen.
+- [x] T-112 Dodac workflow CI: gate "demo build cannot include devtools".
+- [x] T-113 Dodac workflow CI: gate "telemetry mode must be OFF in demo".
+- [x] T-114 Zintegrowac obecny perf gate jako krok wymagany przed release.
+- [x] T-115 Dodac upload artefaktow build + logow testowych.
+- [x] T-116 Przygotowac `Docs/RELEASE_CHECKLIST_STEAM_DEMO.md`.
+- [x] T-117 Dodac sekcje rollback procedure i hotfix checklist do release checklist.
 
 ### F-10 Legal + docs release (P1)
 

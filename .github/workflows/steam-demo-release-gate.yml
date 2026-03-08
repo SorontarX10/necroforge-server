@@ -1,0 +1,202 @@
+name: Steam Demo Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  release-gate-missing-config:
+    if: ${{ secrets.UNITY_EDITOR_PATH == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Missing UNITY_EDITOR_PATH configuration
+        run: |
+          echo "::notice::Skipping Steam Demo Release Gate because UNITY_EDITOR_PATH secret is not configured."
+          echo "::notice::Set UNITY_EDITOR_PATH to a full Unity.exe path on the runner to enable demo build and smoke validation."
+
+  build-demo-artifact:
+    if: ${{ secrets.UNITY_EDITOR_PATH != '' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build demo artifact with startup smoke
+        shell: pwsh
+        env:
+          UNITY_EDITOR_PATH: ${{ secrets.UNITY_EDITOR_PATH }}
+        run: |
+          if (-not $env:UNITY_EDITOR_PATH) {
+            Write-Error "Missing UNITY_EDITOR_PATH secret (expected full Unity.exe path)."
+            exit 2
+          }
+
+          New-Item -Path "results/demo" -ItemType Directory -Force | Out-Null
+          $outputPath = Join-Path $PWD "results/demo/Necroforge_Demo.exe"
+          $logPath = Join-Path $PWD "results/demo/unity-build-demo.log"
+
+          & "$env:UNITY_EDITOR_PATH" `
+            -batchmode `
+            -nographics `
+            -projectPath "$PWD" `
+            -quit `
+            -executeMethod GrassSim.Editor.BuildProfileBuildAutomation.BuildDemoWindows64 `
+            -buildOutput "$outputPath" `
+            -buildWithSmoke true `
+            -smokeTimeoutSeconds 120 `
+            -logFile "$logPath"
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Gate demo profile flags and smoke artifacts
+        shell: pwsh
+        run: |
+          $infoPath = "results/demo/build_profile_info.txt"
+          $smokeInfoPath = "results/demo/build_profile_smoke.txt"
+          $smokeRuntimeLog = "results/demo/smoke_runtime.log"
+          $exePath = "results/demo/Necroforge_Demo.exe"
+
+          foreach ($required in @($infoPath, $smokeInfoPath, $smokeRuntimeLog, $exePath)) {
+            if (-not (Test-Path $required)) {
+              Write-Error "Missing required artifact: $required"
+              exit 3
+            }
+          }
+
+          $raw = Get-Content -Path $infoPath -Raw
+          $norm = $raw.ToLowerInvariant()
+
+          if ($norm -notmatch "profile=demo") {
+            Write-Error "Gate failed: expected profile=Demo in build_profile_info.txt"
+            exit 4
+          }
+
+          if ($norm -notmatch "build_demo=true") {
+            Write-Error "Gate failed: expected BUILD_DEMO=true in symbol snapshot."
+            exit 5
+          }
+
+          if ($norm -match "build_devtools=true") {
+            Write-Error "Gate failed: BUILD_DEVTOOLS must be false in demo build."
+            exit 6
+          }
+
+          if ($norm -match "devtools=true") {
+            Write-Error "Gate failed: runtime flag devtools=true is not allowed in demo build."
+            exit 7
+          }
+
+          if ($norm -notmatch "telemetrymode=off") {
+            Write-Error "Gate failed: telemetryMode must be Off in demo build."
+            exit 8
+          }
+
+      - name: Upload demo build + smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-demo-build
+          path: |
+            results/demo/Necroforge_Demo.exe
+            results/demo/build_profile_info.txt
+            results/demo/build_profile_smoke.txt
+            results/demo/smoke_runtime.log
+            results/demo/unity-build-demo.log
+
+  export-profiler-metrics:
+    if: ${{ secrets.UNITY_EDITOR_PATH != '' }}
+    runs-on: windows-latest
+    needs: build-demo-artifact
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export latest metrics from Unity Profiler
+        shell: pwsh
+        env:
+          UNITY_EDITOR_PATH: ${{ secrets.UNITY_EDITOR_PATH }}
+        run: |
+          if (-not $env:UNITY_EDITOR_PATH) {
+            Write-Error "Missing UNITY_EDITOR_PATH secret (expected full Unity.exe path)."
+            exit 2
+          }
+
+          New-Item -Path "results/perf" -ItemType Directory -Force | Out-Null
+
+          & "$env:UNITY_EDITOR_PATH" `
+            -batchmode `
+            -nographics `
+            -projectPath "$PWD" `
+            -executeMethod GrassSim.Editor.UnityProfilerMetricsExporter.ExportLatestMetricsForCI `
+            -perfScene "Assets/Scenes/Game.unity" `
+            -perfOutput "results/perf/latest_metrics.json" `
+            -perfWarmupFrames 120 `
+            -perfSampleFrames 360 `
+            -perfTimeoutSeconds 180 `
+            -logFile "results/perf/unity-profiler-export.log"
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload profiler export artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-demo-profiler-export
+          path: |
+            results/perf/latest_metrics.json
+            results/perf/unity-profiler-export.log
+
+  perf-budget-gate:
+    if: ${{ needs.export-profiler-metrics.result == 'success' }}
+    needs: export-profiler-metrics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download profiler export artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: steam-demo-profiler-export
+          path: results/perf
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify profiler export exists
+        run: |
+          test -f results/perf/latest_metrics.json || (echo "Missing results/perf/latest_metrics.json profiler export." && exit 2)
+
+      - name: Enforce CPU/GC budget
+        run: |
+          python Tools/perf/perf_budget_gate.py \
+            --metrics results/perf/latest_metrics.json \
+            --budget Tools/perf/perf_budget.json \
+            --output-json results/perf/perf_budget_gate_result.json
+
+      - name: Upload perf gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-demo-perf-gate
+          path: |
+            results/perf/latest_metrics.json
+            results/perf/perf_budget_gate_result.json
+            results/perf/unity-profiler-export.log
+
+  release-ready:
+    if: ${{ secrets.UNITY_EDITOR_PATH != '' }}
+    needs:
+      - build-demo-artifact
+      - perf-budget-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark release gate as passed
+        run: |
+          echo "Steam Demo release gate passed: demo build + smoke + profile gates + perf budget."
