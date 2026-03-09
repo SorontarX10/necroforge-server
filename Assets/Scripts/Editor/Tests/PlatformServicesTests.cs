@@ -11,12 +11,24 @@ namespace GrassSim.Editor.Tests
             private readonly string playerId;
             private readonly string playerName;
             private readonly bool overlayOpenResult;
+            private readonly string authTicketProvider;
+            private readonly string authTicketProviderUserId;
+            private readonly string authTicket;
 
-            public FakePlatformServices(string playerId, string playerName, bool overlayOpenResult)
+            public FakePlatformServices(
+                string playerId,
+                string playerName,
+                bool overlayOpenResult,
+                string authTicketProvider = "",
+                string authTicketProviderUserId = "",
+                string authTicket = "")
             {
                 this.playerId = playerId;
                 this.playerName = playerName;
                 this.overlayOpenResult = overlayOpenResult;
+                this.authTicketProvider = authTicketProvider;
+                this.authTicketProviderUserId = authTicketProviderUserId;
+                this.authTicket = authTicket;
             }
 
             public string ProviderKey => "fake";
@@ -53,6 +65,16 @@ namespace GrassSim.Editor.Tests
             {
                 LastOverlayUrl = leaderboardUrl;
                 return overlayOpenResult;
+            }
+
+            public bool TryGetExternalAuthTicket(out string provider, out string providerUserId, out string sessionTicket)
+            {
+                provider = authTicketProvider;
+                providerUserId = authTicketProviderUserId;
+                sessionTicket = authTicket;
+                return !string.IsNullOrWhiteSpace(provider)
+                    && !string.IsNullOrWhiteSpace(providerUserId)
+                    && !string.IsNullOrWhiteSpace(sessionTicket);
             }
         }
 
@@ -133,6 +155,30 @@ namespace GrassSim.Editor.Tests
 
             Assert.IsTrue(opened);
             Assert.AreEqual("https://example.com/leaderboard", fake.LastOverlayUrl);
+        }
+
+        [Test]
+        public void TryGetExternalAuthTicket_DelegatesToProvider()
+        {
+            var fake = new FakePlatformServices(
+                playerId: "steam:999",
+                playerName: "OverlayUser",
+                overlayOpenResult: true,
+                authTicketProvider: "steam",
+                authTicketProviderUserId: "76561198000000000",
+                authTicket: "abcdef0123"
+            );
+            PlatformServices.SetProviderForTests(fake);
+
+            bool ok = PlatformServices.TryGetExternalAuthTicket(
+                out string provider,
+                out string providerUserId,
+                out string ticket);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual("steam", provider);
+            Assert.AreEqual("76561198000000000", providerUserId);
+            Assert.AreEqual("abcdef0123", ticket);
         }
     }
 }

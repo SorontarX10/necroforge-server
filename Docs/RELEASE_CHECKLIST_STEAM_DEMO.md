@@ -47,7 +47,12 @@ Scope: Steam Demo candidate (Unity client + leaderboard backend)
 - [ ] `Docs/PRIVACY.md` is present and matches real telemetry behavior.
 - [ ] `Docs/EULA.md` is present and linked from menu.
 - [ ] `Docs/THIRD_PARTY_LICENSES.md` is present and up to date.
-- [ ] In-game Privacy/EULA links open correctly in demo build.
+- [ ] Hosted legal URLs return 2xx:
+  - `https://<host>/legal/privacy-policy.html`
+  - `https://<host>/legal/eula.html`
+  - `https://<host>/legal/third-party-licenses.html`
+- [ ] HTTP requests to legal URLs redirect to HTTPS (`Tools/leaderboard/legal_links_check.ps1`).
+- [ ] In-game Privacy/EULA/Licenses buttons open hosted URLs correctly in demo build.
 
 ## 6. Deployment and Verification Checklist
 
@@ -89,4 +94,3 @@ Use hotfix flow when rollback is not sufficient or issue exists in latest stable
 - [ ] QA sign-off:
 - [ ] Engineering sign-off:
 - [ ] Timestamp UTC:
-

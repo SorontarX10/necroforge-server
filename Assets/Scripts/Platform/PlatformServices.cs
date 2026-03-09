@@ -80,6 +80,12 @@ public static class PlatformServices
         return current.OpenOverlayToLeaderboard(leaderboardUrl);
     }
 
+    public static bool TryGetExternalAuthTicket(out string provider, out string providerUserId, out string sessionTicket)
+    {
+        Initialize();
+        return current.TryGetExternalAuthTicket(out provider, out providerUserId, out sessionTicket);
+    }
+
     public static void SetProviderForTests(IPlatformServices provider)
     {
         Shutdown();

@@ -9,10 +9,18 @@
 - `GET /health`
 - `GET /metrics`
 - `GET /auth/external/{provider}/start`
+- `GET /auth/external/{provider}/flow/start`
 - `GET /auth/external/{provider}/callback`
+- `GET /auth/external/flow/{flowId}/session`
+- `POST /auth/external/steam/session`
 - `POST /auth/external/exchange`
 - `POST /auth/external/refresh`
 - `POST /auth/external/logout`
+
+Recommended desktop OAuth flow (no manual copy/paste):
+1. Client calls `GET /auth/external/{provider}/flow/start` and opens returned `auth_url`.
+2. Provider redirects to `/auth/external/{provider}/callback`.
+3. Client polls `GET /auth/external/flow/{flowId}/session` until it returns a session payload.
 
 ## External Account Identity (optional fields)
 
@@ -63,3 +71,8 @@ Then configure one or more providers:
   - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_ID=...`
   - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_SECRET=...`
   - callback URL: `https://<your-domain>/auth/external/facebook/callback`
+- Steam (client session ticket validation):
+  - `LEADERBOARD_AUTH_STEAM_ENABLED=true`
+  - `LEADERBOARD_AUTH_STEAM_APP_ID=<Steam AppID>`
+  - `LEADERBOARD_AUTH_STEAM_WEB_API_KEY=<Publisher Web API key>`
+  - client sends `steam_id` + `session_ticket` to `POST /auth/external/steam/session`

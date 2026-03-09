@@ -54,16 +54,49 @@ namespace GrassSim.Auth
             public string message;
         }
 
+        [Serializable]
+        private sealed class StartFlowResponseDto
+        {
+            public string provider;
+            public string flow_id;
+            public string auth_url;
+            public long expires_at_unix;
+            public string error;
+            public string message;
+        }
+
+        [Serializable]
+        private sealed class FlowStatusResponseDto
+        {
+            public string flow_id;
+            public string status;
+            public string message;
+            public string error;
+            public string code;
+        }
+
+        [Serializable]
+        private sealed class SteamSessionExchangeRequestDto
+        {
+            public string steam_id;
+            public string session_ticket;
+            public string display_name;
+        }
+
         private static bool initialized;
         private static ExternalAuthUpdater updater;
         private static ExternalAuthSession currentSession;
         private static ExternalAuthState state = ExternalAuthState.Disabled;
         private static string statusMessage = "External auth disabled.";
         private static string pendingProvider = string.Empty;
+        private static string pendingFlowId = string.Empty;
+        private static string pendingFlowSessionUrl = string.Empty;
+        private static float nextFlowPollAt;
         private static string lastClipboardValue = string.Empty;
         private static float nextClipboardPollAt;
         private static float nextRefreshCheckAt;
         private static bool requestInFlight;
+        private static bool platformAutoSignInAttempted;
 
         public static event Action StateChanged;
 
@@ -87,6 +120,8 @@ namespace GrassSim.Auth
 
             initialized = true;
             EnsureUpdater();
+            ClearPendingAuthFlow();
+            platformAutoSignInAttempted = false;
 
             if (!ExternalAuthSettings.IsEnabled)
             {
@@ -95,6 +130,7 @@ namespace GrassSim.Auth
             }
 
             RestoreSessionFromStore();
+            TrySilentPlatformSignInIfAvailable();
         }
 
         public static void SignInWithProvider(string provider)
@@ -124,20 +160,17 @@ namespace GrassSim.Auth
             }
 
             pendingProvider = normalizedProvider;
-            lastClipboardValue = GUIUtility.systemCopyBuffer ?? string.Empty;
-            nextClipboardPollAt = Time.unscaledTime + 0.2f;
+            pendingFlowId = string.Empty;
+            pendingFlowSessionUrl = string.Empty;
+            nextFlowPollAt = 0f;
 
-            SetState(
-                ExternalAuthState.AwaitingCallback,
-                $"Login in browser ({normalizedProvider}), then copy callback URL to clipboard."
-            );
-            Application.OpenURL(startUrl);
+            updater.StartCoroutine(BeginSignInFlowRoutine(normalizedProvider, startUrl));
         }
 
         public static void SignOut()
         {
             Initialize();
-            pendingProvider = string.Empty;
+            ClearPendingAuthFlow();
             if (requestInFlight)
                 return;
 
@@ -220,21 +253,31 @@ namespace GrassSim.Auth
 
             float now = Time.unscaledTime;
 
-            if (state == ExternalAuthState.AwaitingCallback && !requestInFlight && now >= nextClipboardPollAt)
+            if (state == ExternalAuthState.AwaitingCallback && !requestInFlight)
             {
-                nextClipboardPollAt = now + ExternalAuthSettings.ClipboardPollIntervalSeconds;
-                string clipboard = GUIUtility.systemCopyBuffer ?? string.Empty;
-                if (!string.Equals(clipboard, lastClipboardValue, StringComparison.Ordinal))
+                bool hasFlowPolling = !string.IsNullOrWhiteSpace(pendingFlowId)
+                    && !string.IsNullOrWhiteSpace(pendingFlowSessionUrl);
+                if (hasFlowPolling && now >= nextFlowPollAt)
                 {
-                    lastClipboardValue = clipboard;
-                    if (TryExtractAuthorizationCode(
-                        clipboard,
-                        pendingProvider,
-                        out string resolvedProvider,
-                        out string code))
+                    nextFlowPollAt = now + ExternalAuthSettings.FlowPollIntervalSeconds;
+                    updater.StartCoroutine(PollFlowSessionRoutine());
+                }
+                else if (!hasFlowPolling && now >= nextClipboardPollAt)
+                {
+                    nextClipboardPollAt = now + ExternalAuthSettings.ClipboardPollIntervalSeconds;
+                    string clipboard = GUIUtility.systemCopyBuffer ?? string.Empty;
+                    if (!string.Equals(clipboard, lastClipboardValue, StringComparison.Ordinal))
                     {
-                        pendingProvider = resolvedProvider;
-                        updater.StartCoroutine(ExchangeCodeRoutine(resolvedProvider, code));
+                        lastClipboardValue = clipboard;
+                        if (TryExtractAuthorizationCode(
+                            clipboard,
+                            pendingProvider,
+                            out string resolvedProvider,
+                            out string code))
+                        {
+                            pendingProvider = resolvedProvider;
+                            updater.StartCoroutine(ExchangeCodeRoutine(resolvedProvider, code));
+                        }
                     }
                 }
             }
@@ -280,6 +323,43 @@ namespace GrassSim.Auth
             nextRefreshCheckAt = Time.unscaledTime + 2f;
         }
 
+        private static void TrySilentPlatformSignInIfAvailable()
+        {
+            if (platformAutoSignInAttempted)
+                return;
+
+            if (!ExternalAuthSettings.IsEnabled || !ExternalAuthSettings.SteamAutoSignInEnabled)
+                return;
+
+            if (state != ExternalAuthState.SignedOut && state != ExternalAuthState.Expired)
+                return;
+
+            if (requestInFlight)
+                return;
+
+            string steamExchangeUrl = ExternalAuthSettings.BuildSteamSessionExchangeUrl();
+            if (string.IsNullOrWhiteSpace(steamExchangeUrl))
+                return;
+
+            platformAutoSignInAttempted = true;
+            if (!PlatformServices.TryGetExternalAuthTicket(
+                    out string provider,
+                    out string providerUserId,
+                    out string sessionTicket))
+            {
+                return;
+            }
+
+            provider = NormalizeProvider(provider);
+            if (!string.Equals(provider, "steam", StringComparison.Ordinal))
+                return;
+            if (string.IsNullOrWhiteSpace(providerUserId) || string.IsNullOrWhiteSpace(sessionTicket))
+                return;
+
+            string displayName = PlatformServices.GetPlayerName();
+            updater.StartCoroutine(ExchangeSteamSessionRoutine(providerUserId, sessionTicket, displayName, silent: true));
+        }
+
         private static bool ShouldRefreshSoon(ExternalAuthSession session)
         {
             if (session == null || session.expires_at_unix <= 0)
@@ -299,6 +379,237 @@ namespace GrassSim.Auth
 
             string refreshUrl = ExternalAuthSettings.BuildRefreshUrl();
             return !string.IsNullOrWhiteSpace(refreshUrl);
+        }
+
+        private static IEnumerator BeginSignInFlowRoutine(string provider, string fallbackStartUrl)
+        {
+            requestInFlight = true;
+            SetState(ExternalAuthState.SigningIn, $"Opening {provider} login...");
+
+            string flowStartUrl = ExternalAuthSettings.BuildProviderFlowStartUrl(provider);
+            string startError = string.Empty;
+            if (!string.IsNullOrWhiteSpace(flowStartUrl))
+            {
+                long statusCode = 0;
+                string responseBody = string.Empty;
+                string requestError = string.Empty;
+
+                yield return SendGet(
+                    flowStartUrl,
+                    onSuccess: (httpStatus, body) =>
+                    {
+                        statusCode = httpStatus;
+                        responseBody = body;
+                    },
+                    onError: (httpStatus, error) =>
+                    {
+                        statusCode = httpStatus;
+                        requestError = error;
+                    }
+                );
+
+                string parseError = string.Empty;
+                if (string.IsNullOrWhiteSpace(requestError)
+                    && TryParseFlowStartResponse(
+                        responseBody,
+                        provider,
+                        out string flowId,
+                        out string authUrl,
+                        out parseError))
+                {
+                    string sessionUrl = ExternalAuthSettings.BuildFlowSessionUrl(flowId);
+                    if (!string.IsNullOrWhiteSpace(sessionUrl))
+                    {
+                        pendingProvider = provider;
+                        pendingFlowId = flowId;
+                        pendingFlowSessionUrl = sessionUrl;
+                        nextFlowPollAt = Time.unscaledTime + 0.6f;
+                        requestInFlight = false;
+                        SetState(
+                            ExternalAuthState.AwaitingCallback,
+                            $"Complete login in browser ({provider}). Session will finalize automatically."
+                        );
+                        Application.OpenURL(authUrl);
+                        yield break;
+                    }
+
+                    startError = "flow_session_url_not_configured";
+                }
+                else if (string.IsNullOrWhiteSpace(requestError))
+                {
+                    startError = parseError;
+                }
+                else
+                {
+                    startError = $"{statusCode}:{requestError}";
+                }
+            }
+            else
+            {
+                startError = "flow_start_url_not_configured";
+            }
+
+            requestInFlight = false;
+            StartClipboardFallback(provider, fallbackStartUrl, startError);
+        }
+
+        private static void StartClipboardFallback(string provider, string startUrl, string reason)
+        {
+            ClearPendingAuthFlow();
+            if (string.IsNullOrWhiteSpace(startUrl))
+            {
+                SetState(ExternalAuthState.Error, "Auth broker start URL is not configured.");
+                return;
+            }
+
+            pendingProvider = provider;
+            lastClipboardValue = GUIUtility.systemCopyBuffer ?? string.Empty;
+            nextClipboardPollAt = Time.unscaledTime + 0.2f;
+            string message = $"Login in browser ({provider}), then copy callback URL to clipboard.";
+            if (!string.IsNullOrWhiteSpace(reason))
+                message = $"Automatic callback unavailable. {message}";
+
+            SetState(ExternalAuthState.AwaitingCallback, message);
+            Application.OpenURL(startUrl);
+        }
+
+        private static IEnumerator PollFlowSessionRoutine()
+        {
+            if (string.IsNullOrWhiteSpace(pendingFlowId)
+                || string.IsNullOrWhiteSpace(pendingFlowSessionUrl))
+            {
+                yield break;
+            }
+
+            requestInFlight = true;
+            long statusCode = 0;
+            string responseBody = string.Empty;
+            string requestError = string.Empty;
+
+            yield return SendGet(
+                pendingFlowSessionUrl,
+                onSuccess: (httpStatus, body) =>
+                {
+                    statusCode = httpStatus;
+                    responseBody = body;
+                },
+                onError: (httpStatus, error) =>
+                {
+                    statusCode = httpStatus;
+                    requestError = error;
+                }
+            );
+
+            requestInFlight = false;
+            if (!string.IsNullOrWhiteSpace(requestError))
+            {
+                ClearPendingAuthFlow();
+                if (statusCode == 410L)
+                {
+                    SetState(ExternalAuthState.Expired, "Auth session expired. Sign in again.");
+                    yield break;
+                }
+
+                SetState(ExternalAuthState.Error, $"Auth callback failed: {requestError}");
+                yield break;
+            }
+
+            if (statusCode == 202L)
+            {
+                if (TryParseFlowStatusMessage(responseBody, out string pendingMessage)
+                    && !string.IsNullOrWhiteSpace(pendingMessage))
+                {
+                    SetState(ExternalAuthState.AwaitingCallback, pendingMessage);
+                }
+                else
+                {
+                    SetState(
+                        ExternalAuthState.AwaitingCallback,
+                        $"Complete login in browser ({pendingProvider})."
+                    );
+                }
+
+                yield break;
+            }
+
+            if (!TryParseSessionResponse(responseBody, out ExternalAuthSession session, out string parseError))
+            {
+                ClearPendingAuthFlow();
+                SetState(ExternalAuthState.Error, $"Auth exchange invalid response: {parseError}");
+                yield break;
+            }
+
+            currentSession = session;
+            ExternalAuthSessionStore.Save(session);
+            ClearPendingAuthFlow();
+            SetState(ExternalAuthState.SignedIn, BuildSignedInMessage(session));
+            nextRefreshCheckAt = Time.unscaledTime + 5f;
+        }
+
+        private static IEnumerator ExchangeSteamSessionRoutine(
+            string steamId,
+            string sessionTicket,
+            string displayName,
+            bool silent)
+        {
+            requestInFlight = true;
+            SetState(ExternalAuthState.SigningIn, "Signing in with Steam...");
+
+            string url = ExternalAuthSettings.BuildSteamSessionExchangeUrl();
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                requestInFlight = false;
+                if (silent)
+                    SetState(ExternalAuthState.SignedOut, "Steam auto-login skipped (server endpoint not configured).");
+                else
+                    SetState(ExternalAuthState.Error, "Steam auth endpoint is not configured.");
+                yield break;
+            }
+
+            SteamSessionExchangeRequestDto payload = new()
+            {
+                steam_id = steamId,
+                session_ticket = sessionTicket,
+                display_name = displayName
+            };
+
+            string responseBody = string.Empty;
+            string requestError = string.Empty;
+            yield return SendPostJson(
+                url,
+                JsonUtility.ToJson(payload),
+                onSuccess: body => responseBody = body,
+                onError: error => requestError = error
+            );
+
+            requestInFlight = false;
+            if (!string.IsNullOrWhiteSpace(requestError))
+            {
+                currentSession = null;
+                ExternalAuthSessionStore.Clear();
+                if (silent)
+                    SetState(ExternalAuthState.SignedOut, "Steam auto-login failed. Use another provider.");
+                else
+                    SetState(ExternalAuthState.Error, $"Steam auth failed: {requestError}");
+                yield break;
+            }
+
+            if (!TryParseSessionResponse(responseBody, out ExternalAuthSession session, out string parseError))
+            {
+                currentSession = null;
+                ExternalAuthSessionStore.Clear();
+                if (silent)
+                    SetState(ExternalAuthState.SignedOut, "Steam auto-login failed. Use another provider.");
+                else
+                    SetState(ExternalAuthState.Error, $"Steam auth invalid response: {parseError}");
+                yield break;
+            }
+
+            currentSession = session;
+            ExternalAuthSessionStore.Save(session);
+            ClearPendingAuthFlow();
+            SetState(ExternalAuthState.SignedIn, BuildSignedInMessage(session));
+            nextRefreshCheckAt = Time.unscaledTime + 5f;
         }
 
         private static IEnumerator ExchangeCodeRoutine(string provider, string code)
@@ -332,19 +643,21 @@ namespace GrassSim.Auth
             requestInFlight = false;
             if (!string.IsNullOrWhiteSpace(requestError))
             {
+                ClearPendingAuthFlow();
                 SetState(ExternalAuthState.Error, $"Auth exchange failed: {requestError}");
                 yield break;
             }
 
             if (!TryParseSessionResponse(responseBody, out ExternalAuthSession session, out string parseError))
             {
+                ClearPendingAuthFlow();
                 SetState(ExternalAuthState.Error, $"Auth exchange invalid response: {parseError}");
                 yield break;
             }
 
             currentSession = session;
             ExternalAuthSessionStore.Save(session);
-            pendingProvider = string.Empty;
+            ClearPendingAuthFlow();
             SetState(ExternalAuthState.SignedIn, BuildSignedInMessage(session));
             nextRefreshCheckAt = Time.unscaledTime + 5f;
         }
@@ -436,10 +749,20 @@ namespace GrassSim.Auth
             ClearSession(message);
         }
 
+        private static void ClearPendingAuthFlow()
+        {
+            pendingProvider = string.Empty;
+            pendingFlowId = string.Empty;
+            pendingFlowSessionUrl = string.Empty;
+            nextFlowPollAt = 0f;
+            nextClipboardPollAt = 0f;
+            lastClipboardValue = string.Empty;
+        }
+
         private static void ClearSession(string message)
         {
             currentSession = null;
-            pendingProvider = string.Empty;
+            ClearPendingAuthFlow();
             ExternalAuthSessionStore.Clear();
             SetState(ExternalAuthState.SignedOut, message);
         }
@@ -447,7 +770,7 @@ namespace GrassSim.Auth
         private static void HandleExpiredSession(string message)
         {
             currentSession = null;
-            pendingProvider = string.Empty;
+            ClearPendingAuthFlow();
             ExternalAuthSessionStore.Clear();
             SetState(ExternalAuthState.Expired, message);
         }
@@ -531,6 +854,87 @@ namespace GrassSim.Auth
             return false;
         }
 
+        private static bool TryParseFlowStartResponse(
+            string json,
+            string expectedProvider,
+            out string flowId,
+            out string authUrl,
+            out string error)
+        {
+            flowId = string.Empty;
+            authUrl = string.Empty;
+            error = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                error = "empty_response";
+                return false;
+            }
+
+            StartFlowResponseDto dto = null;
+            try
+            {
+                dto = JsonUtility.FromJson<StartFlowResponseDto>(json);
+            }
+            catch (Exception ex)
+            {
+                error = SanitizeError(ex.Message);
+                return false;
+            }
+
+            if (dto == null)
+            {
+                error = "invalid_flow_start_payload";
+                return false;
+            }
+
+            string provider = NormalizeProvider(dto.provider);
+            string normalizedExpected = NormalizeProvider(expectedProvider);
+            if (!string.IsNullOrWhiteSpace(normalizedExpected)
+                && !string.Equals(provider, normalizedExpected, StringComparison.Ordinal))
+            {
+                error = "provider_mismatch";
+                return false;
+            }
+
+            flowId = (dto.flow_id ?? string.Empty).Trim();
+            authUrl = (dto.auth_url ?? string.Empty).Trim();
+            if (flowId.Length > 128)
+                flowId = flowId.Substring(0, 128);
+            if (!string.IsNullOrWhiteSpace(flowId) && !string.IsNullOrWhiteSpace(authUrl))
+                return true;
+
+            string message = string.IsNullOrWhiteSpace(dto.error) ? dto.message : dto.error;
+            error = string.IsNullOrWhiteSpace(message) ? "invalid_flow_start_payload" : SanitizeError(message);
+            return false;
+        }
+
+        private static bool TryParseFlowStatusMessage(string json, out string message)
+        {
+            message = string.Empty;
+            if (string.IsNullOrWhiteSpace(json))
+                return false;
+
+            try
+            {
+                FlowStatusResponseDto dto = JsonUtility.FromJson<FlowStatusResponseDto>(json);
+                if (dto != null)
+                {
+                    string parsed = string.IsNullOrWhiteSpace(dto.message) ? dto.error : dto.message;
+                    if (!string.IsNullOrWhiteSpace(parsed))
+                    {
+                        message = parsed.Trim();
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
         private static IEnumerator SendPostJson(
             string url,
             string json,
@@ -565,6 +969,33 @@ namespace GrassSim.Auth
             }
 
             request.Dispose();
+        }
+
+        private static IEnumerator SendGet(
+            string url,
+            Action<long, string> onSuccess,
+            Action<long, string> onError)
+        {
+            using UnityWebRequest request = UnityWebRequest.Get(url);
+            request.timeout = Mathf.CeilToInt(ExternalAuthSettings.TimeoutSeconds);
+
+            yield return request.SendWebRequest();
+
+            long statusCode = request.responseCode;
+            bool success = request.result == UnityWebRequest.Result.Success
+                && statusCode >= 200
+                && statusCode < 300;
+            if (success)
+            {
+                onSuccess?.Invoke(statusCode, request.downloadHandler?.text ?? string.Empty);
+            }
+            else
+            {
+                string detail = request.downloadHandler?.text;
+                if (string.IsNullOrWhiteSpace(detail))
+                    detail = request.error;
+                onError?.Invoke(statusCode, SanitizeError(detail));
+            }
         }
 
         private static Dictionary<string, string> ParseQueryValues(string source)

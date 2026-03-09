@@ -159,6 +159,31 @@ public sealed class LogoutExternalAuthSessionRequest
     public string? AccessToken { get; init; }
 }
 
+public sealed class ExchangeSteamExternalAuthRequest
+{
+    [JsonPropertyName("steam_id")]
+    public string? SteamId { get; init; }
+
+    [JsonPropertyName("session_ticket")]
+    public string? SessionTicket { get; init; }
+
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; init; }
+}
+
+public sealed record StartExternalAuthFlowResponse(
+    [property: JsonPropertyName("provider")] string Provider,
+    [property: JsonPropertyName("flow_id")] string FlowId,
+    [property: JsonPropertyName("auth_url")] string AuthUrl,
+    [property: JsonPropertyName("expires_at_unix")] long ExpiresAtUnix
+);
+
+public sealed record ExternalAuthFlowStatusResponse(
+    [property: JsonPropertyName("flow_id")] string FlowId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("message")] string Message
+);
+
 public sealed record StartRunResponse(
     [property: JsonPropertyName("run_id")] string RunId,
     [property: JsonPropertyName("nonce")] string Nonce,

@@ -11,4 +11,5 @@ public interface IPlatformServices
     string GetPlayerId();
     string GetPlayerName();
     bool OpenOverlayToLeaderboard(string leaderboardUrl);
+    bool TryGetExternalAuthTicket(out string provider, out string providerUserId, out string sessionTicket);
 }

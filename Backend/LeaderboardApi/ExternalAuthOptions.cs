@@ -11,6 +11,7 @@ public sealed class ExternalAuthOptions
     public ExternalAuthProviderOptions Google { get; init; } = new("google");
     public ExternalAuthProviderOptions Microsoft { get; init; } = new("microsoft");
     public ExternalAuthProviderOptions Facebook { get; init; } = new("facebook");
+    public ExternalAuthSteamOptions Steam { get; init; } = new();
 
     public static ExternalAuthOptions FromConfiguration(IConfiguration configuration)
     {
@@ -58,7 +59,30 @@ public sealed class ExternalAuthOptions
                 envPrefix: "LEADERBOARD_AUTH_FACEBOOK",
                 providerName: "facebook",
                 defaultScopes: "public_profile,email"
-            )
+            ),
+            Steam = new ExternalAuthSteamOptions
+            {
+                Enabled = GetBool(
+                    configuration,
+                    "Leaderboard:Auth:Steam:Enabled",
+                    "LEADERBOARD_AUTH_STEAM_ENABLED",
+                    false
+                ),
+                AppId = GetLong(
+                    configuration,
+                    "Leaderboard:Auth:Steam:AppId",
+                    "LEADERBOARD_AUTH_STEAM_APP_ID",
+                    0L,
+                    0L,
+                    long.MaxValue
+                ),
+                WebApiKey = GetString(
+                    configuration,
+                    "Leaderboard:Auth:Steam:WebApiKey",
+                    "LEADERBOARD_AUTH_STEAM_WEB_API_KEY",
+                    string.Empty
+                )
+            }
         };
     }
 
@@ -176,6 +200,20 @@ public sealed class ExternalAuthOptions
             ? Math.Clamp(parsed, minValue, maxValue)
             : defaultValue;
     }
+
+    private static long GetLong(
+        IConfiguration configuration,
+        string configKey,
+        string envKey,
+        long defaultValue,
+        long minValue,
+        long maxValue)
+    {
+        string raw = GetString(configuration, configKey, envKey, defaultValue.ToString(CultureInfo.InvariantCulture));
+        return long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed)
+            ? Math.Clamp(parsed, minValue, maxValue)
+            : defaultValue;
+    }
 }
 
 public sealed class ExternalAuthProviderOptions(string name)
@@ -191,4 +229,16 @@ public sealed class ExternalAuthProviderOptions(string name)
         Enabled
         && !string.IsNullOrWhiteSpace(ClientId)
         && !string.IsNullOrWhiteSpace(ClientSecret);
+}
+
+public sealed class ExternalAuthSteamOptions
+{
+    public bool Enabled { get; init; }
+    public long AppId { get; init; }
+    public string WebApiKey { get; init; } = string.Empty;
+
+    public bool IsConfigured =>
+        Enabled
+        && AppId > 0
+        && !string.IsNullOrWhiteSpace(WebApiKey);
 }

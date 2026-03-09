@@ -100,11 +100,57 @@ app.MapGet(
 );
 
 app.MapGet(
+    "/auth/external/{provider}/flow/start",
+    (string provider, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        ServiceResult<StartExternalAuthFlowResponse> result = broker.StartFlow(provider, httpContext.Request);
+        return result.ToIResult();
+    }
+);
+
+app.MapGet(
     "/auth/external/{provider}/callback",
     (string provider, HttpContext httpContext, ExternalAuthBroker broker) =>
     {
         string html = broker.RenderCallbackPage(provider, httpContext.Request);
         return Results.Content(html, "text/html; charset=utf-8");
+    }
+);
+
+app.MapGet(
+    "/auth/external/flow/{flowId}/session",
+    async (string flowId, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        ServiceResult<ExternalAuthFlowStatusResponse> status = broker.GetFlowStatus(flowId);
+        if (!status.Ok || status.Payload == null)
+            return status.ToIResult();
+
+        if (!string.Equals(status.Payload.Status, "ready", StringComparison.Ordinal))
+            return status.ToIResult();
+
+        ServiceResult<ExternalAuthBroker.PendingAuthFlowCode> flowCode = broker.TryStartFlowExchange(flowId);
+        if (!flowCode.Ok || flowCode.Payload == null)
+        {
+            ErrorResponse error = flowCode.Error ?? new ErrorResponse("auth_flow_pending", "Waiting for provider callback.");
+            return Results.Json(error, statusCode: flowCode.StatusCode);
+        }
+
+        ServiceResult<ExternalAuthSessionResponse> exchange = await broker.ExchangeCodeAsync(
+            new ExchangeExternalAuthCodeRequest
+            {
+                Provider = flowCode.Payload.Provider,
+                Code = flowCode.Payload.Code
+            },
+            httpContext.Request,
+            httpContext.RequestAborted
+        );
+
+        broker.CompleteFlowExchange(
+            flowCode.Payload.FlowId,
+            success: exchange.Ok && exchange.Payload != null,
+            errorMessage: exchange.Error?.Message
+        );
+        return exchange.ToIResult();
     }
 );
 
@@ -140,6 +186,18 @@ app.MapPost(
     {
         await broker.RevokeAccessTokenAsync(request, httpContext.RequestAborted);
         return Results.NoContent();
+    }
+);
+
+app.MapPost(
+    "/auth/external/steam/session",
+    async (ExchangeSteamExternalAuthRequest request, HttpContext httpContext, ExternalAuthBroker broker) =>
+    {
+        ServiceResult<ExternalAuthSessionResponse> result = await broker.ExchangeSteamSessionAsync(
+            request,
+            httpContext.RequestAborted
+        );
+        return result.ToIResult();
     }
 );
 

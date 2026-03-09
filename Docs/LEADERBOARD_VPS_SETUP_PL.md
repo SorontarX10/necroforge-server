@@ -177,7 +177,7 @@ Uwaga:
 - Jesli w `.env` haslo zawiera `$` albo `#`, wpisz je w pojedynczych cudzyslowach, np. `POSTGRES_PASSWORD='abc$123#xyz'`.
 - Jesli zmienisz `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` po pierwszym starcie, sam `.env` nie zaktualizuje danych w istniejacym wolumenie Postgresa.
 
-## Krok 1b: Konfiguracja brokera OAuth (Google/Microsoft/Facebook)
+## Krok 1b: Konfiguracja brokera OAuth (Google/Microsoft/Facebook/Steam)
 
 W tym samym `Infra/leaderboard/.env` ustaw:
 
@@ -203,6 +203,10 @@ Nastepnie wlacz i uzupelnij minimum jednego dostawce:
   - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_ID=...`
   - `LEADERBOARD_AUTH_FACEBOOK_CLIENT_SECRET=...`
   - callback: `https://necroforge-lb.duckdns.org/auth/external/facebook/callback`
+- Steam (auto-login z klienta Steam + walidacja ticketu po stronie API):
+  - `LEADERBOARD_AUTH_STEAM_ENABLED=true`
+  - `LEADERBOARD_AUTH_STEAM_APP_ID=<twoje_steam_app_id>`
+  - `LEADERBOARD_AUTH_STEAM_WEB_API_KEY=<publisher_web_api_key>`
 
 ## Krok 2: Start kontenerow
 
@@ -219,6 +223,18 @@ curl -s https://necroforge-lb.duckdns.org/health
 ```
 
 Ma byc JSON ze `status: "ok"`.
+
+## Krok 4: Health check legal docs (statyczne HTML)
+
+Po deployu sprawdz, czy Caddy serwuje legal strony:
+
+```bash
+curl -I https://necroforge-lb.duckdns.org/legal/privacy-policy.html
+curl -I https://necroforge-lb.duckdns.org/legal/eula.html
+curl -I https://necroforge-lb.duckdns.org/legal/third-party-licenses.html
+```
+
+Kazdy URL powinien zwrocic `HTTP/2 200`.
 
 ## 5. Unity i build demo
 
@@ -242,6 +258,8 @@ Wstaw:
 }
 ```
 
+Po tej konfiguracji klient uzywa flow automatycznego (`flow/start` + polling `flow/{id}/session`), bez recznego kopiowania URL callback z przegladarki.
+
 `version_lock` ustaw na te sama wartosc co `LEADERBOARD_VERSION_LOCK` w `.env` backendu.
 
 ## Krok 1b: Ustaw URL brokera auth w grze
@@ -256,9 +274,14 @@ Ustaw:
   "enabled": true,
   "broker_base_url": "https://necroforge-lb.duckdns.org",
   "provider_start_path_template": "/auth/external/{provider}/start",
+  "flow_start_path_template": "/auth/external/{provider}/flow/start",
+  "flow_session_path_template": "/auth/external/flow/{flow_id}/session",
+  "steam_session_exchange_path": "/auth/external/steam/session",
   "exchange_path": "/auth/external/exchange",
   "refresh_path": "/auth/external/refresh",
-  "logout_path": "/auth/external/logout"
+  "logout_path": "/auth/external/logout",
+  "steam_auto_sign_in_enabled": true,
+  "flow_poll_interval_seconds": 0.5
 }
 ```
 
@@ -305,6 +328,12 @@ Test integracyjny API (`start -> submit -> leaderboard/me -> leaderboard top`):
 ```
 
 Skrypt konczy sie bledem, jesli submit nie jest `accepted` albo ranking nie zwroci wpisu.
+
+Legal URL smoke (`HTTPS + redirect + brak 404`):
+
+```powershell
+.\Tools\leaderboard\legal_links_check.ps1 -BaseUrl "https://necroforge-lb.duckdns.org"
+```
 
 Komendy admin do recznego review flagowanych runow:
 

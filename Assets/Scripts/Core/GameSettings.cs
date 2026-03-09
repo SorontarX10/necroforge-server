@@ -17,6 +17,7 @@ public static class GameSettings
     private const string PrefGodMode = "opt_godmode";
     private const string PrefFullscreenLegacy = "opt_fullscreen";
     private const string PrefWindowMode = "opt_window_mode";
+    private const string PrefWindowModeDefaultMigrationV2 = "opt_window_mode_default_v2";
     private const string PrefResolutionWidth = "opt_resolution_width";
     private const string PrefResolutionHeight = "opt_resolution_height";
     private const string PrefResolutionRefreshHz = "opt_resolution_refresh_hz";
@@ -156,6 +157,7 @@ public static class GameSettings
         SanitizeGodModeIfNeeded("Load");
 
         WindowMode = LoadWindowMode();
+        ApplyWindowModeDefaultMigrationV2();
 
         Vector3Int defaultResolution = ResolveDefaultResolution();
         ResolutionWidth = Mathf.Max(640, PlayerPrefs.GetInt(PrefResolutionWidth, defaultResolution.x));
@@ -169,6 +171,18 @@ public static class GameSettings
         );
 
         Apply();
+    }
+
+    private static void ApplyWindowModeDefaultMigrationV2()
+    {
+        if (PlayerPrefs.GetInt(PrefWindowModeDefaultMigrationV2, 0) == 1)
+            return;
+
+        WindowMode = DisplayWindowMode.BorderlessFullscreen;
+        PlayerPrefs.SetInt(PrefWindowMode, (int)WindowMode);
+        PlayerPrefs.SetInt(PrefFullscreenLegacy, 1);
+        PlayerPrefs.SetInt(PrefWindowModeDefaultMigrationV2, 1);
+        PlayerPrefs.Save();
     }
 
     private static void Save()

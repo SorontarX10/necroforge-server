@@ -1,12 +1,17 @@
 {
   "enabled": true,
-  "broker_base_url": "",
+  "broker_base_url": "https://necroforge-lb.duckdns.org",
   "provider_start_path_template": "/auth/external/{provider}/start",
+  "flow_start_path_template": "/auth/external/{provider}/flow/start",
+  "flow_session_path_template": "/auth/external/flow/{flow_id}/session",
+  "steam_session_exchange_path": "/auth/external/steam/session",
   "exchange_path": "/auth/external/exchange",
   "refresh_path": "/auth/external/refresh",
   "logout_path": "/auth/external/logout",
   "callback_code_query_key": "code",
   "callback_provider_query_key": "provider",
+  "steam_auto_sign_in_enabled": true,
+  "flow_poll_interval_seconds": 0.5,
   "timeout_seconds": 8,
   "refresh_lead_seconds": 90,
   "clipboard_poll_interval_seconds": 0.5

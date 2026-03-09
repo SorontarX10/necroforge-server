@@ -220,7 +220,29 @@ Kryteria akceptacji:
 - Brak soft-lockow UI po zmianie display mode.
 
 Testy:
-- Manual matrix: 3 rozdzielczosci x 2 window modes x 2 quality preset.
+- Manual matrix: 3 rozdzielczosci x 2 window modes x 3 quality preset (18 przypadkow).
+- Dokladny matrix do wykonania:
+
+| # | Rozdzielczosc | Window mode | Quality | Zastosowalo sie natychmiast (Y/N) | Persist po restarcie (Y/N) | Uwagi |
+|---|---|---|---|---|---|---|
+| 1 | 1280x720 | Windowed | Low |  |  |  |
+| 2 | 1280x720 | Windowed | Medium |  |  |  |
+| 3 | 1280x720 | Windowed | High |  |  |  |
+| 4 | 1280x720 | Borderless | Low |  |  |  |
+| 5 | 1280x720 | Borderless | Medium |  |  |  |
+| 6 | 1280x720 | Borderless | High |  |  |  |
+| 7 | 1920x1080 | Windowed | Low |  |  |  |
+| 8 | 1920x1080 | Windowed | Medium |  |  |  |
+| 9 | 1920x1080 | Windowed | High |  |  |  |
+| 10 | 1920x1080 | Borderless | Low |  |  |  |
+| 11 | 1920x1080 | Borderless | Medium |  |  |  |
+| 12 | 1920x1080 | Borderless | High |  |  |  |
+| 13 | 2560x1440 | Windowed | Low |  |  |  |
+| 14 | 2560x1440 | Windowed | Medium |  |  |  |
+| 15 | 2560x1440 | Windowed | High |  |  |  |
+| 16 | 2560x1440 | Borderless | Low |  |  |  |
+| 17 | 2560x1440 | Borderless | Medium |  |  |  |
+| 18 | 2560x1440 | Borderless | High |  |  |  |
 
 ## F-08 Integracja Steam (bootstrap) (P1)
 
@@ -272,10 +294,17 @@ Zakres:
   - `Docs/EULA.md`
   - `Docs/THIRD_PARTY_LICENSES.md`
 - Dodac w menu:
-  - linki do privacy/eula (otwierane lokalnie lub URL).
+  - linki do privacy/eula/licences kierujace na URL hostowane na subdomenie.
+- Wystawic legal docs jako statyczne pliki na subdomenie (nie lokalne `.md`):
+  - `https://<twoja-subdomena>/legal/privacy-policy.html`
+  - `https://<twoja-subdomena>/legal/eula.html`
+  - `https://<twoja-subdomena>/legal/third-party-licenses.html`
+- Usunac fallback "otwieranie lokalnych plikow `.md`" z flow gracza.
 
 Kryteria akceptacji:
 - Dokumenty istnieja i sa podlinkowane z menu.
+- Wszystkie 3 linki legal otwieraja dokumenty hostowane na subdomenie pod stalymi URL.
+- Build demo nie korzysta z lokalnych plikow `.md` dla legal docs.
 
 ## F-11 Domkniecie TODO gameplay/UI (P2)
 
@@ -296,6 +325,7 @@ Cel: miec stabilna tozsamosc gracza i sensowny model danych usera dla leaderboar
 
 Zakres:
 - Oprzec konta tylko o autoryzacje zewnetrznych dostawcow:
+  - Steam (auto-login, gdy gra uruchomiona przez Steam)
   - Google
   - Microsoft
   - Facebook
@@ -312,6 +342,12 @@ Zakres:
   - logowanie przez provider
   - odswiezanie sesji
   - odzyskanie profilu przy starcie klienta
+- Usprawnic UX logowania external auth:
+  - callback OAuth wraca i finalizuje sesje automatycznie (bez recznego kopiowania URL z przegladarki)
+  - osobny panel logowania widoczny tylko dla niezalogowanych
+  - po zalogowaniu ukryc przyciski providerow i pokazac status/profil + akcje logout
+  - dla uruchomienia przez Steam: probowac auto-logowania przy starcie gry, bez dodatkowego klikania
+  - panel logowania jest domyslnym ekranem startowym, a menu gry otwiera sie dopiero po poprawnym zalogowaniu
 - Podlaczyc konto/profil do submitu leaderboardu i UI:
   - leaderboard zapisuje stabilne `player_id/account_id`
   - UI pokazuje aktualny `display_name` z providera lub profilu backendowego
@@ -321,6 +357,10 @@ Kryteria akceptacji:
 - Gracz loguje sie tylko przez zewnetrznego dostawce.
 - Leaderboard nie tworzy lokalnej tozsamosci konta poza flow external auth.
 - Dane wysylane do leaderboardu sa spojne z profilem konta z providera.
+- Flow OAuth nie wymaga recznego kopiowania URL/callback przez gracza.
+- Panel logowania jest oddzielony od glownego menu i wyswietla sie tylko dla wylogowanego stanu.
+- Gdy gra jest uruchomiona przez Steam i Steam jest poprawnie zainicjalizowany, gracz jest logowany automatycznie.
+- Gra po starcie pokazuje najpierw ekran logowania; przejscie do glownego menu jest mozliwe dopiero po udanym logowaniu.
 
 ## 5. Kolejnosc wdrozenia (rekomendowana)
 
@@ -448,7 +488,7 @@ Zakonczone 2026-03-07:
 - [x] T-095 Dodac trwale zapisywanie i ladowanie nowych opcji.
 - [x] T-096 Ustawic sensowne defaulty dla pierwszego startu.
 - [x] T-097 Ustawic `resizableWindow = true` dla targetu PC.
-- [ ] T-098 Dodac test manualny matrix (rozdzielczosc x window mode x quality).
+- [ ] T-098 Dodac test manualny matrix (18 przypadkow: 1280x720/1920x1080/2560x1440 x Windowed/Borderless x Low/Medium/High).
       Arkusz wykonania: `Docs/MANUAL_QA_T098_T125.md`.
 
 ### F-08 Integracja Steam (bootstrap) (P1)
@@ -481,6 +521,10 @@ Zakonczone 2026-03-07:
 - [x] T-124 Dodac fallback otwierania lokalnego pliku lub URL w zaleznosci od platformy.
 - [ ] T-125 Zweryfikowac widocznosc i dzialanie linkow w buildzie demo.
       Arkusz wykonania: `Docs/MANUAL_QA_T098_T125.md`.
+- [x] T-126 Wystawic legal docs na subdomenie jako statyczne pliki HTML pod URL: `/legal/privacy-policy.html`, `/legal/eula.html`, `/legal/third-party-licenses.html`.
+- [x] T-127 Przepiac menu gry, aby Privacy/EULA/Licenses wskazywaly tylko URL subdomeny (bez lokalnego fallbacku `.md`).
+- [ ] T-128 Dodac QA check 404/redirect/HTTPS dla 3 URL legal i potwierdzic dzialanie w buildzie demo.
+      Skrypt QA dodany: `Tools/leaderboard/legal_links_check.ps1`; wymagane reczne uruchomienie na docelowym hostcie.
 
 ### F-11 Domkniecie TODO gameplay/UI (P2)
 
@@ -498,6 +542,12 @@ Zakonczone 2026-03-07:
 - [x] T-153 Podlaczyc `display_name` i stabilne `player_id/account_id` z konta providera do leaderboard submit.
 - [x] T-154 Dodac ekran/flow login/logout oraz obsluge wygaslej sesji.
 - [x] T-155 Przygotowac backendowy model `user/profile` i mapowanie provider identity pod przyszle rozszerzenia leaderboardu.
+- [x] T-156 Przebudowac flow OAuth na automatyczny callback (bez recznego kopiowania URL) z bezpiecznym domknieciem sesji w kliencie.
+- [x] T-157 Dodac oddzielny panel logowania external auth widoczny tylko dla wylogowanego stanu oraz panel stanu konta dla zalogowanego.
+- [x] T-158 Dodac provider `steam` w modelu kont i mapowanie `steam_id/session ticket` -> stabilne `account_id`.
+- [x] T-159 Dodac auto-login Steam przy starcie klienta (silent sign-in), gdy `SteamPlatformServices` jest aktywne.
+- [x] T-160 Dodac backendowa walidacje tozsamosci Steam (weryfikacja ticketu) i wydanie sesji konta zgodnej z flow leaderboardu.
+- [x] T-161 Ustawic panel logowania jako domyslny ekran startowy i zablokowac wejscie do glownego menu bez aktywnej sesji konta.
 
 ### Cross-cutting release hardening
 

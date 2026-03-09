@@ -1,4 +1,4 @@
-# Manual QA Sheet: T-098 + T-125
+# Manual QA Sheet: T-098 + T-125 + T-128
 
 Data:  
 Tester:
@@ -48,7 +48,7 @@ Wynik T-098: PASS / FAIL
 
 ## T-125 Legal links w buildzie demo
 
-Cel: zweryfikowac widocznosc i dzialanie linkow legal/docs z menu glownego.
+Cel: zweryfikowac widocznosc i dzialanie linkow legal/docs z menu glownego (hostowane URL subdomeny).
 
 Sprawdz:
 - Privacy
@@ -57,7 +57,10 @@ Sprawdz:
 
 ## Kryteria PASS
 - przyciski sa widoczne i klikalne.
-- kazdy link otwiera sie poprawnie (lokalny fallback lub URL).
+- kazdy link otwiera sie poprawnie pod URL:
+  - `/legal/privacy-policy.html`
+  - `/legal/eula.html`
+  - `/legal/third-party-licenses.html`
 - brak bledow blokujacych UI po powrocie do gry.
 
 ## Wyniki
@@ -70,8 +73,34 @@ Sprawdz:
 
 Wynik T-125: PASS / FAIL
 
+## T-128 Legal URL checks: HTTPS + redirect + 404
+
+Cel: potwierdzic, ze legal URL dzialaja poprawnie przez HTTPS oraz maja poprawne zachowanie redirect z HTTP.
+
+Uruchom:
+
+```powershell
+.\Tools\leaderboard\legal_links_check.ps1 -BaseUrl "https://<twoj-host>"
+```
+
+## Kryteria PASS
+- wszystkie 3 strony zwracaja 2xx po HTTPS.
+- wejscie przez HTTP przekierowuje do HTTPS.
+- brak 404 dla kazdego z 3 URL.
+
+## Wyniki
+
+| URL | HTTPS 2xx (Y/N) | HTTP -> HTTPS redirect (Y/N) | 404 brak (Y/N) | Uwagi |
+|---|---|---|---|---|
+| /legal/privacy-policy.html |  |  |  |  |
+| /legal/eula.html |  |  |  |  |
+| /legal/third-party-licenses.html |  |  |  |  |
+
+Wynik T-128: PASS / FAIL
+
 ## Podsumowanie
 
 - T-098: PASS / FAIL
 - T-125: PASS / FAIL
+- T-128: PASS / FAIL
 - Blokery:

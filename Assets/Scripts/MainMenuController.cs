@@ -3,7 +3,6 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 using System;
-using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using GrassSim.Auth;
@@ -36,10 +35,11 @@ public class MainMenuController : MonoBehaviour
     public Button privacyButton;
     public Button eulaButton;
     public Button thirdPartyLicensesButton;
-    [SerializeField] private string legalLocalFolder = "legal";
-    [SerializeField] private string privacyFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/PRIVACY.md";
-    [SerializeField] private string eulaFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/EULA.md";
-    [SerializeField] private string thirdPartyFallbackUrl = "https://github.com/SorontarX10/necroforge/blob/main/Docs/THIRD_PARTY_LICENSES.md";
+    [SerializeField] private string legalBaseUrlOverride = string.Empty;
+    private const string DefaultLegalBaseUrl = "https://necroforge-lb.duckdns.org";
+    private const string PrivacyPolicyPath = "/legal/privacy-policy.html";
+    private const string EulaPath = "/legal/eula.html";
+    private const string ThirdPartyLicensesPath = "/legal/third-party-licenses.html";
 
     [Header("External Auth")]
     public TMP_Text authStatusText;
@@ -48,8 +48,14 @@ public class MainMenuController : MonoBehaviour
     public Button authLoginFacebookButton;
     public Button authLogoutButton;
     [SerializeField] private bool createAuthPanelAtRuntime = false;
+    [SerializeField] private bool requireAuthBeforeMenu = true;
 
     private GameObject runtimeAuthPanel;
+    private GameObject runtimeAuthLoginGatePanel;
+    private TMP_Text runtimeAuthLoginGateStatusText;
+    private Button runtimeAuthLoginGateGoogleButton;
+    private Button runtimeAuthLoginGateMicrosoftButton;
+    private Button runtimeAuthLoginGateFacebookButton;
 
     public float clickDelay = 0.3f;
 
@@ -65,6 +71,7 @@ public class MainMenuController : MonoBehaviour
         SetupLeaderboardUiBindings();
         SetupLegalLinkBindings();
         SetupAuthUiBindings();
+        ApplyMenuAccessGate();
     }
 
     private void OnDestroy()
@@ -87,6 +94,12 @@ public class MainMenuController : MonoBehaviour
             authLoginFacebookButton.onClick.RemoveListener(OnAuthFacebookClicked);
         if (authLogoutButton != null)
             authLogoutButton.onClick.RemoveListener(OnAuthLogoutClicked);
+        if (runtimeAuthLoginGateGoogleButton != null)
+            runtimeAuthLoginGateGoogleButton.onClick.RemoveListener(OnAuthGoogleClicked);
+        if (runtimeAuthLoginGateMicrosoftButton != null)
+            runtimeAuthLoginGateMicrosoftButton.onClick.RemoveListener(OnAuthMicrosoftClicked);
+        if (runtimeAuthLoginGateFacebookButton != null)
+            runtimeAuthLoginGateFacebookButton.onClick.RemoveListener(OnAuthFacebookClicked);
 
         ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
     }
@@ -97,6 +110,9 @@ public class MainMenuController : MonoBehaviour
 
     public void OnNewGameClicked()
     {
+        if (!EnsureMenuUnlockedByAuthGate())
+            return;
+
         newGameButton.interactable = false;
         StartCoroutine(StartNewGameRoutine());
     }
@@ -127,6 +143,9 @@ public class MainMenuController : MonoBehaviour
 
     public void OnLeaderboardClicked()
     {
+        if (!EnsureMenuUnlockedByAuthGate())
+            return;
+
         if (mainMenuRoot) mainMenuRoot.SetActive(false);
         if (leaderboardRoot) leaderboardRoot.SetActive(true);
 
@@ -318,17 +337,17 @@ public class MainMenuController : MonoBehaviour
 
     public void OnPrivacyClicked()
     {
-        OpenLegalDocument("PRIVACY.md", privacyFallbackUrl);
+        OpenLegalDocument(PrivacyPolicyPath);
     }
 
     public void OnEulaClicked()
     {
-        OpenLegalDocument("EULA.md", eulaFallbackUrl);
+        OpenLegalDocument(EulaPath);
     }
 
     public void OnThirdPartyLicensesClicked()
     {
-        OpenLegalDocument("THIRD_PARTY_LICENSES.md", thirdPartyFallbackUrl);
+        OpenLegalDocument(ThirdPartyLicensesPath);
     }
 
     private void SetupLegalLinkBindings()
@@ -348,33 +367,39 @@ public class MainMenuController : MonoBehaviour
         button.onClick.AddListener(handler);
     }
 
-    private void OpenLegalDocument(string fileName, string fallbackUrl)
+    private void OpenLegalDocument(string path)
     {
-        if (TryOpenLocalLegalDocument(fileName))
-            return;
-
-        if (!string.IsNullOrWhiteSpace(fallbackUrl))
-        {
-            Application.OpenURL(fallbackUrl.Trim());
-            return;
-        }
-
-        Debug.LogWarning($"[Legal] Missing local document and fallback URL for {fileName}.");
+        string url = ResolveLegalUrl(path);
+        if (!string.IsNullOrWhiteSpace(url))
+            Application.OpenURL(url);
     }
 
-    private bool TryOpenLocalLegalDocument(string fileName)
+    private string ResolveLegalUrl(string path)
     {
-        if (string.IsNullOrWhiteSpace(fileName))
-            return false;
+        string baseUrl = ResolveLegalBaseUrl();
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return string.Empty;
 
-        string folder = string.IsNullOrWhiteSpace(legalLocalFolder) ? "legal" : legalLocalFolder.Trim();
-        string localPath = Path.Combine(Application.streamingAssetsPath, folder, fileName);
-        if (!File.Exists(localPath))
-            return false;
+        string normalizedPath = string.IsNullOrWhiteSpace(path) ? "/" : path.Trim();
+        if (!normalizedPath.StartsWith("/", StringComparison.Ordinal))
+            normalizedPath = $"/{normalizedPath}";
 
-        string uri = new Uri(localPath).AbsoluteUri;
-        Application.OpenURL(uri);
-        return true;
+        return $"{baseUrl}{normalizedPath}";
+    }
+
+    private string ResolveLegalBaseUrl()
+    {
+        if (!string.IsNullOrWhiteSpace(legalBaseUrlOverride))
+            return legalBaseUrlOverride.Trim().TrimEnd('/');
+
+        if (!string.IsNullOrWhiteSpace(ExternalAuthSettings.BrokerBaseUrl))
+            return ExternalAuthSettings.BrokerBaseUrl.Trim().TrimEnd('/');
+
+        string leaderboardBaseUrl = OnlineLeaderboardSettings.GetBaseUrl();
+        if (!string.IsNullOrWhiteSpace(leaderboardBaseUrl))
+            return leaderboardBaseUrl.Trim().TrimEnd('/');
+
+        return DefaultLegalBaseUrl;
     }
 
     // ======================
@@ -405,15 +430,20 @@ public class MainMenuController : MonoBehaviour
     {
         ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
 
-        bool authConfigured = ExternalAuthSettings.IsEnabled
-            && !string.IsNullOrWhiteSpace(ExternalAuthSettings.BrokerBaseUrl);
+        bool authConfigured = IsAuthConfigured();
         if (!authConfigured)
         {
             SetAuthUiVisible(false);
+            SetLoginGateVisible(false);
+            ApplyMenuAccessGate();
             return;
         }
 
-        if (createAuthPanelAtRuntime)
+        bool missingAccountUi = authStatusText == null || authLogoutButton == null;
+        bool missingLoginButtons = authLoginGoogleButton == null
+            || authLoginMicrosoftButton == null
+            || authLoginFacebookButton == null;
+        if (createAuthPanelAtRuntime || missingAccountUi || missingLoginButtons)
             EnsureRuntimeAuthControls();
 
         if (authStatusText == null
@@ -423,15 +453,21 @@ public class MainMenuController : MonoBehaviour
             && authLogoutButton == null)
         {
             SetAuthUiVisible(false);
+            SetLoginGateVisible(false);
+            ApplyMenuAccessGate();
             return;
         }
+
+        EnsureRuntimeLoginGateControls();
 
         BindAuthButton(authLoginGoogleButton, OnAuthGoogleClicked);
         BindAuthButton(authLoginMicrosoftButton, OnAuthMicrosoftClicked);
         BindAuthButton(authLoginFacebookButton, OnAuthFacebookClicked);
         BindAuthButton(authLogoutButton, OnAuthLogoutClicked);
+        BindAuthButton(runtimeAuthLoginGateGoogleButton, OnAuthGoogleClicked);
+        BindAuthButton(runtimeAuthLoginGateMicrosoftButton, OnAuthMicrosoftClicked);
+        BindAuthButton(runtimeAuthLoginGateFacebookButton, OnAuthFacebookClicked);
 
-        SetAuthUiVisible(true);
         ExternalAuthService.Initialize();
         ExternalAuthService.StateChanged += RefreshAuthStatusLabel;
         RefreshAuthStatusLabel();
@@ -448,12 +484,44 @@ public class MainMenuController : MonoBehaviour
 
     private void RefreshAuthStatusLabel()
     {
-        if (authStatusText != null)
-            authStatusText.text = ExternalAuthService.StatusMessage;
-
+        bool authConfigured = IsAuthConfigured();
         bool hasSession = ExternalAuthService.IsSignedIn;
+        bool lockedByGate = IsMenuLockedByAuthGate();
+
+        string message = ExternalAuthService.StatusMessage;
+        if (lockedByGate && ExternalAuthService.State == ExternalAuthState.SignedOut)
+            message = "Sign in to continue.";
+
+        if (authStatusText != null)
+            authStatusText.text = message;
+
+        if (runtimeAuthLoginGateStatusText != null)
+            runtimeAuthLoginGateStatusText.text = message;
+
         if (authLogoutButton != null)
             authLogoutButton.interactable = hasSession;
+
+        if (authConfigured && hasSession)
+        {
+            SetAuthUiVisible(true);
+            if (authLoginGoogleButton != null)
+                authLoginGoogleButton.gameObject.SetActive(false);
+            if (authLoginMicrosoftButton != null)
+                authLoginMicrosoftButton.gameObject.SetActive(false);
+            if (authLoginFacebookButton != null)
+                authLoginFacebookButton.gameObject.SetActive(false);
+            if (authStatusText != null)
+                authStatusText.gameObject.SetActive(true);
+            if (authLogoutButton != null)
+                authLogoutButton.gameObject.SetActive(true);
+        }
+        else
+        {
+            SetAuthUiVisible(false);
+        }
+
+        SetLoginGateVisible(lockedByGate);
+        ApplyMenuAccessGate();
     }
 
     private void SetAuthUiVisible(bool visible)
@@ -473,6 +541,56 @@ public class MainMenuController : MonoBehaviour
             authLogoutButton.gameObject.SetActive(visible);
     }
 
+    private bool EnsureMenuUnlockedByAuthGate()
+    {
+        if (!IsMenuLockedByAuthGate())
+            return true;
+
+        RefreshAuthStatusLabel();
+        return false;
+    }
+
+    private bool IsAuthConfigured()
+    {
+        return ExternalAuthSettings.IsEnabled
+            && !string.IsNullOrWhiteSpace(ExternalAuthSettings.BrokerBaseUrl);
+    }
+
+    private bool IsMenuLockedByAuthGate()
+    {
+        if (!requireAuthBeforeMenu)
+            return false;
+
+        return IsAuthConfigured() && !ExternalAuthService.IsSignedIn;
+    }
+
+    private void ApplyMenuAccessGate()
+    {
+        bool unlocked = !IsMenuLockedByAuthGate();
+        if (newGameButton != null)
+            newGameButton.interactable = unlocked;
+
+        if (unlocked)
+            return;
+
+        if (leaderboardRoot != null)
+            leaderboardRoot.SetActive(false);
+        if (optionsRoot != null)
+            optionsRoot.SetActive(false);
+        if (mainMenuRoot != null)
+            mainMenuRoot.SetActive(true);
+    }
+
+    private void SetLoginGateVisible(bool visible)
+    {
+        if (runtimeAuthLoginGatePanel != null)
+        {
+            runtimeAuthLoginGatePanel.SetActive(visible);
+            if (visible)
+                runtimeAuthLoginGatePanel.transform.SetAsLastSibling();
+        }
+    }
+
     // ======================
     // EXIT
     // ======================
@@ -488,6 +606,9 @@ public class MainMenuController : MonoBehaviour
 
     public void OnOptionsClicked()
     {
+        if (!EnsureMenuUnlockedByAuthGate())
+            return;
+
         mainMenuRoot.SetActive(false);
         optionsRoot.SetActive(true);
     }
@@ -669,6 +790,130 @@ public class MainMenuController : MonoBehaviour
         text.alignment = TextAlignmentOptions.Left;
         text.textWrappingMode = TextWrappingModes.NoWrap;
         text.overflowMode = TextOverflowModes.Ellipsis;
+        text.raycastTarget = false;
+
+        if (TMP_Settings.defaultFontAsset != null)
+            text.font = TMP_Settings.defaultFontAsset;
+
+        return text;
+    }
+
+    private void EnsureRuntimeLoginGateControls()
+    {
+        if (runtimeAuthLoginGatePanel != null)
+            return;
+
+        Canvas parentCanvas = null;
+        if (mainMenuRoot != null)
+            parentCanvas = mainMenuRoot.GetComponentInParent<Canvas>();
+        if (parentCanvas == null)
+            parentCanvas = FindFirstObjectByType<Canvas>();
+        if (parentCanvas == null)
+            return;
+
+        GameObject panelGo = new GameObject(
+            "AuthLoginGatePanel",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image)
+        );
+        runtimeAuthLoginGatePanel = panelGo;
+        RectTransform panelRt = panelGo.GetComponent<RectTransform>();
+        panelRt.SetParent(parentCanvas.transform, false);
+        panelRt.anchorMin = Vector2.zero;
+        panelRt.anchorMax = Vector2.one;
+        panelRt.pivot = new Vector2(0.5f, 0.5f);
+        panelRt.offsetMin = Vector2.zero;
+        panelRt.offsetMax = Vector2.zero;
+
+        Image overlay = panelGo.GetComponent<Image>();
+        overlay.color = new Color(0.01f, 0.02f, 0.05f, 0.84f);
+        overlay.raycastTarget = true;
+
+        GameObject cardGo = new GameObject(
+            "AuthLoginGateCard",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image),
+            typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter)
+        );
+        RectTransform cardRt = cardGo.GetComponent<RectTransform>();
+        cardRt.SetParent(panelGo.transform, false);
+        cardRt.anchorMin = new Vector2(0.5f, 0.5f);
+        cardRt.anchorMax = new Vector2(0.5f, 0.5f);
+        cardRt.pivot = new Vector2(0.5f, 0.5f);
+        cardRt.sizeDelta = new Vector2(620f, 220f);
+        cardRt.anchoredPosition = new Vector2(0f, 12f);
+
+        Image cardImage = cardGo.GetComponent<Image>();
+        cardImage.color = new Color(0.07f, 0.1f, 0.16f, 0.96f);
+
+        VerticalLayoutGroup cardLayout = cardGo.GetComponent<VerticalLayoutGroup>();
+        cardLayout.padding = new RectOffset(24, 24, 22, 22);
+        cardLayout.spacing = 12f;
+        cardLayout.childControlWidth = true;
+        cardLayout.childControlHeight = true;
+        cardLayout.childForceExpandWidth = false;
+        cardLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter cardFitter = cardGo.GetComponent<ContentSizeFitter>();
+        cardFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        cardFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        TMP_Text titleText = CreateAuthGateTitleText(cardGo.transform);
+        titleText.text = "Sign in to continue";
+
+        runtimeAuthLoginGateStatusText = CreateAuthStatusText(cardGo.transform);
+        runtimeAuthLoginGateStatusText.text = "Choose a provider to sign in.";
+        LayoutElement statusLayout = runtimeAuthLoginGateStatusText.GetComponent<LayoutElement>();
+        if (statusLayout != null)
+            statusLayout.preferredWidth = 560f;
+
+        GameObject rowGo = new GameObject(
+            "AuthLoginGateButtons",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(HorizontalLayoutGroup)
+        );
+        rowGo.transform.SetParent(cardGo.transform, false);
+
+        HorizontalLayoutGroup rowLayout = rowGo.GetComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = 10f;
+        rowLayout.childControlWidth = true;
+        rowLayout.childControlHeight = true;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = false;
+
+        runtimeAuthLoginGateGoogleButton = CreateLegalButton(rowGo.transform, "GateGoogle", "Google");
+        runtimeAuthLoginGateMicrosoftButton = CreateLegalButton(rowGo.transform, "GateMicrosoft", "Microsoft");
+        runtimeAuthLoginGateFacebookButton = CreateLegalButton(rowGo.transform, "GateFacebook", "Facebook");
+
+        runtimeAuthLoginGatePanel.SetActive(false);
+        runtimeAuthLoginGatePanel.transform.SetAsLastSibling();
+    }
+
+    private static TMP_Text CreateAuthGateTitleText(Transform parent)
+    {
+        GameObject textGo = new GameObject(
+            "AuthGateTitle",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI),
+            typeof(LayoutElement)
+        );
+        textGo.transform.SetParent(parent, false);
+
+        LayoutElement layout = textGo.GetComponent<LayoutElement>();
+        layout.preferredWidth = 560f;
+        layout.preferredHeight = 44f;
+
+        TMP_Text text = textGo.GetComponent<TextMeshProUGUI>();
+        text.fontSize = 34f;
+        text.color = new Color(0.94f, 0.96f, 0.99f, 0.98f);
+        text.alignment = TextAlignmentOptions.Center;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Overflow;
         text.raycastTarget = false;
 
         if (TMP_Settings.defaultFontAsset != null)

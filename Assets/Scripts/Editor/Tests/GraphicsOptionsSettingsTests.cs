@@ -10,6 +10,7 @@ namespace GrassSim.Editor.Tests
         {
             PlayerPrefs.DeleteKey("opt_window_mode");
             PlayerPrefs.DeleteKey("opt_fullscreen");
+            PlayerPrefs.DeleteKey("opt_window_mode_default_v2");
             PlayerPrefs.DeleteKey("opt_resolution_width");
             PlayerPrefs.DeleteKey("opt_resolution_height");
             PlayerPrefs.DeleteKey("opt_resolution_refresh_hz");
@@ -50,6 +51,7 @@ namespace GrassSim.Editor.Tests
         [Test]
         public void Load_UsesLegacyFullscreenPref_WhenWindowModeNotSaved()
         {
+            PlayerPrefs.SetInt("opt_window_mode_default_v2", 1);
             PlayerPrefs.DeleteKey("opt_window_mode");
             PlayerPrefs.SetInt("opt_fullscreen", 0);
             PlayerPrefs.Save();
@@ -58,6 +60,20 @@ namespace GrassSim.Editor.Tests
 
             Assert.AreEqual(GameSettings.DisplayWindowMode.Windowed, GameSettings.WindowMode);
             Assert.IsFalse(GameSettings.Fullscreen);
+        }
+
+        [Test]
+        public void Load_FirstRun_AppliesBorderlessFullscreenDefault()
+        {
+            PlayerPrefs.DeleteKey("opt_window_mode_default_v2");
+            PlayerPrefs.DeleteKey("opt_window_mode");
+            PlayerPrefs.SetInt("opt_fullscreen", 0);
+            PlayerPrefs.Save();
+
+            GameSettings.Load();
+
+            Assert.AreEqual(GameSettings.DisplayWindowMode.BorderlessFullscreen, GameSettings.WindowMode);
+            Assert.IsTrue(GameSettings.Fullscreen);
         }
     }
 }

@@ -18,14 +18,47 @@ public sealed class ExternalAuthBroker(
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly ExternalAuthOptions _options = options;
     private readonly ILogger<ExternalAuthBroker> _logger = logger;
+    private readonly object _flowsLock = new();
+    private readonly Dictionary<string, PendingAuthFlow> _flowsById = new(StringComparer.Ordinal);
+
+    private sealed class PendingAuthFlow
+    {
+        public required string FlowId { get; init; }
+        public required string Provider { get; init; }
+        public required string State { get; init; }
+        public required DateTimeOffset ExpiresAtUtc { get; init; }
+        public string Code { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
+        public PendingAuthFlowState FlowState { get; set; } = PendingAuthFlowState.Pending;
+    }
+
+    private enum PendingAuthFlowState
+    {
+        Pending = 0,
+        Ready = 1,
+        Exchanging = 2,
+        Failed = 3,
+        Consumed = 4
+    }
+
+    internal sealed record PendingAuthFlowCode(string FlowId, string Provider, string Code);
 
     public bool IsEnabled => _options.Enabled;
 
     public ServiceResult<string> BuildStartRedirectUrl(string rawProvider, HttpRequest request)
     {
+        ServiceResult<StartExternalAuthFlowResponse> flow = StartFlow(rawProvider, request);
+        if (!flow.Ok || flow.Payload == null)
+            return BuildErrorResult<string>(flow.StatusCode, flow.Error);
+
+        return ServiceResult<string>.Success(flow.Payload.AuthUrl);
+    }
+
+    public ServiceResult<StartExternalAuthFlowResponse> StartFlow(string rawProvider, HttpRequest request)
+    {
         if (!_options.Enabled)
         {
-            return ServiceResult<string>.Failure(
+            return ServiceResult<StartExternalAuthFlowResponse>.Failure(
                 StatusCodes.Status503ServiceUnavailable,
                 "auth_broker_disabled",
                 "External auth broker is disabled."
@@ -34,15 +67,18 @@ public sealed class ExternalAuthBroker(
 
         if (!TryResolveProvider(rawProvider, out ExternalAuthProviderOptions provider, out string providerError))
         {
-            return ServiceResult<string>.Failure(
+            return ServiceResult<StartExternalAuthFlowResponse>.Failure(
                 StatusCodes.Status400BadRequest,
                 "auth_provider_not_supported",
                 providerError
             );
         }
 
+        CleanupExpiredFlows();
+
+        string flowId = BuildFlowId();
         string callbackUrl = _options.BuildCallbackUrl(request, provider.Name);
-        string state = BuildState(provider.Name);
+        string state = BuildState(provider.Name, flowId);
 
         var query = new Dictionary<string, string?>
         {
@@ -64,17 +100,208 @@ public sealed class ExternalAuthBroker(
                 break;
         }
 
-        string redirectUrl = QueryHelpers.AddQueryString(GetAuthorizationEndpoint(provider), query);
-        return ServiceResult<string>.Success(redirectUrl);
+        string authUrl = QueryHelpers.AddQueryString(GetAuthorizationEndpoint(provider), query);
+        DateTimeOffset expiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(_options.StateTtlSeconds);
+
+        lock (_flowsLock)
+        {
+            _flowsById[flowId] = new PendingAuthFlow
+            {
+                FlowId = flowId,
+                Provider = provider.Name,
+                State = state,
+                ExpiresAtUtc = expiresAtUtc,
+                FlowState = PendingAuthFlowState.Pending
+            };
+        }
+
+        return ServiceResult<StartExternalAuthFlowResponse>.Success(
+            new StartExternalAuthFlowResponse(
+                Provider: provider.Name,
+                FlowId: flowId,
+                AuthUrl: authUrl,
+                ExpiresAtUnix: expiresAtUtc.ToUnixTimeSeconds()
+            )
+        );
+    }
+
+    public ServiceResult<ExternalAuthFlowStatusResponse> GetFlowStatus(string flowId)
+    {
+        CleanupExpiredFlows();
+
+        if (string.IsNullOrWhiteSpace(flowId))
+        {
+            return ServiceResult<ExternalAuthFlowStatusResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "auth_flow_id_required",
+                "Field 'flow_id' is required."
+            );
+        }
+
+        string normalized = flowId.Trim();
+        lock (_flowsLock)
+        {
+            if (!_flowsById.TryGetValue(normalized, out PendingAuthFlow? flow))
+            {
+                return ServiceResult<ExternalAuthFlowStatusResponse>.Failure(
+                    StatusCodes.Status404NotFound,
+                    "auth_flow_not_found",
+                    "Auth flow not found or expired."
+                );
+            }
+
+            if (DateTimeOffset.UtcNow > flow.ExpiresAtUtc)
+            {
+                _flowsById.Remove(normalized);
+                return ServiceResult<ExternalAuthFlowStatusResponse>.Failure(
+                    StatusCodes.Status410Gone,
+                    "auth_flow_expired",
+                    "Auth flow expired. Start login again."
+                );
+            }
+
+            return flow.FlowState switch
+            {
+                PendingAuthFlowState.Pending => ServiceResult<ExternalAuthFlowStatusResponse>.Success(
+                    new ExternalAuthFlowStatusResponse(
+                        FlowId: normalized,
+                        Status: "pending",
+                        Message: "Waiting for provider callback."
+                    ),
+                    statusCode: StatusCodes.Status202Accepted
+                ),
+                PendingAuthFlowState.Exchanging => ServiceResult<ExternalAuthFlowStatusResponse>.Success(
+                    new ExternalAuthFlowStatusResponse(
+                        FlowId: normalized,
+                        Status: "exchanging",
+                        Message: "Finalizing auth session."
+                    ),
+                    statusCode: StatusCodes.Status202Accepted
+                ),
+                PendingAuthFlowState.Ready => ServiceResult<ExternalAuthFlowStatusResponse>.Success(
+                    new ExternalAuthFlowStatusResponse(
+                        FlowId: normalized,
+                        Status: "ready",
+                        Message: "Provider callback received."
+                    )
+                ),
+                PendingAuthFlowState.Failed => ServiceResult<ExternalAuthFlowStatusResponse>.Failure(
+                    StatusCodes.Status400BadRequest,
+                    "auth_flow_failed",
+                    string.IsNullOrWhiteSpace(flow.ErrorMessage)
+                        ? "Auth flow failed."
+                        : flow.ErrorMessage
+                ),
+                PendingAuthFlowState.Consumed => ServiceResult<ExternalAuthFlowStatusResponse>.Failure(
+                    StatusCodes.Status409Conflict,
+                    "auth_flow_consumed",
+                    "Auth flow already consumed."
+                ),
+                _ => ServiceResult<ExternalAuthFlowStatusResponse>.Failure(
+                    StatusCodes.Status500InternalServerError,
+                    "auth_flow_invalid_state",
+                    "Auth flow state is invalid."
+                )
+            };
+        }
+    }
+
+    internal ServiceResult<PendingAuthFlowCode> TryStartFlowExchange(string flowId)
+    {
+        CleanupExpiredFlows();
+
+        if (string.IsNullOrWhiteSpace(flowId))
+        {
+            return ServiceResult<PendingAuthFlowCode>.Failure(
+                StatusCodes.Status400BadRequest,
+                "auth_flow_id_required",
+                "Field 'flow_id' is required."
+            );
+        }
+
+        string normalized = flowId.Trim();
+        lock (_flowsLock)
+        {
+            if (!_flowsById.TryGetValue(normalized, out PendingAuthFlow? flow))
+            {
+                return ServiceResult<PendingAuthFlowCode>.Failure(
+                    StatusCodes.Status404NotFound,
+                    "auth_flow_not_found",
+                    "Auth flow not found or expired."
+                );
+            }
+
+            if (DateTimeOffset.UtcNow > flow.ExpiresAtUtc)
+            {
+                _flowsById.Remove(normalized);
+                return ServiceResult<PendingAuthFlowCode>.Failure(
+                    StatusCodes.Status410Gone,
+                    "auth_flow_expired",
+                    "Auth flow expired. Start login again."
+                );
+            }
+
+            if (flow.FlowState != PendingAuthFlowState.Ready || string.IsNullOrWhiteSpace(flow.Code))
+            {
+                return ServiceResult<PendingAuthFlowCode>.Failure(
+                    StatusCodes.Status202Accepted,
+                    "auth_flow_pending",
+                    "Waiting for provider callback."
+                );
+            }
+
+            flow.FlowState = PendingAuthFlowState.Exchanging;
+            return ServiceResult<PendingAuthFlowCode>.Success(
+                new PendingAuthFlowCode(normalized, flow.Provider, flow.Code)
+            );
+        }
+    }
+
+    internal void CompleteFlowExchange(string flowId, bool success, string? errorMessage = null)
+    {
+        if (string.IsNullOrWhiteSpace(flowId))
+            return;
+
+        string normalized = flowId.Trim();
+        lock (_flowsLock)
+        {
+            if (!_flowsById.TryGetValue(normalized, out PendingAuthFlow? flow))
+                return;
+
+            if (success)
+            {
+                flow.FlowState = PendingAuthFlowState.Consumed;
+                _flowsById.Remove(normalized);
+                return;
+            }
+
+            flow.FlowState = PendingAuthFlowState.Failed;
+            flow.ErrorMessage = string.IsNullOrWhiteSpace(errorMessage)
+                ? "Auth session finalization failed."
+                : TrimTo(errorMessage, 240);
+        }
     }
 
     public string RenderCallbackPage(string rawProvider, HttpRequest request)
     {
         if (!_options.Enabled)
-            return BuildCallbackHtml(false, "Auth broker is disabled.", request.GetDisplayUrl());
+            return BuildCallbackHtml(
+                false,
+                "Auth broker is disabled.",
+                request.GetDisplayUrl(),
+                autoCloseAfterSeconds: 0
+            );
 
         if (!TryResolveProvider(rawProvider, out ExternalAuthProviderOptions provider, out string providerError))
-            return BuildCallbackHtml(false, providerError, request.GetDisplayUrl());
+            return BuildCallbackHtml(
+                false,
+                providerError,
+                request.GetDisplayUrl(),
+                autoCloseAfterSeconds: 0
+            );
+
+        string state = request.Query["state"].ToString();
+        bool stateValid = ValidateState(provider.Name, state, out string flowId);
 
         string error = request.Query["error"].ToString();
         if (!string.IsNullOrWhiteSpace(error))
@@ -83,16 +310,39 @@ public sealed class ExternalAuthBroker(
             string message = string.IsNullOrWhiteSpace(description)
                 ? $"Provider returned error: {error}"
                 : $"Provider returned error: {error} ({description})";
-            return BuildCallbackHtml(false, message, request.GetDisplayUrl());
+            RecordCallbackFailure(flowId, message);
+            return BuildCallbackHtml(
+                false,
+                message,
+                request.GetDisplayUrl(),
+                autoCloseAfterSeconds: 0
+            );
         }
 
         string code = request.Query["code"].ToString();
         if (string.IsNullOrWhiteSpace(code))
-            return BuildCallbackHtml(false, "Missing 'code' query parameter in callback URL.", request.GetDisplayUrl());
+        {
+            const string message = "Missing 'code' query parameter in callback URL.";
+            RecordCallbackFailure(flowId, message);
+            return BuildCallbackHtml(
+                false,
+                message,
+                request.GetDisplayUrl(),
+                autoCloseAfterSeconds: 0
+            );
+        }
 
-        string state = request.Query["state"].ToString();
-        if (!ValidateState(provider.Name, state))
-            return BuildCallbackHtml(false, "Invalid or expired OAuth state.", request.GetDisplayUrl());
+        if (!stateValid)
+        {
+            const string message = "Invalid or expired OAuth state.";
+            RecordCallbackFailure(flowId, message);
+            return BuildCallbackHtml(
+                false,
+                message,
+                request.GetDisplayUrl(),
+                autoCloseAfterSeconds: 0
+            );
+        }
 
         string copyUrl = QueryHelpers.AddQueryString(
             $"{request.Scheme}://{request.Host.Value}{request.Path.Value}",
@@ -102,10 +352,13 @@ public sealed class ExternalAuthBroker(
                 ["code"] = code
             }
         );
+
+        RecordCallbackSuccess(flowId, provider.Name, code);
         return BuildCallbackHtml(
             true,
-            "Login approved. Copy the URL below and return to the game.",
-            copyUrl
+            "Login approved. Return to the game, session should finalize automatically.",
+            copyUrl,
+            autoCloseAfterSeconds: 3
         );
     }
 
@@ -162,6 +415,82 @@ public sealed class ExternalAuthBroker(
             return BuildErrorResult<ExternalAuthSessionResponse>(identityResult.StatusCode, identityResult.Error);
 
         ExternalAuthSessionResponse session = BuildSession(provider.Name, identityResult.Payload, tokenResult.Payload);
+        return ServiceResult<ExternalAuthSessionResponse>.Success(session);
+    }
+
+    public async Task<ServiceResult<ExternalAuthSessionResponse>> ExchangeSteamSessionAsync(
+        ExchangeSteamExternalAuthRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled)
+        {
+            return ServiceResult<ExternalAuthSessionResponse>.Failure(
+                StatusCodes.Status503ServiceUnavailable,
+                "auth_broker_disabled",
+                "External auth broker is disabled."
+            );
+        }
+
+        if (!_options.Steam.IsConfigured)
+        {
+            return ServiceResult<ExternalAuthSessionResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "auth_provider_not_supported",
+                "Provider 'steam' is disabled or not configured on server."
+            );
+        }
+
+        string steamId = NormalizeSteamUserId(request.SteamId);
+        if (string.IsNullOrWhiteSpace(steamId))
+        {
+            return ServiceResult<ExternalAuthSessionResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "auth_missing_steam_id",
+                "Field 'steam_id' is required."
+            );
+        }
+
+        string sessionTicket = request.SessionTicket?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(sessionTicket))
+        {
+            return ServiceResult<ExternalAuthSessionResponse>.Failure(
+                StatusCodes.Status400BadRequest,
+                "auth_missing_session_ticket",
+                "Field 'session_ticket' is required."
+            );
+        }
+
+        ServiceResult<string> validation = await ValidateSteamTicketAsync(
+            steamId,
+            sessionTicket,
+            cancellationToken
+        );
+        if (!validation.Ok || string.IsNullOrWhiteSpace(validation.Payload))
+            return BuildErrorResult<ExternalAuthSessionResponse>(validation.StatusCode, validation.Error);
+
+        string validatedSteamId = validation.Payload;
+        if (!string.Equals(validatedSteamId, steamId, StringComparison.Ordinal))
+        {
+            return ServiceResult<ExternalAuthSessionResponse>.Failure(
+                StatusCodes.Status401Unauthorized,
+                "auth_steam_identity_mismatch",
+                "Steam ticket identity mismatch."
+            );
+        }
+
+        string displayName = TrimTo(request.DisplayName, 48);
+        ExternalAuthIdentity identity = new(
+            ProviderUserId: validatedSteamId,
+            DisplayName: displayName,
+            Email: string.Empty
+        );
+        ExternalAuthTokenPayload tokenPayload = new(
+            AccessToken: Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant(),
+            RefreshToken: string.Empty,
+            IdToken: string.Empty,
+            ExpiresIn: 86_400
+        );
+        ExternalAuthSessionResponse session = BuildSession("steam", identity, tokenPayload);
         return ServiceResult<ExternalAuthSessionResponse>.Success(session);
     }
 
@@ -327,6 +656,27 @@ public sealed class ExternalAuthBroker(
         return true;
     }
 
+    private static string NormalizeSteamUserId(string? rawSteamId)
+    {
+        if (string.IsNullOrWhiteSpace(rawSteamId))
+            return string.Empty;
+
+        string normalized = rawSteamId.Trim();
+        if (normalized.StartsWith("steam:", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[6..];
+
+        if (normalized.Length > 20)
+            normalized = normalized[..20];
+
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            if (!char.IsDigit(normalized[i]))
+                return string.Empty;
+        }
+
+        return normalized;
+    }
+
     private static string TrimTo(string? value, int maxLength)
     {
         string normalized = value?.Trim() ?? string.Empty;
@@ -374,12 +724,93 @@ public sealed class ExternalAuthBroker(
         return ServiceResult<TTo>.Failure(statusCode, resolved.Code, resolved.Message);
     }
 
-    private static string BuildCallbackHtml(bool success, string message, string urlToCopy)
+    private void CleanupExpiredFlows()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        lock (_flowsLock)
+        {
+            if (_flowsById.Count == 0)
+                return;
+
+            List<string>? toRemove = null;
+            foreach ((string flowId, PendingAuthFlow flow) in _flowsById)
+            {
+                if (now > flow.ExpiresAtUtc || flow.FlowState == PendingAuthFlowState.Consumed)
+                {
+                    toRemove ??= new List<string>();
+                    toRemove.Add(flowId);
+                }
+            }
+
+            if (toRemove == null)
+                return;
+
+            for (int i = 0; i < toRemove.Count; i++)
+                _flowsById.Remove(toRemove[i]);
+        }
+    }
+
+    private void RecordCallbackSuccess(string flowId, string provider, string code)
+    {
+        if (string.IsNullOrWhiteSpace(flowId))
+            return;
+
+        string normalizedFlowId = flowId.Trim();
+        string normalizedProvider = ExternalAuthOptions.NormalizeProvider(provider);
+        string normalizedCode = code?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedProvider) || string.IsNullOrWhiteSpace(normalizedCode))
+            return;
+
+        lock (_flowsLock)
+        {
+            if (!_flowsById.TryGetValue(normalizedFlowId, out PendingAuthFlow? flow))
+                return;
+            if (!string.Equals(flow.Provider, normalizedProvider, StringComparison.Ordinal))
+                return;
+
+            flow.Code = normalizedCode;
+            flow.ErrorMessage = string.Empty;
+            flow.FlowState = PendingAuthFlowState.Ready;
+        }
+    }
+
+    private void RecordCallbackFailure(string flowId, string message)
+    {
+        if (string.IsNullOrWhiteSpace(flowId))
+            return;
+
+        string normalizedFlowId = flowId.Trim();
+        lock (_flowsLock)
+        {
+            if (!_flowsById.TryGetValue(normalizedFlowId, out PendingAuthFlow? flow))
+                return;
+
+            flow.FlowState = PendingAuthFlowState.Failed;
+            flow.ErrorMessage = string.IsNullOrWhiteSpace(message)
+                ? "Auth callback failed."
+                : TrimTo(message, 240);
+        }
+    }
+
+    private static string BuildFlowId()
+    {
+        return Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+    }
+
+    private static string BuildCallbackHtml(
+        bool success,
+        string message,
+        string urlToCopy,
+        int autoCloseAfterSeconds)
     {
         string status = success ? "Success" : "Error";
         string color = success ? "#0f7a0f" : "#a41010";
         string safeMessage = WebUtility.HtmlEncode(message ?? string.Empty);
         string safeUrl = WebUtility.HtmlEncode(urlToCopy ?? string.Empty);
+        int closeSeconds = Math.Clamp(autoCloseAfterSeconds, 0, 30);
+        string closeScript = closeSeconds > 0
+            ? $"setTimeout(function(){{ window.close(); }}, {closeSeconds * 1000});"
+            : string.Empty;
         return $$"""
 <!doctype html>
 <html lang="en">
@@ -391,7 +822,7 @@ public sealed class ExternalAuthBroker(
 <body style="font-family:Segoe UI,Arial,sans-serif;background:#111;color:#eee;padding:24px;">
   <h1 style="color:{{color}};margin:0 0 8px 0;">{{status}}</h1>
   <p style="margin:0 0 16px 0;">{{safeMessage}}</p>
-  <p style="margin:0 0 8px 0;">Copy this URL and paste it in game:</p>
+  <p style="margin:0 0 8px 0;">Fallback: if game does not continue automatically, copy this URL and paste it in game:</p>
   <textarea id="callbackUrl" style="width:100%;height:86px;">{{safeUrl}}</textarea>
   <div style="margin-top:12px;">
     <button type="button" onclick="copyUrl()" style="padding:8px 14px;">Copy URL</button>
@@ -407,17 +838,18 @@ public sealed class ExternalAuthBroker(
         document.execCommand('copy');
       }
     }
+    {{closeScript}}
   </script>
 </body>
 </html>
 """;
     }
 
-    private string BuildState(string provider)
+    private string BuildState(string provider, string flowId)
     {
         string nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
         string issuedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
-        string payload = $"{provider}|{issuedAt}|{nonce}";
+        string payload = $"{provider}|{issuedAt}|{nonce}|{flowId}";
         string payloadEncoded = Base64UrlTextEncoder.Encode(Encoding.UTF8.GetBytes(payload));
 
         if (string.IsNullOrWhiteSpace(_options.StateSecret))
@@ -427,36 +859,45 @@ public sealed class ExternalAuthBroker(
         return $"{payloadEncoded}.{signature}";
     }
 
-    private bool ValidateState(string provider, string state)
+    private bool ValidateState(string provider, string state, out string flowId)
     {
+        flowId = string.Empty;
         if (string.IsNullOrWhiteSpace(state))
             return false;
 
-        if (string.IsNullOrWhiteSpace(_options.StateSecret))
-            return true;
-
-        string[] chunks = state.Split('.', 2, StringSplitOptions.RemoveEmptyEntries);
-        if (chunks.Length != 2)
-            return false;
-
         string payload;
+        string signature = string.Empty;
+        string encodedPayload = state;
+        if (!string.IsNullOrWhiteSpace(_options.StateSecret))
+        {
+            string[] chunks = state.Split('.', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (chunks.Length != 2)
+                return false;
+
+            encodedPayload = chunks[0];
+            signature = chunks[1];
+        }
+
         try
         {
-            payload = Encoding.UTF8.GetString(Base64UrlTextEncoder.Decode(chunks[0]));
+            payload = Encoding.UTF8.GetString(Base64UrlTextEncoder.Decode(encodedPayload));
         }
         catch
         {
             return false;
         }
 
-        string expectedSignature = ComputeStateSignature(payload);
-        byte[] providedBytes = Encoding.UTF8.GetBytes(chunks[1]);
-        byte[] expectedBytes = Encoding.UTF8.GetBytes(expectedSignature);
-        if (!CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes))
-            return false;
+        if (!string.IsNullOrWhiteSpace(_options.StateSecret))
+        {
+            string expectedSignature = ComputeStateSignature(payload);
+            byte[] providedBytes = Encoding.UTF8.GetBytes(signature);
+            byte[] expectedBytes = Encoding.UTF8.GetBytes(expectedSignature);
+            if (!CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes))
+                return false;
+        }
 
-        string[] payloadParts = payload.Split('|', 3, StringSplitOptions.None);
-        if (payloadParts.Length != 3)
+        string[] payloadParts = payload.Split('|', 4, StringSplitOptions.None);
+        if (payloadParts.Length < 3)
             return false;
         if (!string.Equals(payloadParts[0], provider, StringComparison.Ordinal))
             return false;
@@ -465,7 +906,12 @@ public sealed class ExternalAuthBroker(
             return false;
 
         long age = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - issuedAt;
-        return age >= 0 && age <= _options.StateTtlSeconds;
+        if (age < 0 || age > _options.StateTtlSeconds)
+            return false;
+
+        if (payloadParts.Length == 4)
+            flowId = payloadParts[3];
+        return true;
     }
 
     private string ComputeStateSignature(string payload)
@@ -685,6 +1131,112 @@ public sealed class ExternalAuthBroker(
                 StatusCodes.Status502BadGateway,
                 "auth_userinfo_invalid_response",
                 "Provider user info response could not be parsed."
+            );
+        }
+    }
+
+    private async Task<ServiceResult<string>> ValidateSteamTicketAsync(
+        string expectedSteamId,
+        string sessionTicket,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.Steam.IsConfigured)
+        {
+            return ServiceResult<string>.Failure(
+                StatusCodes.Status400BadRequest,
+                "auth_provider_not_supported",
+                "Provider 'steam' is disabled or not configured on server."
+            );
+        }
+
+        string url = QueryHelpers.AddQueryString(
+            "https://api.steampowered.com/ISteamUserAuth/AuthenticateUserTicket/v1/",
+            new Dictionary<string, string?>
+            {
+                ["key"] = _options.Steam.WebApiKey.Trim(),
+                ["appid"] = _options.Steam.AppId.ToString(CultureInfo.InvariantCulture),
+                ["ticket"] = sessionTicket
+            }
+        );
+
+        using HttpClient client = CreateHttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using HttpResponseMessage response = await client.SendAsync(request, cancellationToken);
+        string raw = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return ServiceResult<string>.Failure(
+                StatusCodes.Status502BadGateway,
+                "auth_steam_validation_failed",
+                ExtractProviderError(raw, response.ReasonPhrase)
+            );
+        }
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(raw);
+            JsonElement root = doc.RootElement;
+            if (!root.TryGetProperty("response", out JsonElement responseNode))
+            {
+                return ServiceResult<string>.Failure(
+                    StatusCodes.Status502BadGateway,
+                    "auth_steam_invalid_response",
+                    "Steam validation response is missing 'response' object."
+                );
+            }
+
+            if (!responseNode.TryGetProperty("params", out JsonElement paramsNode))
+            {
+                return ServiceResult<string>.Failure(
+                    StatusCodes.Status401Unauthorized,
+                    "auth_steam_ticket_invalid",
+                    "Steam ticket validation failed."
+                );
+            }
+
+            string result = GetJsonString(paramsNode, "result");
+            if (!string.Equals(result, "OK", StringComparison.OrdinalIgnoreCase))
+            {
+                string errorMessage = FirstNonEmpty(
+                    GetJsonString(paramsNode, "error"),
+                    GetJsonString(paramsNode, "message"),
+                    "Steam ticket validation failed."
+                );
+                return ServiceResult<string>.Failure(
+                    StatusCodes.Status401Unauthorized,
+                    "auth_steam_ticket_invalid",
+                    errorMessage
+                );
+            }
+
+            string validatedSteamId = NormalizeSteamUserId(GetJsonString(paramsNode, "steamid"));
+            if (string.IsNullOrWhiteSpace(validatedSteamId))
+            {
+                return ServiceResult<string>.Failure(
+                    StatusCodes.Status401Unauthorized,
+                    "auth_steam_missing_steamid",
+                    "Steam validation response did not include steamid."
+                );
+            }
+
+            if (!string.Equals(validatedSteamId, expectedSteamId, StringComparison.Ordinal))
+            {
+                return ServiceResult<string>.Failure(
+                    StatusCodes.Status401Unauthorized,
+                    "auth_steam_identity_mismatch",
+                    "Steam ticket identity mismatch."
+                );
+            }
+
+            return ServiceResult<string>.Success(validatedSteamId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Steam validation parse failed.");
+            return ServiceResult<string>.Failure(
+                StatusCodes.Status502BadGateway,
+                "auth_steam_invalid_response",
+                "Steam validation response could not be parsed."
             );
         }
     }

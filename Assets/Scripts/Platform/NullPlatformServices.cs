@@ -33,4 +33,12 @@ public sealed class NullPlatformServices : IPlatformServices
     {
         return false;
     }
+
+    public bool TryGetExternalAuthTicket(out string provider, out string providerUserId, out string sessionTicket)
+    {
+        provider = string.Empty;
+        providerUserId = string.Empty;
+        sessionTicket = string.Empty;
+        return false;
+    }
 }

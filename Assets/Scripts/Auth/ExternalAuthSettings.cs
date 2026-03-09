@@ -14,11 +14,16 @@ namespace GrassSim.Auth
             public bool enabled = true;
             public string broker_base_url = string.Empty;
             public string provider_start_path_template = "/auth/external/{provider}/start";
+            public string flow_start_path_template = "/auth/external/{provider}/flow/start";
+            public string flow_session_path_template = "/auth/external/flow/{flow_id}/session";
+            public string steam_session_exchange_path = "/auth/external/steam/session";
             public string exchange_path = "/auth/external/exchange";
             public string refresh_path = "/auth/external/refresh";
             public string logout_path = "/auth/external/logout";
             public string callback_code_query_key = "code";
             public string callback_provider_query_key = "provider";
+            public bool steam_auto_sign_in_enabled = true;
+            public float flow_poll_interval_seconds = 0.5f;
             public float timeout_seconds = 8f;
             public float refresh_lead_seconds = 90f;
             public float clipboard_poll_interval_seconds = 0.5f;
@@ -81,6 +86,17 @@ namespace GrassSim.Auth
             }
         }
 
+        public static float FlowPollIntervalSeconds
+        {
+            get
+            {
+                float value = GetConfig().flow_poll_interval_seconds;
+                if (value <= 0f)
+                    value = 0.5f;
+                return Mathf.Clamp(value, 0.2f, 5f);
+            }
+        }
+
         public static float ClipboardPollIntervalSeconds
         {
             get
@@ -109,6 +125,47 @@ namespace GrassSim.Auth
             string path = template.Replace("{provider}", Uri.EscapeDataString(normalizedProvider));
             return JoinUrl(baseUrl, path);
         }
+
+        public static string BuildProviderFlowStartUrl(string provider)
+        {
+            string baseUrl = BrokerBaseUrl;
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                return string.Empty;
+
+            string normalizedProvider = NormalizeProvider(provider);
+            if (string.IsNullOrWhiteSpace(normalizedProvider))
+                return string.Empty;
+
+            string template = GetConfig().flow_start_path_template;
+            if (string.IsNullOrWhiteSpace(template))
+                template = "/auth/external/{provider}/flow/start";
+
+            string path = template.Replace("{provider}", Uri.EscapeDataString(normalizedProvider));
+            return JoinUrl(baseUrl, path);
+        }
+
+        public static string BuildFlowSessionUrl(string flowId)
+        {
+            string baseUrl = BrokerBaseUrl;
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                return string.Empty;
+            if (string.IsNullOrWhiteSpace(flowId))
+                return string.Empty;
+
+            string template = GetConfig().flow_session_path_template;
+            if (string.IsNullOrWhiteSpace(template))
+                template = "/auth/external/flow/{flow_id}/session";
+
+            string path = template.Replace("{flow_id}", Uri.EscapeDataString(flowId.Trim()));
+            return JoinUrl(baseUrl, path);
+        }
+
+        public static string BuildSteamSessionExchangeUrl()
+        {
+            return BuildAbsolutePath(GetConfig().steam_session_exchange_path);
+        }
+
+        public static bool SteamAutoSignInEnabled => GetConfig().steam_auto_sign_in_enabled;
 
         public static string BuildExchangeUrl()
         {

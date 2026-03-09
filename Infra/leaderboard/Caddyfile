@@ -1,6 +1,13 @@
 {$LEADERBOARD_DOMAIN} {
   encode gzip zstd
-  reverse_proxy api:8080
+  route {
+    handle_path /legal/* {
+      root * /srv/legal
+      file_server
+    }
+
+    reverse_proxy api:8080
+  }
 
   @preflight method OPTIONS
   header @preflight Access-Control-Allow-Origin "*"

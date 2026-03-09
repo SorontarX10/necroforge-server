@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
 
 public sealed class SteamPlatformServices : IPlatformServices
@@ -13,6 +14,7 @@ public sealed class SteamPlatformServices : IPlatformServices
     private readonly MethodInfo runCallbacksMethod;
     private readonly MethodInfo getSteamIdMethod;
     private readonly MethodInfo getPersonaNameMethod;
+    private readonly MethodInfo getAuthSessionTicketMethod;
     private readonly MethodInfo openWebOverlayMethod;
     private readonly MethodInfo openWebOverlayWithModeMethod;
     private readonly MethodInfo openGenericOverlayMethod;
@@ -32,6 +34,7 @@ public sealed class SteamPlatformServices : IPlatformServices
         runCallbacksMethod = GetStaticMethod(steamApiType, "RunCallbacks");
         getSteamIdMethod = GetStaticMethod(steamUserType, "GetSteamID");
         getPersonaNameMethod = GetStaticMethod(steamFriendsType, "GetPersonaName");
+        getAuthSessionTicketMethod = FindGetAuthSessionTicketMethod(steamUserType);
 
         openWebOverlayMethod = GetStaticMethod(
             steamFriendsType,
@@ -191,6 +194,45 @@ public sealed class SteamPlatformServices : IPlatformServices
         return false;
     }
 
+    public bool TryGetExternalAuthTicket(out string provider, out string providerUserId, out string sessionTicket)
+    {
+        provider = "steam";
+        providerUserId = string.Empty;
+        sessionTicket = string.Empty;
+
+        if (!IsInitialized || getSteamIdMethod == null || getAuthSessionTicketMethod == null)
+            return false;
+
+        try
+        {
+            object rawSteamId = getSteamIdMethod.Invoke(null, null);
+            string steamId = ExtractSteamId(rawSteamId);
+            if (string.IsNullOrWhiteSpace(steamId))
+                return false;
+
+            byte[] ticketBuffer = new byte[2048];
+            object[] args = BuildAuthTicketArgs(getAuthSessionTicketMethod, ticketBuffer);
+            if (args == null)
+                return false;
+
+            getAuthSessionTicketMethod.Invoke(null, args);
+            int ticketSize = ReadAuthTicketSize(getAuthSessionTicketMethod, args);
+            if (ticketSize <= 0 || ticketSize > ticketBuffer.Length)
+                return false;
+
+            providerUserId = steamId;
+            sessionTicket = ConvertToHex(ticketBuffer, ticketSize);
+            return !string.IsNullOrWhiteSpace(sessionTicket);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[Platform/Steam] GetAuthSessionTicket failed: {ex.Message}");
+            providerUserId = string.Empty;
+            sessionTicket = string.Empty;
+            return false;
+        }
+    }
+
     private static Type FindType(string fullTypeName)
     {
         if (string.IsNullOrWhiteSpace(fullTypeName))
@@ -244,6 +286,105 @@ public sealed class SteamPlatformServices : IPlatformServices
 
             return method;
         }
+
+        return null;
+    }
+
+    private static MethodInfo FindGetAuthSessionTicketMethod(Type steamUserType)
+    {
+        if (steamUserType == null)
+            return null;
+
+        BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
+        MethodInfo[] methods = steamUserType.GetMethods(flags);
+        for (int i = 0; i < methods.Length; i++)
+        {
+            MethodInfo method = methods[i];
+            if (!string.Equals(method.Name, "GetAuthSessionTicket", StringComparison.Ordinal))
+                continue;
+
+            ParameterInfo[] parameters = method.GetParameters();
+            if (parameters.Length < 3 || parameters.Length > 4)
+                continue;
+            if (parameters[0].ParameterType != typeof(byte[]))
+                continue;
+            if (parameters[1].ParameterType != typeof(int))
+                continue;
+
+            Type ticketSizeType = parameters[2].ParameterType.IsByRef
+                ? parameters[2].ParameterType.GetElementType()
+                : parameters[2].ParameterType;
+            if (ticketSizeType != typeof(uint))
+                continue;
+
+            if (parameters.Length == 4 && !parameters[3].ParameterType.IsByRef)
+                continue;
+
+            return method;
+        }
+
+        return null;
+    }
+
+    private static object[] BuildAuthTicketArgs(MethodInfo method, byte[] ticketBuffer)
+    {
+        if (method == null || ticketBuffer == null || ticketBuffer.Length == 0)
+            return null;
+
+        ParameterInfo[] parameters = method.GetParameters();
+        object[] args = new object[parameters.Length];
+        args[0] = ticketBuffer;
+        args[1] = ticketBuffer.Length;
+        args[2] = 0u;
+
+        if (parameters.Length == 4)
+        {
+            Type identityType = parameters[3].ParameterType.GetElementType();
+            args[3] = identityType == null ? null : CreateDefaultValue(identityType);
+        }
+
+        return args;
+    }
+
+    private static int ReadAuthTicketSize(MethodInfo method, object[] args)
+    {
+        if (method == null || args == null || args.Length < 3)
+            return 0;
+
+        try
+        {
+            object sizeValue = args[2];
+            return Convert.ToInt32(sizeValue);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static string ConvertToHex(byte[] data, int length)
+    {
+        if (data == null || data.Length == 0 || length <= 0)
+            return string.Empty;
+
+        int clampedLength = Mathf.Clamp(length, 0, data.Length);
+        StringBuilder builder = new StringBuilder(clampedLength * 2);
+        for (int i = 0; i < clampedLength; i++)
+            builder.Append(data[i].ToString("x2"));
+        return builder.ToString();
+    }
+
+    private static object CreateDefaultValue(Type type)
+    {
+        if (type == null)
+            return null;
+
+        if (type.IsValueType)
+            return Activator.CreateInstance(type);
+
+        ConstructorInfo ctor = type.GetConstructor(Type.EmptyTypes);
+        if (ctor != null)
+            return ctor.Invoke(null);
 
         return null;
     }

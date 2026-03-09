@@ -36,6 +36,12 @@
 - Reworked VPS setup guide for a fresh Oracle rebuild flow using DuckDNS free subdomain (`Docs/LEADERBOARD_VPS_SETUP_PL.md`).
 - Added helper script to install DuckDNS auto-update cron on Linux VPS (`Infra/leaderboard/scripts/install_duckdns_cron.sh`).
 
+### Legal Hosting
+- Added static legal HTML pages served by Caddy under `/legal/privacy-policy.html`, `/legal/eula.html`, and `/legal/third-party-licenses.html` (`Infra/leaderboard/legal/*`).
+- Updated Caddy/docker-compose deployment to mount and serve static legal assets from the VPS stack.
+- Rewired main menu legal buttons to hosted URLs only (removed local markdown fallback flow from player path).
+- Added `Tools/leaderboard/legal_links_check.ps1` for HTTPS/redirect/404 validation of legal URLs.
+
 ### Release
 - Bumped application version to `0.7.2`.
 - Updated test sandbox version fallback to `0.7.2`.
