@@ -58,6 +58,8 @@ public class MainMenuController : MonoBehaviour
     private Button runtimeAuthLoginGateFacebookButton;
 
     public float clickDelay = 0.3f;
+    private bool authUiInitialized;
+    private bool suppressAuthGateDuringSceneTransition;
 
     void Awake()
     {
@@ -72,6 +74,20 @@ public class MainMenuController : MonoBehaviour
         SetupLegalLinkBindings();
         SetupAuthUiBindings();
         ApplyMenuAccessGate();
+    }
+
+    private void OnEnable()
+    {
+        if (authUiInitialized)
+            RefreshAuthStatusLabel();
+    }
+
+    private IEnumerator Start()
+    {
+        // One-frame delayed refresh to avoid timing glitches with intro/menu activation order.
+        yield return null;
+        if (authUiInitialized)
+            RefreshAuthStatusLabel();
     }
 
     private void OnDestroy()
@@ -113,6 +129,8 @@ public class MainMenuController : MonoBehaviour
         if (!EnsureMenuUnlockedByAuthGate())
             return;
 
+        suppressAuthGateDuringSceneTransition = true;
+        SetLoginGateVisible(false);
         newGameButton.interactable = false;
         StartCoroutine(StartNewGameRoutine());
     }
@@ -429,6 +447,7 @@ public class MainMenuController : MonoBehaviour
     private void SetupAuthUiBindings()
     {
         ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
+        authUiInitialized = false;
 
         bool authConfigured = IsAuthConfigured();
         if (!authConfigured)
@@ -470,6 +489,7 @@ public class MainMenuController : MonoBehaviour
         BindAuthButton(runtimeAuthLoginGateMicrosoftButton, OnAuthMicrosoftClicked);
         BindAuthButton(runtimeAuthLoginGateFacebookButton, OnAuthFacebookClicked);
 
+        authUiInitialized = true;
         ExternalAuthService.Initialize();
         ExternalAuthService.StateChanged += RefreshAuthStatusLabel;
         RefreshAuthStatusLabel();
@@ -486,6 +506,9 @@ public class MainMenuController : MonoBehaviour
 
     private void RefreshAuthStatusLabel()
     {
+        if (!authUiInitialized)
+            return;
+
         bool authConfigured = IsAuthConfigured();
         bool hasSession = ExternalAuthService.IsSignedIn;
         bool lockedByGate = IsMenuLockedByAuthGate();
@@ -518,7 +541,10 @@ public class MainMenuController : MonoBehaviour
         }
 
         ApplyProviderButtonAvailability();
-        SetLoginGateVisible(lockedByGate);
+        if (suppressAuthGateDuringSceneTransition)
+            SetLoginGateVisible(false);
+        else
+            SetLoginGateVisible(lockedByGate);
         ApplyMenuAccessGate();
     }
 
