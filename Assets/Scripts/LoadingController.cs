@@ -12,9 +12,33 @@ public class LoadingController : MonoBehaviour
 
     [Header("Timing")]
     [SerializeField] private float minLoadingTime = 1.0f;
+    [SerializeField] private float worldReadyTimeoutSeconds = 20f;
+
+    private bool sawGameSceneLoad;
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (!string.Equals(scene.name, "Game", System.StringComparison.Ordinal))
+            return;
+
+        sawGameSceneLoad = true;
+        if (scene.IsValid() && scene.isLoaded)
+            SceneManager.SetActiveScene(scene);
+    }
 
     void Start()
     {
+        sawGameSceneLoad = false;
         loadingCamera.gameObject.SetActive(true);
         loadingCanvas.gameObject.SetActive(true);
 
@@ -56,8 +80,9 @@ public class LoadingController : MonoBehaviour
         }
 
         op.allowSceneActivation = true;
-        yield return new WaitUntil(() => ChunkedProceduralLevelGenerator.WorldReady);
+        yield return new WaitUntil(() => op.isDone || sawGameSceneLoad);
         EnsureGameSceneIsActive();
+        yield return WaitForWorldReady();
 
         if (progressFill != null)
             progressFill.fillAmount = 1f;
@@ -87,5 +112,32 @@ public class LoadingController : MonoBehaviour
         AsyncOperation unload = SceneManager.UnloadSceneAsync(loadingScene);
         if (unload != null)
             yield return unload;
+    }
+
+    private IEnumerator WaitForWorldReady()
+    {
+        if (ChunkedProceduralLevelGenerator.WorldReady)
+            yield break;
+
+        float timeout = Mathf.Max(0f, worldReadyTimeoutSeconds);
+        if (timeout <= 0f)
+        {
+            yield return new WaitUntil(() => ChunkedProceduralLevelGenerator.WorldReady);
+            yield break;
+        }
+
+        float elapsed = 0f;
+        while (!ChunkedProceduralLevelGenerator.WorldReady && elapsed < timeout)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (!ChunkedProceduralLevelGenerator.WorldReady)
+        {
+            Debug.LogWarning(
+                $"[Loading] WorldReady timeout after {timeout:0.0}s. Continuing to avoid black-screen lock."
+            );
+        }
     }
 }
