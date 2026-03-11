@@ -273,6 +273,9 @@ Ustaw:
 {
   "enabled": true,
   "broker_base_url": "https://necroforge-lb.duckdns.org",
+  "google_login_enabled": true,
+  "microsoft_login_enabled": false,
+  "facebook_login_enabled": false,
   "provider_start_path_template": "/auth/external/{provider}/start",
   "flow_start_path_template": "/auth/external/{provider}/flow/start",
   "flow_session_path_template": "/auth/external/flow/{flow_id}/session",
@@ -280,7 +283,7 @@ Ustaw:
   "exchange_path": "/auth/external/exchange",
   "refresh_path": "/auth/external/refresh",
   "logout_path": "/auth/external/logout",
-  "steam_auto_sign_in_enabled": true,
+  "steam_auto_sign_in_enabled": false,
   "flow_poll_interval_seconds": 0.5
 }
 ```

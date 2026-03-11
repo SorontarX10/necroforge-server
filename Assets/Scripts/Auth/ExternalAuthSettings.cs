@@ -13,6 +13,9 @@ namespace GrassSim.Auth
         {
             public bool enabled = true;
             public string broker_base_url = string.Empty;
+            public bool google_login_enabled = true;
+            public bool microsoft_login_enabled = false;
+            public bool facebook_login_enabled = false;
             public string provider_start_path_template = "/auth/external/{provider}/start";
             public string flow_start_path_template = "/auth/external/{provider}/flow/start";
             public string flow_session_path_template = "/auth/external/flow/{flow_id}/session";
@@ -22,7 +25,7 @@ namespace GrassSim.Auth
             public string logout_path = "/auth/external/logout";
             public string callback_code_query_key = "code";
             public string callback_provider_query_key = "provider";
-            public bool steam_auto_sign_in_enabled = true;
+            public bool steam_auto_sign_in_enabled = false;
             public float flow_poll_interval_seconds = 0.5f;
             public float timeout_seconds = 8f;
             public float refresh_lead_seconds = 90f;
@@ -117,6 +120,8 @@ namespace GrassSim.Auth
             string normalizedProvider = NormalizeProvider(provider);
             if (string.IsNullOrWhiteSpace(normalizedProvider))
                 return string.Empty;
+            if (!IsProviderLoginEnabled(normalizedProvider))
+                return string.Empty;
 
             string template = GetConfig().provider_start_path_template;
             if (string.IsNullOrWhiteSpace(template))
@@ -134,6 +139,8 @@ namespace GrassSim.Auth
 
             string normalizedProvider = NormalizeProvider(provider);
             if (string.IsNullOrWhiteSpace(normalizedProvider))
+                return string.Empty;
+            if (!IsProviderLoginEnabled(normalizedProvider))
                 return string.Empty;
 
             string template = GetConfig().flow_start_path_template;
@@ -166,6 +173,18 @@ namespace GrassSim.Auth
         }
 
         public static bool SteamAutoSignInEnabled => GetConfig().steam_auto_sign_in_enabled;
+
+        public static bool IsProviderLoginEnabled(string provider)
+        {
+            string normalized = NormalizeProvider(provider);
+            return normalized switch
+            {
+                "google" => GetConfig().google_login_enabled,
+                "microsoft" => GetConfig().microsoft_login_enabled,
+                "facebook" => GetConfig().facebook_login_enabled,
+                _ => false
+            };
+        }
 
         public static string BuildExchangeUrl()
         {

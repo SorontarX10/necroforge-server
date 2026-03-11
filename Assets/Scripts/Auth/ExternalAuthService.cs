@@ -151,6 +151,11 @@ namespace GrassSim.Auth
                 SetState(ExternalAuthState.Error, "Invalid auth provider.");
                 return;
             }
+            if (!ExternalAuthSettings.IsProviderLoginEnabled(normalizedProvider))
+            {
+                SetState(ExternalAuthState.Error, $"Provider '{normalizedProvider}' is disabled in client config.");
+                return;
+            }
 
             string startUrl = ExternalAuthSettings.BuildProviderStartUrl(normalizedProvider);
             if (string.IsNullOrWhiteSpace(startUrl))

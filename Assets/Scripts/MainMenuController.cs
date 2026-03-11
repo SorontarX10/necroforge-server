@@ -440,9 +440,10 @@ public class MainMenuController : MonoBehaviour
         }
 
         bool missingAccountUi = authStatusText == null || authLogoutButton == null;
-        bool missingLoginButtons = authLoginGoogleButton == null
-            || authLoginMicrosoftButton == null
-            || authLoginFacebookButton == null;
+        bool missingLoginButtons =
+            (IsProviderLoginEnabled("google") && authLoginGoogleButton == null)
+            || (IsProviderLoginEnabled("microsoft") && authLoginMicrosoftButton == null)
+            || (IsProviderLoginEnabled("facebook") && authLoginFacebookButton == null);
         if (createAuthPanelAtRuntime || missingAccountUi || missingLoginButtons)
             EnsureRuntimeAuthControls();
 
@@ -459,6 +460,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         EnsureRuntimeLoginGateControls();
+        ApplyProviderButtonAvailability();
 
         BindAuthButton(authLoginGoogleButton, OnAuthGoogleClicked);
         BindAuthButton(authLoginMicrosoftButton, OnAuthMicrosoftClicked);
@@ -504,12 +506,7 @@ public class MainMenuController : MonoBehaviour
         if (authConfigured && hasSession)
         {
             SetAuthUiVisible(true);
-            if (authLoginGoogleButton != null)
-                authLoginGoogleButton.gameObject.SetActive(false);
-            if (authLoginMicrosoftButton != null)
-                authLoginMicrosoftButton.gameObject.SetActive(false);
-            if (authLoginFacebookButton != null)
-                authLoginFacebookButton.gameObject.SetActive(false);
+            HideInteractiveProviderButtons();
             if (authStatusText != null)
                 authStatusText.gameObject.SetActive(true);
             if (authLogoutButton != null)
@@ -520,6 +517,7 @@ public class MainMenuController : MonoBehaviour
             SetAuthUiVisible(false);
         }
 
+        ApplyProviderButtonAvailability();
         SetLoginGateVisible(lockedByGate);
         ApplyMenuAccessGate();
     }
@@ -532,11 +530,11 @@ public class MainMenuController : MonoBehaviour
         if (authStatusText != null)
             authStatusText.gameObject.SetActive(visible);
         if (authLoginGoogleButton != null)
-            authLoginGoogleButton.gameObject.SetActive(visible);
+            authLoginGoogleButton.gameObject.SetActive(visible && IsProviderLoginEnabled("google"));
         if (authLoginMicrosoftButton != null)
-            authLoginMicrosoftButton.gameObject.SetActive(visible);
+            authLoginMicrosoftButton.gameObject.SetActive(visible && IsProviderLoginEnabled("microsoft"));
         if (authLoginFacebookButton != null)
-            authLoginFacebookButton.gameObject.SetActive(visible);
+            authLoginFacebookButton.gameObject.SetActive(visible && IsProviderLoginEnabled("facebook"));
         if (authLogoutButton != null)
             authLogoutButton.gameObject.SetActive(visible);
     }
@@ -553,7 +551,8 @@ public class MainMenuController : MonoBehaviour
     private bool IsAuthConfigured()
     {
         return ExternalAuthSettings.IsEnabled
-            && !string.IsNullOrWhiteSpace(ExternalAuthSettings.BrokerBaseUrl);
+            && !string.IsNullOrWhiteSpace(ExternalAuthSettings.BrokerBaseUrl)
+            && HasAnyInteractiveAuthProviderEnabled();
     }
 
     private bool IsMenuLockedByAuthGate()
@@ -696,11 +695,11 @@ public class MainMenuController : MonoBehaviour
 
     private void EnsureRuntimeAuthControls()
     {
-        if (authStatusText != null
-            && authLoginGoogleButton != null
-            && authLoginMicrosoftButton != null
-            && authLoginFacebookButton != null
-            && authLogoutButton != null)
+        bool hasGoogle = !IsProviderLoginEnabled("google") || authLoginGoogleButton != null;
+        bool hasMicrosoft = !IsProviderLoginEnabled("microsoft") || authLoginMicrosoftButton != null;
+        bool hasFacebook = !IsProviderLoginEnabled("facebook") || authLoginFacebookButton != null;
+        bool hasAccountUi = authStatusText != null && authLogoutButton != null;
+        if (hasAccountUi && hasGoogle && hasMicrosoft && hasFacebook)
         {
             return;
         }
@@ -758,11 +757,11 @@ public class MainMenuController : MonoBehaviour
         rowLayout.childForceExpandWidth = false;
         rowLayout.childForceExpandHeight = false;
 
-        if (authLoginGoogleButton == null)
+        if (IsProviderLoginEnabled("google") && authLoginGoogleButton == null)
             authLoginGoogleButton = CreateLegalButton(rowGo.transform, "AuthGoogleButton", "Google");
-        if (authLoginMicrosoftButton == null)
+        if (IsProviderLoginEnabled("microsoft") && authLoginMicrosoftButton == null)
             authLoginMicrosoftButton = CreateLegalButton(rowGo.transform, "AuthMicrosoftButton", "Microsoft");
-        if (authLoginFacebookButton == null)
+        if (IsProviderLoginEnabled("facebook") && authLoginFacebookButton == null)
             authLoginFacebookButton = CreateLegalButton(rowGo.transform, "AuthFacebookButton", "Facebook");
         if (authLogoutButton == null)
             authLogoutButton = CreateLegalButton(rowGo.transform, "AuthLogoutButton", "Logout");
@@ -885,12 +884,70 @@ public class MainMenuController : MonoBehaviour
         rowLayout.childForceExpandWidth = false;
         rowLayout.childForceExpandHeight = false;
 
-        runtimeAuthLoginGateGoogleButton = CreateLegalButton(rowGo.transform, "GateGoogle", "Google");
-        runtimeAuthLoginGateMicrosoftButton = CreateLegalButton(rowGo.transform, "GateMicrosoft", "Microsoft");
-        runtimeAuthLoginGateFacebookButton = CreateLegalButton(rowGo.transform, "GateFacebook", "Facebook");
+        if (IsProviderLoginEnabled("google"))
+            runtimeAuthLoginGateGoogleButton = CreateLegalButton(rowGo.transform, "GateGoogle", "Google");
+        if (IsProviderLoginEnabled("microsoft"))
+            runtimeAuthLoginGateMicrosoftButton = CreateLegalButton(rowGo.transform, "GateMicrosoft", "Microsoft");
+        if (IsProviderLoginEnabled("facebook"))
+            runtimeAuthLoginGateFacebookButton = CreateLegalButton(rowGo.transform, "GateFacebook", "Facebook");
 
         runtimeAuthLoginGatePanel.SetActive(false);
         runtimeAuthLoginGatePanel.transform.SetAsLastSibling();
+    }
+
+    private static bool IsProviderLoginEnabled(string provider)
+    {
+        return ExternalAuthSettings.IsProviderLoginEnabled(provider);
+    }
+
+    private bool HasAnyInteractiveAuthProviderEnabled()
+    {
+        return IsProviderLoginEnabled("google")
+            || IsProviderLoginEnabled("microsoft")
+            || IsProviderLoginEnabled("facebook");
+    }
+
+    private void ApplyProviderButtonAvailability()
+    {
+        if (!IsProviderLoginEnabled("google"))
+        {
+            if (authLoginGoogleButton != null)
+                authLoginGoogleButton.gameObject.SetActive(false);
+            if (runtimeAuthLoginGateGoogleButton != null)
+                runtimeAuthLoginGateGoogleButton.gameObject.SetActive(false);
+        }
+
+        if (!IsProviderLoginEnabled("microsoft"))
+        {
+            if (authLoginMicrosoftButton != null)
+                authLoginMicrosoftButton.gameObject.SetActive(false);
+            if (runtimeAuthLoginGateMicrosoftButton != null)
+                runtimeAuthLoginGateMicrosoftButton.gameObject.SetActive(false);
+        }
+
+        if (!IsProviderLoginEnabled("facebook"))
+        {
+            if (authLoginFacebookButton != null)
+                authLoginFacebookButton.gameObject.SetActive(false);
+            if (runtimeAuthLoginGateFacebookButton != null)
+                runtimeAuthLoginGateFacebookButton.gameObject.SetActive(false);
+        }
+    }
+
+    private void HideInteractiveProviderButtons()
+    {
+        if (authLoginGoogleButton != null)
+            authLoginGoogleButton.gameObject.SetActive(false);
+        if (authLoginMicrosoftButton != null)
+            authLoginMicrosoftButton.gameObject.SetActive(false);
+        if (authLoginFacebookButton != null)
+            authLoginFacebookButton.gameObject.SetActive(false);
+        if (runtimeAuthLoginGateGoogleButton != null)
+            runtimeAuthLoginGateGoogleButton.gameObject.SetActive(false);
+        if (runtimeAuthLoginGateMicrosoftButton != null)
+            runtimeAuthLoginGateMicrosoftButton.gameObject.SetActive(false);
+        if (runtimeAuthLoginGateFacebookButton != null)
+            runtimeAuthLoginGateFacebookButton.gameObject.SetActive(false);
     }
 
     private static TMP_Text CreateAuthGateTitleText(Transform parent)
