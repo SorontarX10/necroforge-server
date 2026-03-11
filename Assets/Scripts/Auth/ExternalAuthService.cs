@@ -196,6 +196,23 @@ namespace GrassSim.Auth
             updater.StartCoroutine(LogoutRoutine(logoutUrl, currentSession));
         }
 
+        public static bool TrySetDisplayNameOverride(string displayName)
+        {
+            Initialize();
+            if (currentSession == null || !currentSession.HasIdentity)
+                return false;
+
+            string normalized = NormalizeDisplayName(displayName, currentSession.account_id);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return false;
+
+            currentSession.display_name = normalized;
+            ExternalAuthSessionStore.Save(currentSession);
+            if (state == ExternalAuthState.SignedIn)
+                SetState(ExternalAuthState.SignedIn, BuildSignedInMessage(currentSession));
+            return true;
+        }
+
         public static void TryRefreshSession(bool force)
         {
             Initialize();

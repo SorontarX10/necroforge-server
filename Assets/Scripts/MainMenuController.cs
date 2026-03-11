@@ -5,6 +5,7 @@ using TMPro;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using GrassSim.Auth;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Networking;
@@ -56,10 +57,18 @@ public class MainMenuController : MonoBehaviour
     private Button runtimeAuthLoginGateGoogleButton;
     private Button runtimeAuthLoginGateMicrosoftButton;
     private Button runtimeAuthLoginGateFacebookButton;
+    private GameObject runtimeNicknameGatePanel;
+    private TMP_Text runtimeNicknameGateStatusText;
+    private TMP_InputField runtimeNicknameInputField;
+    private Button runtimeNicknameConfirmButton;
+    private string nicknamePromptAccountId = string.Empty;
 
     public float clickDelay = 0.3f;
     private bool authUiInitialized;
     private bool suppressAuthGateDuringSceneTransition;
+
+    private const int NicknameMinLength = 3;
+    private const int NicknameMaxLength = 24;
 
     void Awake()
     {
@@ -116,6 +125,8 @@ public class MainMenuController : MonoBehaviour
             runtimeAuthLoginGateMicrosoftButton.onClick.RemoveListener(OnAuthMicrosoftClicked);
         if (runtimeAuthLoginGateFacebookButton != null)
             runtimeAuthLoginGateFacebookButton.onClick.RemoveListener(OnAuthFacebookClicked);
+        if (runtimeNicknameConfirmButton != null)
+            runtimeNicknameConfirmButton.onClick.RemoveListener(OnNicknameConfirmClicked);
 
         ExternalAuthService.StateChanged -= RefreshAuthStatusLabel;
     }
@@ -131,6 +142,7 @@ public class MainMenuController : MonoBehaviour
 
         suppressAuthGateDuringSceneTransition = true;
         SetLoginGateVisible(false);
+        SetNicknameGateVisible(false);
         newGameButton.interactable = false;
         StartCoroutine(StartNewGameRoutine());
     }
@@ -454,6 +466,8 @@ public class MainMenuController : MonoBehaviour
         {
             SetAuthUiVisible(false);
             SetLoginGateVisible(false);
+            SetNicknameGateVisible(false);
+            nicknamePromptAccountId = string.Empty;
             ApplyMenuAccessGate();
             return;
         }
@@ -474,11 +488,14 @@ public class MainMenuController : MonoBehaviour
         {
             SetAuthUiVisible(false);
             SetLoginGateVisible(false);
+            SetNicknameGateVisible(false);
+            nicknamePromptAccountId = string.Empty;
             ApplyMenuAccessGate();
             return;
         }
 
         EnsureRuntimeLoginGateControls();
+        EnsureRuntimeNicknameGateControls();
         ApplyProviderButtonAvailability();
 
         BindAuthButton(authLoginGoogleButton, OnAuthGoogleClicked);
@@ -488,6 +505,7 @@ public class MainMenuController : MonoBehaviour
         BindAuthButton(runtimeAuthLoginGateGoogleButton, OnAuthGoogleClicked);
         BindAuthButton(runtimeAuthLoginGateMicrosoftButton, OnAuthMicrosoftClicked);
         BindAuthButton(runtimeAuthLoginGateFacebookButton, OnAuthFacebookClicked);
+        BindAuthButton(runtimeNicknameConfirmButton, OnNicknameConfirmClicked);
 
         authUiInitialized = true;
         ExternalAuthService.Initialize();
@@ -511,11 +529,14 @@ public class MainMenuController : MonoBehaviour
 
         bool authConfigured = IsAuthConfigured();
         bool hasSession = ExternalAuthService.IsSignedIn;
-        bool lockedByGate = IsMenuLockedByAuthGate();
+        bool lockedByAuthGate = IsMenuLockedByAuthGate();
+        bool lockedByNicknameGate = IsMenuLockedByNicknameGate();
 
         string message = ExternalAuthService.StatusMessage;
-        if (lockedByGate && ExternalAuthService.State == ExternalAuthState.SignedOut)
+        if (lockedByAuthGate && ExternalAuthService.State == ExternalAuthState.SignedOut)
             message = "Sign in to continue.";
+        else if (lockedByNicknameGate)
+            message = "Set your in-game nickname to continue.";
 
         if (authStatusText != null)
             authStatusText.text = message;
@@ -541,10 +562,11 @@ public class MainMenuController : MonoBehaviour
         }
 
         ApplyProviderButtonAvailability();
+        RefreshNicknameGateState();
         if (suppressAuthGateDuringSceneTransition)
             SetLoginGateVisible(false);
         else
-            SetLoginGateVisible(lockedByGate);
+            SetLoginGateVisible(lockedByAuthGate);
         ApplyMenuAccessGate();
     }
 
@@ -567,7 +589,7 @@ public class MainMenuController : MonoBehaviour
 
     private bool EnsureMenuUnlockedByAuthGate()
     {
-        if (!IsMenuLockedByAuthGate())
+        if (!IsMenuLockedByAuthGate() && !IsMenuLockedByNicknameGate())
             return true;
 
         RefreshAuthStatusLabel();
@@ -589,9 +611,20 @@ public class MainMenuController : MonoBehaviour
         return IsAuthConfigured() && !ExternalAuthService.IsSignedIn;
     }
 
+    private bool IsMenuLockedByNicknameGate()
+    {
+        if (!requireAuthBeforeMenu)
+            return false;
+
+        if (!IsAuthConfigured() || !ExternalAuthService.IsSignedIn)
+            return false;
+
+        return !PlayerIdentityService.HasCustomExternalDisplayNameForActiveSession();
+    }
+
     private void ApplyMenuAccessGate()
     {
-        bool unlocked = !IsMenuLockedByAuthGate();
+        bool unlocked = !IsMenuLockedByAuthGate() && !IsMenuLockedByNicknameGate();
         if (newGameButton != null)
             newGameButton.interactable = unlocked;
 
@@ -614,6 +647,302 @@ public class MainMenuController : MonoBehaviour
             if (visible)
                 runtimeAuthLoginGatePanel.transform.SetAsLastSibling();
         }
+    }
+
+    private void SetNicknameGateVisible(bool visible)
+    {
+        if (runtimeNicknameGatePanel != null)
+        {
+            runtimeNicknameGatePanel.SetActive(visible);
+            if (visible)
+                runtimeNicknameGatePanel.transform.SetAsLastSibling();
+        }
+    }
+
+    private void RefreshNicknameGateState()
+    {
+        bool visible = IsMenuLockedByNicknameGate();
+        if (!visible)
+        {
+            nicknamePromptAccountId = string.Empty;
+            SetNicknameGateVisible(false);
+            return;
+        }
+
+        EnsureRuntimeNicknameGateControls();
+        if (runtimeNicknameGatePanel == null)
+            return;
+
+        ExternalAuthSession session = ExternalAuthService.CurrentSession;
+        string accountId = session?.account_id ?? string.Empty;
+        if (!string.Equals(nicknamePromptAccountId, accountId, StringComparison.Ordinal))
+        {
+            nicknamePromptAccountId = accountId;
+            if (runtimeNicknameInputField != null)
+                runtimeNicknameInputField.text = BuildNicknameSuggestion(ExternalAuthService.CurrentDisplayName);
+            if (runtimeNicknameGateStatusText != null)
+                runtimeNicknameGateStatusText.text = $"Choose your in-game nickname ({NicknameMinLength}-{NicknameMaxLength} chars).";
+        }
+
+        SetNicknameGateVisible(true);
+    }
+
+    private void EnsureRuntimeNicknameGateControls()
+    {
+        if (runtimeNicknameGatePanel != null)
+            return;
+
+        Canvas parentCanvas = null;
+        if (mainMenuRoot != null)
+            parentCanvas = mainMenuRoot.GetComponentInParent<Canvas>();
+        if (parentCanvas == null)
+            parentCanvas = FindFirstObjectByType<Canvas>();
+        if (parentCanvas == null)
+            return;
+
+        GameObject panelGo = new GameObject(
+            "NicknameGatePanel",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image)
+        );
+        runtimeNicknameGatePanel = panelGo;
+        RectTransform panelRt = panelGo.GetComponent<RectTransform>();
+        panelRt.SetParent(parentCanvas.transform, false);
+        panelRt.anchorMin = Vector2.zero;
+        panelRt.anchorMax = Vector2.one;
+        panelRt.pivot = new Vector2(0.5f, 0.5f);
+        panelRt.offsetMin = Vector2.zero;
+        panelRt.offsetMax = Vector2.zero;
+
+        Image overlay = panelGo.GetComponent<Image>();
+        overlay.color = new Color(0.01f, 0.02f, 0.05f, 0.88f);
+        overlay.raycastTarget = true;
+
+        GameObject cardGo = new GameObject(
+            "NicknameGateCard",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image),
+            typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter)
+        );
+        RectTransform cardRt = cardGo.GetComponent<RectTransform>();
+        cardRt.SetParent(panelGo.transform, false);
+        cardRt.anchorMin = new Vector2(0.5f, 0.5f);
+        cardRt.anchorMax = new Vector2(0.5f, 0.5f);
+        cardRt.pivot = new Vector2(0.5f, 0.5f);
+        cardRt.sizeDelta = new Vector2(640f, 280f);
+        cardRt.anchoredPosition = new Vector2(0f, 8f);
+
+        Image cardImage = cardGo.GetComponent<Image>();
+        cardImage.color = new Color(0.08f, 0.1f, 0.16f, 0.97f);
+
+        VerticalLayoutGroup cardLayout = cardGo.GetComponent<VerticalLayoutGroup>();
+        cardLayout.padding = new RectOffset(24, 24, 22, 22);
+        cardLayout.spacing = 14f;
+        cardLayout.childControlWidth = true;
+        cardLayout.childControlHeight = true;
+        cardLayout.childForceExpandWidth = false;
+        cardLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter cardFitter = cardGo.GetComponent<ContentSizeFitter>();
+        cardFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        cardFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        TMP_Text titleText = CreateAuthGateTitleText(cardGo.transform);
+        titleText.text = "Choose your nickname";
+
+        runtimeNicknameGateStatusText = CreateAuthStatusText(cardGo.transform);
+        runtimeNicknameGateStatusText.text = $"Choose your in-game nickname ({NicknameMinLength}-{NicknameMaxLength} chars).";
+        LayoutElement statusLayout = runtimeNicknameGateStatusText.GetComponent<LayoutElement>();
+        if (statusLayout != null)
+            statusLayout.preferredWidth = 580f;
+
+        runtimeNicknameInputField = CreateNicknameInputField(cardGo.transform);
+        if (runtimeNicknameInputField != null)
+            runtimeNicknameInputField.characterLimit = NicknameMaxLength;
+
+        runtimeNicknameConfirmButton = CreateLegalButton(cardGo.transform, "NicknameConfirmButton", "Save nickname");
+
+        runtimeNicknameGatePanel.SetActive(false);
+        runtimeNicknameGatePanel.transform.SetAsLastSibling();
+    }
+
+    private void OnNicknameConfirmClicked()
+    {
+        if (runtimeNicknameInputField == null)
+            return;
+
+        if (!TryNormalizeNicknameCandidate(
+                runtimeNicknameInputField.text,
+                out string normalizedNickname,
+                out string validationMessage))
+        {
+            if (runtimeNicknameGateStatusText != null)
+                runtimeNicknameGateStatusText.text = validationMessage;
+            return;
+        }
+
+        PlayerIdentityService.SetDisplayName(normalizedNickname);
+        if (runtimeNicknameGateStatusText != null)
+            runtimeNicknameGateStatusText.text = "Nickname saved.";
+
+        RefreshAuthStatusLabel();
+    }
+
+    private static TMP_InputField CreateNicknameInputField(Transform parent)
+    {
+        GameObject inputGo = new GameObject(
+            "NicknameInput",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image),
+            typeof(TMP_InputField),
+            typeof(LayoutElement)
+        );
+        inputGo.transform.SetParent(parent, false);
+
+        LayoutElement layout = inputGo.GetComponent<LayoutElement>();
+        layout.preferredWidth = 580f;
+        layout.preferredHeight = 46f;
+
+        Image background = inputGo.GetComponent<Image>();
+        background.color = new Color(0.06f, 0.08f, 0.12f, 0.95f);
+
+        TMP_InputField inputField = inputGo.GetComponent<TMP_InputField>();
+        inputField.lineType = TMP_InputField.LineType.SingleLine;
+        inputField.contentType = TMP_InputField.ContentType.Standard;
+        inputField.characterValidation = TMP_InputField.CharacterValidation.None;
+
+        GameObject textAreaGo = new GameObject(
+            "Text Area",
+            typeof(RectTransform),
+            typeof(RectMask2D)
+        );
+        RectTransform textAreaRt = textAreaGo.GetComponent<RectTransform>();
+        textAreaRt.SetParent(inputGo.transform, false);
+        textAreaRt.anchorMin = Vector2.zero;
+        textAreaRt.anchorMax = Vector2.one;
+        textAreaRt.offsetMin = new Vector2(12f, 8f);
+        textAreaRt.offsetMax = new Vector2(-12f, -8f);
+
+        GameObject placeholderGo = new GameObject(
+            "Placeholder",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI)
+        );
+        RectTransform placeholderRt = placeholderGo.GetComponent<RectTransform>();
+        placeholderRt.SetParent(textAreaGo.transform, false);
+        placeholderRt.anchorMin = Vector2.zero;
+        placeholderRt.anchorMax = Vector2.one;
+        placeholderRt.offsetMin = Vector2.zero;
+        placeholderRt.offsetMax = Vector2.zero;
+
+        TMP_Text placeholderText = placeholderGo.GetComponent<TextMeshProUGUI>();
+        placeholderText.text = "Enter nickname";
+        placeholderText.fontSize = 22f;
+        placeholderText.color = new Color(0.64f, 0.68f, 0.75f, 0.8f);
+        placeholderText.alignment = TextAlignmentOptions.Left;
+        placeholderText.raycastTarget = false;
+        placeholderText.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null)
+            placeholderText.font = TMP_Settings.defaultFontAsset;
+
+        GameObject inputTextGo = new GameObject(
+            "Text",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI)
+        );
+        RectTransform inputTextRt = inputTextGo.GetComponent<RectTransform>();
+        inputTextRt.SetParent(textAreaGo.transform, false);
+        inputTextRt.anchorMin = Vector2.zero;
+        inputTextRt.anchorMax = Vector2.one;
+        inputTextRt.offsetMin = Vector2.zero;
+        inputTextRt.offsetMax = Vector2.zero;
+
+        TMP_Text inputText = inputTextGo.GetComponent<TextMeshProUGUI>();
+        inputText.text = string.Empty;
+        inputText.fontSize = 22f;
+        inputText.color = new Color(0.9f, 0.94f, 0.99f, 0.98f);
+        inputText.alignment = TextAlignmentOptions.Left;
+        inputText.raycastTarget = false;
+        inputText.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null)
+            inputText.font = TMP_Settings.defaultFontAsset;
+
+        inputField.textViewport = textAreaRt;
+        inputField.textComponent = inputText as TextMeshProUGUI;
+        inputField.placeholder = placeholderText as Graphic;
+        inputField.caretColor = new Color(0.96f, 0.98f, 1f, 0.98f);
+        inputField.customCaretColor = true;
+
+        return inputField;
+    }
+
+    private static string BuildNicknameSuggestion(string rawDisplayName)
+    {
+        string source = string.IsNullOrWhiteSpace(rawDisplayName) ? "Player" : rawDisplayName.Trim();
+        int atSign = source.IndexOf('@');
+        if (atSign > 0)
+            source = source.Substring(0, atSign);
+
+        StringBuilder builder = new(source.Length);
+        for (int i = 0; i < source.Length; i++)
+        {
+            char c = source[i];
+            if (IsNicknameCharacterAllowed(c))
+                builder.Append(c);
+        }
+
+        string normalized = builder.ToString().Trim();
+        if (normalized.Length > NicknameMaxLength)
+            normalized = normalized.Substring(0, NicknameMaxLength).Trim();
+
+        if (normalized.Length < NicknameMinLength)
+            normalized = "Player";
+
+        return normalized;
+    }
+
+    private static bool TryNormalizeNicknameCandidate(string raw, out string normalized, out string error)
+    {
+        normalized = string.Empty;
+        error = $"Nickname must be {NicknameMinLength}-{NicknameMaxLength} characters.";
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            error = "Nickname is required.";
+            return false;
+        }
+
+        string trimmed = raw.Trim();
+        if (trimmed.Length < NicknameMinLength || trimmed.Length > NicknameMaxLength)
+            return false;
+
+        for (int i = 0; i < trimmed.Length; i++)
+        {
+            if (!IsNicknameCharacterAllowed(trimmed[i]))
+            {
+                error = "Use only letters, numbers, spaces, '.', '-' or '_'.";
+                return false;
+            }
+        }
+
+        normalized = trimmed;
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool IsNicknameCharacterAllowed(char c)
+    {
+        return char.IsLetterOrDigit(c)
+            || c == ' '
+            || c == '.'
+            || c == '-'
+            || c == '_';
     }
 
     // ======================

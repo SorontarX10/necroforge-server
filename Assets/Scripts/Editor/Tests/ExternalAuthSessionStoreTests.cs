@@ -1,3 +1,4 @@
+using System;
 using GrassSim.Auth;
 using NUnit.Framework;
 using UnityEngine;
@@ -46,10 +47,11 @@ namespace GrassSim.Editor.Tests
         [Test]
         public void PlayerIdentityService_PrefersExternalAuthSession()
         {
+            string providerUserId = $"ms-uid-{Guid.NewGuid():N}";
             ExternalAuthSession session = new()
             {
                 provider = "microsoft",
-                provider_user_id = "ms-uid-42",
+                provider_user_id = providerUserId,
                 display_name = "MsTester"
             };
             ExternalAuthSessionStore.Save(session);
@@ -57,8 +59,26 @@ namespace GrassSim.Editor.Tests
             string playerId = PlayerIdentityService.GetPlayerId();
             string displayName = PlayerIdentityService.GetDisplayName();
 
-            Assert.AreEqual("microsoft:ms-uid-42", playerId);
+            Assert.AreEqual($"microsoft:{providerUserId}", playerId);
             Assert.AreEqual("MsTester", displayName);
+        }
+
+        [Test]
+        public void PlayerIdentityService_UsesCustomNicknameForExternalAuthSession()
+        {
+            string providerUserId = $"google-uid-{Guid.NewGuid():N}";
+            ExternalAuthSession session = new()
+            {
+                provider = "google",
+                provider_user_id = providerUserId,
+                display_name = "Google Real Name"
+            };
+            ExternalAuthSessionStore.Save(session);
+
+            PlayerIdentityService.SetDisplayName("NecroKnight");
+
+            string displayName = PlayerIdentityService.GetDisplayName();
+            Assert.AreEqual("NecroKnight", displayName);
         }
     }
 }

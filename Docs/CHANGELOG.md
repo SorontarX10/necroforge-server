@@ -46,6 +46,7 @@
 - Added client-side provider visibility toggles in `auth_config.json` (`google_login_enabled`, `microsoft_login_enabled`, `facebook_login_enabled`).
 - Disabled Microsoft and Facebook login buttons by default in client config.
 - Disabled Steam auto sign-in by default in client config until Steam setup is ready.
+- Added first-sign-in nickname onboarding for external auth accounts (player picks in-game nickname instead of provider full name).
 
 ### Release
 - Bumped application version to `0.7.2`.
